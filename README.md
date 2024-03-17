@@ -8,7 +8,7 @@ This repository provides a comprehensive collection of resources and code for We
 - Reference materials: Access industry-standard security best practices and documentation.
 - Sample code: Explore real-world examples of Web3.0 smart contracts and applications.
 - Competition materials: Participate in exciting Web3.0 auditing challenges and test your skills.
-- 
+  
 Whether you're a seasoned security professional or just starting out, this repository is a valuable resource for anyone interested in Web3.0 security.
 
 Here are some of the benefits of using this repository:
