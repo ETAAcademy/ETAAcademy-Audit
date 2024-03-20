@@ -24,7 +24,7 @@
 
 Authors: [Eta](https://twitter.com/pwhattie)
 
-## 1. [High] Missing Range Constraint on Check of Remainder < Divisor
+## 1. [High] Missing Range Constraint of Remainder < Divisor
 
 - Summary: The circuit needs to verify that the remainder is less than the divisor by subtracting the divisor from the remainder and enforcing that the borrow flow is true.
 - Impact: A malicious validator could generate and submit a proof with incorrect behavior of smart contracts. For example, the validator could manipulate the calculated price during the execution of an on-chain DEX and steal all of the assets in the DEX.
