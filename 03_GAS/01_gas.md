@@ -71,7 +71,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
   </details>
 
-## 2. [Medium] An L1->L2 Transaction to be Sent that Does not Cover the Total Gas Limit Required
+## 2. [Medium] A Discrepancy in Units Used
 
 - Summary: A discrepancy in units used for calculating transaction leads to the overhead being 32 times larger than it should be.
 - Impact: Users may be charged significantly more than they should for certain transactions, causing potential financial implications and inaccuracies in cost assessments.
