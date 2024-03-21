@@ -22,7 +22,7 @@
 
 [Github](https://github.com/ETAAcademy)｜[Twitter](https://twitter.com/ETAAcademy)｜[ETF-Audit](https://github.com/ETAAcademy/ETAAcademy-Audit)
 
-Authors: [Eta](https://twitter.com/pwhattie)
+Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 1.[High] Manipulate the Sorted Queue in Log Sorter
 

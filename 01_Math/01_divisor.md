@@ -20,9 +20,9 @@
   </tr>
 </table>
 
-[Github](https://github.com/ETAAcademy)｜[Twitter](https://twitter.com/ETAAcademy)｜[ETF-Audit](https://github.com/ETAAcademy/ETAAcademy-Audit)
+[Github](https://github.com/ETAAcademy)｜[Twitter](https://twitter.com/ETAAcademy)｜[ETA-Audit](https://github.com/ETAAcademy/ETAAcademy-Audit)
 
-Authors: [Eta](https://twitter.com/pwhattie)
+Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 1. [High] Missing Range Constraint of Remainder < Divisor
 
@@ -209,3 +209,51 @@ Authors: [Eta](https://twitter.com/pwhattie)
   ```
 
     </details>
+
+## 2. [High] Divisor is Zero
+
+- Summary: When the `**div**` opcode is applied, and the dividend is nonzero while the divisor is zero, both the quotient and remainder become zero, `**src0 = q * src1 + rem**`.
+- Impact: In such cases, enforcing the multiplication/division relation results in an unprovable transaction, which may disrupt the processing of the priority queue.
+  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/598) & [Report](https://code4rena.com/reports/2023-10-zksync)
+
+  <details><summary>POC</summary>
+
+  ```rust
+    quotient_is_zero.conditionally_enforce_true(cs, divisor_is_zero);
+    remainder_is_zero.conditionally_enforce_true(cs, divisor_is_zero);
+
+    let uint256_zero = UInt256::zero(cs);
+    let rem_to_enforce = UInt32::parallel_select(
+        cs,
+        should_apply_mul,
+        &uint256_zero.inner,
+        &remainder_unchecked,
+    );
+    let a_to_enforce =
+        UInt32::parallel_select(cs, should_apply_mul, src0_view, &quotient_unchecked);
+    let b_to_enforce = src1_view.clone();
+    let mul_low_to_enforce =
+        UInt32::parallel_select(cs, should_apply_mul, &mul_low_unchecked, &src0_view);
+    let mul_high_to_enforce = UInt32::parallel_select(
+        cs,
+        should_apply_mul,
+        &mul_high_unchecked,
+        &uint256_zero.inner,
+    );
+    let mul_relation = MulDivRelation {
+        a: a_to_enforce,
+        b: b_to_enforce,
+        rem: rem_to_enforce,
+        mul_low: mul_low_to_enforce,
+        mul_high: mul_high_to_enforce,
+    };
+
+    let apply_any = Boolean::multi_or(cs, &[should_apply_mul, should_apply_div]);
+    ......
+    diffs_accumulator
+        .mul_div_relations
+        .push((apply_any, mul_div_relations));
+
+  ```
+
+  </details>
