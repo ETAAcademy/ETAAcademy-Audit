@@ -20,7 +20,7 @@
   </tr>
 </table>
 
-[Github](https://github.com/ETAAcademy)｜[Twitter](https://twitter.com/ETAAcademy)｜[ETF-Audit](https://github.com/ETAAcademy/ETAAcademy-Audit)
+[Github](https://github.com/ETAAcademy)｜[Twitter](https://twitter.com/ETAAcademy)｜[ETA-Audit](https://github.com/ETAAcademy/ETAAcademy-Audit)
 
 Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
@@ -205,6 +205,34 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
     let uma_ptr_read_cleanup_mask =
         Num::from_variable(uma_cleanup_bitspread).spread_into_bits::<_, 32>(cs);
     We don’t mask neither, since bytes_to_cleanup_out_of_b
+
+  ```
+
+  </details>
+
+## 3. [Medium] ECADD and ECMUL Unrecognized as Precompiles
+
+- Summary: The updated revision of ZkSync Era still refers to the old maximum precompile address, making the new precompiles **`ECADD`** and **`ECMUL`** unrecognized as precompiles due to their higher addresses, thus breaking the system's invariant.
+- Impact: It causes unexpected behavior in the system where **`getCodeHash()`** returns zero instead of the expected hash value for these precompiles.
+  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/888) & [Report](https://code4rena.com/reports/2023-10-zksync)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+    describe('AccountCodeStorage', function() {
+        it('fails to return correct hash for ECADD precompile', async () => {
+            expect(await accountCodeStorage.getCodeHash('0x0000000000000000000000000000000000000006')).to.be.eq(
+                EMPTY_STRING_KECCAK
+            );
+        });
+
+        it('fails to return correct hash for ECMUL precompile', async () => {
+            expect(await accountCodeStorage.getCodeHash('0x0000000000000000000000000000000000000007')).to.be.eq(
+                EMPTY_STRING_KECCAK
+            );
+        });
+    });
 
   ```
 
