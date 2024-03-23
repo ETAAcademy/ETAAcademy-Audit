@@ -24,7 +24,9 @@
 
 Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
-## 1. [High] Missing Range Constraint of Remainder < Divisor
+## 1. [High] Missing range constraint on remainder check in div opcode implementation
+
+### Remainder < Divisor
 
 - Summary: The circuit needs to verify that the remainder is less than the divisor by subtracting the divisor from the remainder and enforcing that the borrow flow is true.
 - Impact: A malicious validator could generate and submit a proof with incorrect behavior of smart contracts. For example, the validator could manipulate the calculated price during the execution of an on-chain DEX and steal all of the assets in the DEX.
@@ -210,7 +212,9 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
     </details>
 
-## 2. [High] Divisor is Zero
+## 2. [High] Mul/div relation should not be enforced when divisor is zero
+
+### Divisor is Zero
 
 - Summary: When the `**div**` opcode is applied, and the dividend is nonzero while the divisor is zero, both the quotient and remainder become zero, `**src0 = q * src1 + rem**`.
 - Impact: In such cases, enforcing the multiplication/division relation results in an unprovable transaction, which may disrupt the processing of the priority queue.

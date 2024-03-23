@@ -24,7 +24,9 @@
 
 Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
-## 1.[High] Lack of Overflow Check
+## 1.[High] Reduction gate in binop operation is unsafe
+
+### Lack of Overflow Check
 
 - Summary: This method converts a constraint system variable (representing a value in the prime field) directly into a **`UInt8`** value without performing any overflow checks.
 

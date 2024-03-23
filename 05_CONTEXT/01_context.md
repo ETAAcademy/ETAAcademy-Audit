@@ -24,7 +24,9 @@
 
 Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
-## 1. [Medium] EOA Nonce Ordering Manipulated via L1 Transaction
+## 1. [Medium] Nonce ordering of EOA can be updated to "arbitary" through an L1 tx
+
+### EOA Nonce Ordering Manipulated via L1 Transaction
 
 - Summary: This vulnerability enables the manipulation of an Externally Owned Account (EOA)'s nonce ordering to an arbitrary state through an L1 priority transaction, leading to the permanent freezing of the user's account.
 - Impact: Once the nonce ordering is updated to an arbitrary state, it becomes permanent, rendering the account unable to initiate any new transactions.

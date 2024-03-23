@@ -24,7 +24,9 @@
 
 Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
-## 1. [Medium] An L1->L2 Transaction to be Sent that Does not Cover the Total Gas Limit Required
+## 1. [Medium] TransactionValidator checks intrinsic costs against wrong value
+
+### L1->L2 Transaction Sent Without Enough Gas
 
 - Summary: An incorrect check allows an **`L1->L2`** transaction to be sent without covering the total gas limit required, including both overhead and intrinsic costs for the operator. **`{totalGasLimit} = {overhead + actualGasLimit} = {overhead + (intrinsicCosts + executionCosts)}`**
 - Impact: This leads to situations where transactions may not have enough gas to be executed on L2, despite incurring overhead and intrinsic costs.
@@ -71,7 +73,9 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
   </details>
 
-## 2. [Medium] A Discrepancy in Units Used
+## 2. [Medium] Unit difference between transaction encoding and bootloader memory constant
+
+### A Discrepancy in Units Used
 
 - Summary: A discrepancy in units used for calculating transaction leads to the overhead being 32 times larger than it should be.
 - Impact: Users may be charged significantly more than they should for certain transactions, causing potential financial implications and inaccuracies in cost assessments.
@@ -93,7 +97,9 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
   </details>
 
-## 3. [Medium] L1->L2 Transaction Reverts but Consume all Gas
+## 3. [Medium] Loss of funds for the sender when L1->L2 TX fails in the bootloader on L2
+
+### L1->L2 Transaction Reverts but Consume all Gas
 
 - Summary: When an L1->L2 transaction is initiated, zkSync employs a near call opcode to execute the transaction on the L2 network. This opcode is exempt from certain gas usage limitations, such as the 63/64 rule. The discrepancy arises from zkSync's failure to return unspent gas to the caller when a transaction fails due to a REVERT opcode, resembling the behavior of Ethereum's deprecated THROW opcode.
 - Impact: L1->L2 transactions that revert will consume all gas, posing inconsistency with the EVM and potential risk for end users.

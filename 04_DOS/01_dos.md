@@ -24,7 +24,9 @@
 
 Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
-## 1. [Medium] Absence of enforcement of EIP-155
+## 1. [Medium] EIP-155 is not enforced, allowing attackers/malicious operators to profit from replaying transactions
+
+### Absence of enforcement of EIP-155
 
 - Summary: Attackers and malicious operators profit from replaying transactions due to the absence of enforcement of **`EIP-155`**, which prevents replay attacks by including the chain ID in the transaction's signature.
 - Impact: Attackers can replay transactions from networks not protected by EIP-155, while operators can replay early user transactions from other EVM networks to collect gas fees or profit directly.
