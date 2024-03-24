@@ -12,7 +12,7 @@
         <tr>
           <th>audit</th>
           <th>basic</th>
-          <th>CONTEXT</th>
+          <th>context</th>
           <td>context</td>
         </tr>
       </table>
@@ -139,6 +139,41 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
         emit AccountNonceOrderingUpdated(msg.sender, _nonceOrdering);
     }
 
+
+  ```
+
+  </details>
+
+## 2. [Medium] Lack of access to ETH on L2 through L1->L2 transactions
+
+### msg.value
+
+- Summary : Users are unable to access their ETH stored on L2 through L1->L2 transactions, because the msg.value is generated solely from the ETH on Layer 1, not from the active balance of the user's account on Layer 2.
+- Impact: Users cannot access their ETH on Layer 2 to withdraw funds from the rollup before a scheduled malicious upgrade, if a malicious operator only processes L1->L2 transactions, effectively trapping their funds.
+  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/803) & [Report](https://code4rena.com/reports/2023-10-zksync)
+
+## 3. [Medium] Vulnerabilities in Deposit Limit Enforcement and the Impact on Failed Deposits
+
+### Deposit Limit and Track
+
+- Summary: Users may struggle to claim failed deposits if a deposit limit is later imposed on a token, while malicious actors can exploit the system by intentionally failing deposits before limits are introduced, resetting their total deposited amount and exceeding caps once enforced.
+- Impact: To mitigate these risks, the system should be updated to track deposited amounts regardless of existing limits, preventing difficulties in claiming failed deposits and thwarting attempts to bypass deposit restrictions.
+  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/425) & [Report](https://code4rena.com/reports/2023-10-zksync)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+  function _verifyDepositLimit(address _l1Token, address _depositor, uint256 _amount, bool _claiming) internal {
+        IAllowList.Deposit memory limitData = IAllowList(allowList).getTokenDepositLimitData(_l1Token);
+        if (_claiming) {
+            totalDepositedAmountPerUser[_l1Token][_depositor] -= _amount;
+        } else {
+            totalDepositedAmountPerUser[_l1Token][_depositor] += _amount;
+      if(limitData.depositLimitation){
+               require(totalDepositedAmountPerUser[_l1Token][_depositor] <= limitData.depositCap, "d1");
+            }
+        }
+    }
 
   ```
 

@@ -259,3 +259,25 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 4. [Medium] Operator can steal all gas provided by ANY user for L1 → L2 transactions
+
+### Manipulate Gas Refund Calculation
+
+- Summary: Malicious operators abuse the gas refund system to stealing all gas provided by users for L1→L2 transactions, due to inadequate overflow checks in the refund calculation, allowing the operator to inflate the refundGas value.
+- Impact: To mitigate this risk, the recommended solution is to replace the **`add`** function with **`safeAdd`** to ensure overflow checks are performed, preventing malicious operators from claiming more gas than provided by users, resulting in a loss of gas funds for them.
+
+  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/255) & [Report](https://code4rena.com/reports/2023-10-zksync)
+
+  <details><summary>POC</summary>
+
+  ```rust
+
+    refundGas := add(refundGas, reservedGas) // overflow, refundGas = 0 while gasLimit != 0
+    if gt(refundGas, gasLimit) { // correct, 0 < x for all x iff x != 0
+        assertionError("L1: refundGas > gasLimit")
+    }
+    // gasPrice * (gasLimit - refundGas) == gasPrice * (gasLimit - 0) == gasPrice * gasLimit
+    let payToOperator := safeMul(gasPrice, safeSub(gasLimit, refundGas, "lpah"), "mnk")
+
+  ```

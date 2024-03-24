@@ -12,7 +12,7 @@
         <tr>
           <th>audit</th>
           <th>basic</th>
-          <th>DOS</th>
+          <th>dos</th>
           <td>dos</td>
         </tr>
       </table>
