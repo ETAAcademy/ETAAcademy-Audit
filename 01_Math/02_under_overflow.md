@@ -26,11 +26,11 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 1.[High] Reduction gate in binop operation is unsafe
 
-### Lack of Overflow Check
+### Lack of overflow check
 
 - Summary: This method converts a constraint system variable (representing a value in the prime field) directly into a **`UInt8`** value without performing any overflow checks.
 
-- Impact: This means that if the original value exceeds the range of **`UInt8`** (0 to 255), an attacker could inject unexpected or malicious behavior into the circuit by manipulating the overflowed **`xor_result`**.
+- Impact & Recommendation: This means that if the original value exceeds the range of **`UInt8`** (0 to 255), an attacker could inject unexpected or malicious behavior into the circuit by manipulating the overflowed **`xor_result`**.
   🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/679) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>

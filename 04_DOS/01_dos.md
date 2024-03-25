@@ -29,7 +29,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ### Absence of enforcement of EIP-155
 
 - Summary: Attackers and malicious operators profit from replaying transactions due to the absence of enforcement of **`EIP-155`**, which prevents replay attacks by including the chain ID in the transaction's signature.
-- Impact: Attackers can replay transactions from networks not protected by EIP-155, while operators can replay early user transactions from other EVM networks to collect gas fees or profit directly.
+- Impact & Recommendation: Attackers can replay transactions from networks not protected by EIP-155, while operators can replay early user transactions from other EVM networks to collect gas fees or profit directly.
   🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/882) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>

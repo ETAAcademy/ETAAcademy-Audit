@@ -26,10 +26,10 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 1.[Medium] Timestamp Constraints Leading to Number of Blocks Creation Limitations
 
-### Different Timestamp Constraints Between Batches and Blocks
+### Different timestamp constraints between batches and blocks
 
 - Summary : The constraints on timestamp differences between batches and their respective blocks in zkSync lead to smaller batch sizes, and prohibits the simultaneous commitment of two batches on L1 within the same Ethereum block, causing bottlenecks during high transaction volumes and block space utilization.
-- Impact: The current timestamp verification process on L1 and L2 exacerbates these issues, necessitating stricter constraints to prevent batches with future timestamps. Mitigation steps should involve applying stricter timestamp constraints on both L1 and L2.
+- Impact & Recommendation: The current timestamp verification process on L1 and L2 exacerbates these issues, necessitating stricter constraints to prevent batches with future timestamps. Mitigation steps should involve applying stricter timestamp constraints on both L1 and L2.
   🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/316) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>

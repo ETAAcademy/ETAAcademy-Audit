@@ -26,10 +26,10 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 1. [Medium] TransactionValidator checks intrinsic costs against wrong value
 
-### L1->L2 Transaction Sent Without Enough Gas
+### L1->L2 transaction sent without enough gas
 
 - Summary: An incorrect check allows an **`L1->L2`** transaction to be sent without covering the total gas limit required, including both overhead and intrinsic costs for the operator. **`{totalGasLimit} = {overhead + actualGasLimit} = {overhead + (intrinsicCosts + executionCosts)}`**
-- Impact: This leads to situations where transactions may not have enough gas to be executed on L2, despite incurring overhead and intrinsic costs.
+- Impact & Recommendation: This leads to situations where transactions may not have enough gas to be executed on L2, despite incurring overhead and intrinsic costs.
   🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/1108) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
@@ -75,10 +75,10 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 2. [Medium] Unit difference between transaction encoding and bootloader memory constant
 
-### A Discrepancy in Units Used
+### A discrepancy in units used
 
 - Summary: A discrepancy in units used for calculating transaction leads to the overhead being 32 times larger than it should be.
-- Impact: Users may be charged significantly more than they should for certain transactions, causing potential financial implications and inaccuracies in cost assessments.
+- Impact & Recommendation: Users may be charged significantly more than they should for certain transactions, causing potential financial implications and inaccuracies in cost assessments.
   🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/1105) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
@@ -99,10 +99,10 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 3. [Medium] Loss of funds for the sender when L1->L2 TX fails in the bootloader on L2
 
-### L1->L2 Transaction Reverts but Consume all Gas
+### L1->L2 transaction reverts but consume all gas
 
 - Summary: When an L1->L2 transaction is initiated, zkSync employs a near call opcode to execute the transaction on the L2 network. This opcode is exempt from certain gas usage limitations, such as the 63/64 rule. The discrepancy arises from zkSync's failure to return unspent gas to the caller when a transaction fails due to a REVERT opcode, resembling the behavior of Ethereum's deprecated THROW opcode.
-- Impact: L1->L2 transactions that revert will consume all gas, posing inconsistency with the EVM and potential risk for end users.
+- Impact & Recommendation: L1->L2 transactions that revert will consume all gas, posing inconsistency with the EVM and potential risk for end users.
 
   🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/979) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
@@ -262,10 +262,10 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 4. [Medium] Operator can steal all gas provided by ANY user for L1 → L2 transactions
 
-### Manipulate Gas Refund Calculation
+### Manipulate gas refund calculation
 
 - Summary: Malicious operators abuse the gas refund system to stealing all gas provided by users for L1→L2 transactions, due to inadequate overflow checks in the refund calculation, allowing the operator to inflate the refundGas value.
-- Impact: To mitigate this risk, the recommended solution is to replace the **`add`** function with **`safeAdd`** to ensure overflow checks are performed, preventing malicious operators from claiming more gas than provided by users, resulting in a loss of gas funds for them.
+- Impact & Recommendation: To mitigate this risk, the recommended solution is to replace the **`add`** function with **`safeAdd`** to ensure overflow checks are performed, preventing malicious operators from claiming more gas than provided by users, resulting in a loss of gas funds for them.
 
   🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/255) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
