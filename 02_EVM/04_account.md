@@ -148,7 +148,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ### `keccak256("")` v.s. `bytes32(0)`
 
-- Summary: In the zkSync Era, adherence to EIP-161 criteria determines whether an account is considered "empty," with no code, zero nonce, and zero balance. However, regardless of the account's balance, zkSync returns bytes32(0) for extcodehash, only considering the nonce and code presence, which diverges from keccak256("") for such accounts with no code in EVM.
+- Summary: In the zkSync Era, adherence to EIP-161 criteria determines whether an account is considered "empty" `bytes32(0)`, with no code, zero nonce, and zero balance. However, regardless of the account's balance, zkSync returns bytes32(0) for extcodehash, only considering the nonce and code presence, which diverges from keccak256("") for such accounts with no code in EVM.
 - Impact & Recommendation: It accurately emulates the extcodehash EVM opcode as specified by EIP-1051. To mitigate this issue, a recommended solution is provided to precisely simulate the extcodehash EVM opcode based on EIP-1052.
   🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/133) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
