@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 1. Transaction
+# ETAAcademy-Adudit: 3. Transaction
 
 <table>
   <tr>
@@ -6,7 +6,7 @@
     <th>tags</th>
   </tr>
   <tr>
-    <td>02. Transaction</td>
+    <td>03. Transaction</td>
     <td>
       <table>
         <tr>
@@ -94,6 +94,38 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
         address to = address(uint160(_transaction.to));
         (bool success,) = address(to).delegatecall("0x1234");
         require(success, "call was not successful");
+    }
+
+  ```
+
+  </details>
+
+## 3.[Medium] Nonce Behavior Discrepancy Between zkSync Era and EIP-161
+
+## Create & nonce
+
+- Summary: The **`CREATE3`** library facilitates EVM contract creation similar to **`CREATE2`**, but it excludes the contract **`initCode`** from the address derivation formula. It involves deploying a new proxy contract using the **`CREATE2`** method, which then deploys the child contract using **`CREATE`**. The child contract's address is computed based on the proxy contract's address and its hardcoded nonce `**hex"01”**` ,which aligns with EIP-161. However, in the zkSync Era, where the nonce does not increment by one as expected, this mechanism unexpectedly fails compared to the EVM.
+- Impact & Recommendation: It is recommended to increase the deployment nonce of a contract by one before calling its constructor.
+  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/92) & [Report](https://code4rena.com/reports/2023-10-zksync)
+
+  🐬: Others
+
+  - [Medium] Deployment Nonce Does not Increment For a Reverted Child Contract < Divisor: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/91) & [Report](https://code4rena.com/reports/2023-10-zksync)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+  function _constructContract(
+        address _sender,
+        address _newAddress,
+        bytes32 _bytecodeHash,
+        bytes calldata _input,
+        bool _isSystem,
+        bool _callConstructor
+    ) internal {
+        NONCE_HOLDER_SYSTEM_CONTRACT.incrementDeploymentNonce(_newAddress);
+        //...
     }
 
   ```

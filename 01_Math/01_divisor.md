@@ -31,6 +31,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: The circuit needs to verify that the remainder is less than the divisor by subtracting the divisor from the remainder and enforcing that the borrow flow is true.
 - Impact & Recommendation: A malicious validator could generate and submit a proof with incorrect behavior of smart contracts. For example, the validator could manipulate the calculated price during the execution of an on-chain DEX and steal all of the assets in the DEX.
   🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/1133) & [Report](https://code4rena.com/reports/2023-10-zksync)
+
   🐬: Others
 
   - [High] SHR Opcodes Fails to Constrain Remainder < Divisor: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/697) & [Report](https://code4rena.com/reports/2023-10-zksync)

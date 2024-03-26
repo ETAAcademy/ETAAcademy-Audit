@@ -281,3 +281,61 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
     let payToOperator := safeMul(gasPrice, safeSub(gasLimit, refundGas, "lpah"), "mnk")
 
   ```
+
+## 4. [Medium] Potential Gas Manipulation via Bytecode Compression
+
+### Gas & Compression
+
+- Summary: Gas consumption is determined by the length of the transmitted message, but malicious operators could exploit this by inflating gas costs through manipulation of the compression method, potentially leading to increased gas costs for message publication in L1 and undermining the intended efficiency and cost-effectiveness of the compression mechanism.
+- Impact & Recommendation: The function **`publishCompressedBytecode`** is updated to include an array called **`usedDictionaryIndex`** to track the usage of dictionary chunks and ensure that all chunks in the dictionary are utilized.
+
+  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/71) & [Report](https://code4rena.com/reports/2023-10-zksync)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+  function publishCompressedBytecode(
+        bytes calldata _bytecode,
+        bytes calldata _rawCompressedData
+    ) external payable onlyCallFromBootloader returns (bytes32 bytecodeHash) {
+        unchecked {
+            (bytes calldata dictionary, bytes calldata encodedData) = _decodeRawBytecode(_rawCompressedData);
+            require(dictionary.length % 8 == 0, "Dictionary length should be a multiple of 8");
+            require(dictionary.length <= 2 ** 16 * 8, "Dictionary is too big");
+            require(
+                encodedData.length * 4 == _bytecode.length,
+                "Encoded data length should be 4 times shorter than the original bytecode"
+            );
+            // This code is added
+            bool[] memory usedDictionaryIndex = new bool[](
+                dictionary.length / 8
+            );
+            //////////////////////
+            for (uint256 encodedDataPointer = 0; encodedDataPointer < encodedData.length; encodedDataPointer += 2) {
+                uint256 indexOfEncodedChunk = uint256(encodedData.readUint16(encodedDataPointer)) * 8;
+                require(indexOfEncodedChunk < dictionary.length, "Encoded chunk index is out of bounds");
+                // This code is added
+                usedDictionaryIndex[indexOfEncodedChunk] = true;
+                //////////////////////
+                uint64 encodedChunk = dictionary.readUint64(indexOfEncodedChunk);
+                uint64 realChunk = _bytecode.readUint64(encodedDataPointer * 4);
+                require(encodedChunk == realChunk, "Encoded chunk does not match the original bytecode");
+            }
+            // This code is added
+            for (uint256 i = 0; i < usedDictionaryIndex.length; ++i) {
+                require(
+                    usedDictionaryIndex[i],
+                    "the dictionary includes chunks that are useless"
+                );
+            }
+            //////////////////////
+        }
+        bytecodeHash = Utils.hashL2Bytecode(_bytecode);
+        L1_MESSENGER_CONTRACT.sendToL1(_rawCompressedData);
+        KNOWN_CODE_STORAGE_CONTRACT.markBytecodeAsPublished(bytecodeHash);
+    }
+
+  ```
+
+  </details>
