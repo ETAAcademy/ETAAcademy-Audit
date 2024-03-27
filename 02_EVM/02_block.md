@@ -61,3 +61,31 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
     The time this batch is committed on L1: blockTimestamp1001.
 
   ```
+
+## 2.[Low] Chaining hashes with the wrong initial value
+
+### `""` v.s. `0`
+
+- Summary: Some contracts in L1 use 0, instead of using an empty string hash as the initial value when chaining hashes together
+- Impact & Recommendation: It potentially causes issues or inconsistencies in the hashing process.
+  🐬: [Source](https://code4rena.com/reports/2023-10-zksync) & [Report](https://code4rena.com/reports/2023-10-zksync)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+    bytes32 reconstructedChainedLogsHash; // defaults to bytes32(0)
+
+    function _collectOperationsFromPriorityQueue(uint256 _nPriorityOps) internal returns (bytes32 concatHash) {
+        concatHash = EMPTY_STRING_KECCAK;
+        for (uint256 i = 0; i < _nPriorityOps; i = i.uncheckedInc()) {
+            PriorityOperation memory priorityOp = s.priorityQueue.popFront();
+            concatHash = keccak256(abi.encode(concatHash, priorityOp.canonicalTxHash));
+        }
+    }
+
+
+
+  ```
+
+  </details>

