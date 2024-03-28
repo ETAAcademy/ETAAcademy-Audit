@@ -85,13 +85,13 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
   </details>
 
-## 2.[High] The userGaugeProfitIndex is not set correctly, allowing an attacker to receive rewards without waiting
+## 2.[Medium] The userGaugeProfitIndex is not set correctly, allowing an attacker to receive rewards without waiting
 
-### Initialization
+### Not correctly initialized
 
 - Summary: This vulnerability arises from a flaw in the **`ProfitManager`** contract where the **`userGaugeProfitIndex`** is not correctly initialized, if the user's gauge weight is zero.
 - Impact & Recommendation: As a result, the attacker can drain rewards, potentially depriving other users of their entitled rewards. To address this issue, it's crucial to ensure that the **`userGaugeProfitIndex`** is correctly set to the current `gaugeProfitIndex` when initially accessed, later when the `gaugeProfitIndex` grows the user will be able to claim the rewards.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1194) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1253) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -138,6 +138,29 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
         profitManager.claimGaugeRewards(bob,gauge1);
         console.log(credit.balanceOf(bob));
     }
+
+  ```
+
+  </details>
+
+## 3.[Medium] No check for sequencer uptime can lead to dutch auctions failing or executing at bad prices
+
+### Sequencer uptime
+
+- Summary: The AuctionHouse contract doesn't check sequencer uptime, risking failed auctions or unfavorable prices. Without bids for over 10 minutes, the protocol faces losses or loan forgiveness, impacting users during network outages.
+
+- Impact & Recommendation : Consider using Chainlink’s L2 Sequencer Feeds or implementing a mechanism to restart auctions if no bids are received.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1194) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+      /// @notice maximum duration of auctions, in seconds.
+    /// with a midpoint of 650 (10m50s) and an auction duration of 30min, and a block every
+    /// 13s, first phase will last around 50 blocks and each block will offer an additional
+    /// 1/(650/13)=2% of the collateral during the first phase. During the second phase,
+    /// every block will ask 1/((1800-650)/13)=1.13% less CREDIT in each block.
+    uint256 public immutable auctionDuration;
 
   ```
 

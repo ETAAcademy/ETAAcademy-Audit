@@ -30,7 +30,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: By executing a self-transfer of tokens while in rebase, an attacker can mint additional tokens for themselves, effectively stealing all distributed rewards until that point. This occurs due to a discrepancy in updating share balances during the transfer process, leading to an incorrect calculation of token balances.
 - Impact & Recommendation: Consequently, an attacker can repeatedly exploit this flaw to siphon off rewards intended for other users.To mitigate this issue, preventing self-transfers is recommended to prevent further exploitation and potential loss of funds.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/991) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/991) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -68,6 +68,60 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
     console.log("--------------------------------------------------");
     console.log("Alice profit credit        : ", token_balance_alice - token_balance_alice_before);
   }
+
+
+  ```
+
+  </details>
+
+## 2. [Medium] Inability to withdraw funds for certain users due to whenNotPaused modifier in RateLimitedMinter
+
+### EmergencyWithdraw for paused protocol
+
+- Summary: The GUARDIAN role is meant to freeze new protocol usage but allow fund withdrawals. However, the whenNotPaused modifier in the RateLimitedMinter.mint() function prevents users from withdrawing funds if they have CREDIT tokens staked with pending guild rewards. This occurs because the SurplusGuildMinter.unstake() function, called during withdrawal, tries to mint rewards through RateLimitedMinter.mint() by getRewards(), which fails if the protocol is paused.
+
+- Impact & Recommendation: Introduce emergencyWithdraw for users to withdraw funds, excluding rewards when the protocol is paused.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1249) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function unstake(address term, uint256 amount) external {
+        // apply pending rewards
+        (, UserStake memory userStake, bool slashed) = getRewards(
+            msg.sender,
+            term
+        );
+    ...
+
+
+    function getRewards(
+        address user,
+        address term
+    )
+        public
+        returns (
+            uint256 lastGaugeLoss, // GuildToken.lastGaugeLoss(term)
+            UserStake memory userStake, // stake state after execution of getRewards()
+            bool slashed // true if the user has been slashed
+        )
+    {
+    ...
+
+                // forward rewards to user
+            if (guildReward != 0) {
+                RateLimitedMinter(rlgm).mint(user, guildReward);
+                emit GuildReward(block.timestamp, user, guildReward);
+            }
+    ...
+
+    function mint(
+        address to,
+        uint256 amount
+    ) external onlyCoreRole(role) whenNotPaused {
+        _depleteBuffer(amount); /// check and effects
+        IERC20Mintable(token).mint(to, amount); /// interactions
+    }
 
 
   ```
