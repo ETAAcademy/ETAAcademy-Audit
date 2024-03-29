@@ -86,3 +86,70 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 4. [Medium] Repayers using EOA accounts can be affected if bad debt is generated when they are repaying loans
+
+### Mint to repay loans in the same transaction
+
+- Summary: The current protocol design forces EOA repayers to mint CreditTokens before repaying loans, causing issues if bad debt is generated and the creditMultiplier decreases between minting and repayment. This unfairly burdens repayers, who are already paying interest and fees. Bad debt should be covered by other mechanisms, not by repayers forced to mint additional tokens due to protocol design flaws.
+
+- Impact & Recommendation: Allow repayers to mint the exact amount of CreditTokens needed to repay loans in the same transaction, protecting against bad debt. Alternatively, they can follow the current method. The LendingTerm will pull the required PeggedTokens for minting CreditTokens, handled by the PSM module.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1041) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    //@audit-issue => A repayer could compute how much CreditTokens are required to repay a loan by calling this function, the computed value will be based on the current value of the creditMultiplier
+    //@audit-issue => The repayer would then go and mint the amount returned by this function before calling the `repay()` to finally repay his loan
+    /// @notice outstanding borrowed amount of a loan, including interests
+    function getLoanDebt(bytes32 loanId) public view returns (uint256) {
+        ...
+        // compute interest owed
+        uint256 borrowAmount = loan.borrowAmount;
+        uint256 interest = (borrowAmount *
+            params.interestRate *
+            (block.timestamp - borrowTime)) /
+            YEAR /
+            1e18;
+        uint256 loanDebt = borrowAmount + interest;
+        uint256 _openingFee = params.openingFee;
+        if (_openingFee != 0) {
+            loanDebt += (borrowAmount * _openingFee) / 1e18;
+        }
+        uint256 creditMultiplier = ProfitManager(refs.profitManager)
+            .creditMultiplier();
+
+        //@audit-info => The loanDebt is normalized using the current value of the `creditMultiplier`. loanDebt includes interests and fees accrued by the original borrowAmount
+        loanDebt = (loanDebt * loan.borrowCreditMultiplier) / creditMultiplier;
+        return loanDebt;
+    }
+    //@audit-issue => The problem when repaying the loan is if bad debt was generated in the system, now, the value of the `creditMultiplier` will be slightly lower than when the user queried the total amount of CreditTokens to be repaid by calling the `getLoanDebt()`
+    function _repay(address repayer, bytes32 loanId) internal {
+        ...
+        ...
+        ...
+        // compute interest owed
+        //@audit-issue => Now, when repaying the loan, the creditMultiplier will be different, thus, the computed value of the loanDebt will be greater than before, thus, more CreditTokens will be required to repay the same loan
+        uint256 loanDebt = getLoanDebt(loanId);
+        uint256 borrowAmount = loan.borrowAmount;
+        uint256 creditMultiplier = ProfitManager(refs.profitManager)
+            .creditMultiplier();
+        uint256 principal = (borrowAmount * loan.borrowCreditMultiplier) /
+            creditMultiplier;
+        uint256 interest = loanDebt - principal;
+        //@audit-issue => The amount of `loanDebt` CreditTokens are pulled from the repayer, this means, the repayer must have already minted the CreditTokens and it also granted enough allowance to the LendingTerm contract to spend on his behalf!
+        /// pull debt from the borrower and replenish the buffer of available debt that can be minted.
+        CreditToken(refs.creditToken).transferFrom(
+            repayer,
+            address(this),
+            loanDebt
+        );
+        ...
+        ...
+        ...
+    }
+
+
+  ```
+
+  </details>
