@@ -29,6 +29,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ### Absence of enforcement of EIP-155
 
 - Summary: Attackers and malicious operators profit from replaying transactions due to the absence of enforcement of **`EIP-155`**, which prevents replay attacks by including the chain ID in the transaction's signature.
+
 - Impact & Recommendation: Attackers can replay transactions from networks not protected by EIP-155, while operators can replay early user transactions from other EVM networks to collect gas fees or profit directly.
   🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/882) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
@@ -53,6 +54,44 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
                 let v = rlp.val_at(6).ok()?;
                 PackedEthSignature::unpack_v(v).ok()?.1?
             }
+
+  ```
+
+  </details>
+
+## 2. [Low] CoreRef::emergencyAction is susceptible to returnbomb attack
+
+### Lack of assembly to handle returned data
+
+- Summary: **`Emergency()`** lack of assembly to handle returned data leaves it vulnerable to returnbomb attacks, especially when interacting with untrusted external contracts.
+
+- Impact & Recommendation: Consider using the ExcessivelySafeCall library or assembly to mitigate the vulnerability.
+  🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+    /// @notice due to inflexibility of current smart contracts,
+    /// add this ability to be able to execute arbitrary calldata
+    /// against arbitrary addresses.
+    /// callable only by governor
+    function emergencyAction(Call[] calldata calls)
+        external
+        payable
+        onlyCoreRole(CoreRoles.GOVERNOR)
+        returns (bytes[] memory returnData)
+    {
+        returnData = new bytes[](calls.length);
+        for (uint256 i = 0; i < calls.length; i++) {
+            address payable target = payable(calls[i].target);
+            uint256 value = calls[i].value;
+            bytes calldata callData = calls[i].callData;
+            (bool success, bytes memory returned) = target.call{value: value}(callData);
+            require(success, "CoreRef: underlying call reverted");
+            returnData[i] = returned;
+        }
+    }
 
   ```
 
