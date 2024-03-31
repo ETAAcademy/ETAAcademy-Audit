@@ -31,7 +31,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: Attackers and malicious operators profit from replaying transactions due to the absence of enforcement of **`EIP-155`**, which prevents replay attacks by including the chain ID in the transaction's signature.
 
 - Impact & Recommendation: Attackers can replay transactions from networks not protected by EIP-155, while operators can replay early user transactions from other EVM networks to collect gas fees or profit directly.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/882) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/882) & [Report](https://github.com/code-423n4/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -91,6 +91,31 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
             require(success, "CoreRef: underlying call reverted");
             returnData[i] = returned;
         }
+    }
+
+  ```
+
+  </details>
+
+## 3. [Medium] Wrong ProfitManager in GuildToken, will always revert for other types of gauges leading to bad debt
+
+### ProfitManagers in different markets
+
+- Summary: In GuildToken.sol, setting profitManager in the constructor causes problems as different markets have different ProfitManagers. Calling `notifyPnL()` with negative values from other term types triggers `notifyGaugeLoss()`, leading to reverts because the caller differs from the constructor-set ProfitManager.
+
+- Impact & Recommendation: In GuildToken.sol, ProfitManager should be dynamically called to accommodate different ProfitManagers for each market.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1001) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function testNotifyPnLCannotBeCalledWithNegative() public {
+        // Show that for the initial gUSDC term there is no problem.
+        credit.mint(address(profitManager), 10);
+        profitManager.notifyPnL(term, -1);
+        creditWETH.mint(address(profitManagerWETH), 10);
+        vm.expectRevert("UNAUTHORIZED");
+        profitManagerWETH.notifyPnL(termWETH, -1);
     }
 
   ```

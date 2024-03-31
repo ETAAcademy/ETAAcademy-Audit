@@ -380,3 +380,46 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 5.[Medium] There is no way to liquidate a position if it breaches maxDebtPerCollateralToken value creating bad debt.
+
+### debtPerCollateralToken < maxDebtPerCollateral
+
+- Summary: The lending protocol aims to maintain a healthy debt-to-collateral ratio. However, over time, accrued interest can push users' debt beyond this ratio. Even though the ratio is breached, positions can't be called unless users miss repayment deadlines. In addition, In the current setup, periodic repayments aren't enforced for every term, making it possible for malicious users to avoid repayments and keep their positions unliquidatable.
+- Impact & Recommendation: This loophole creates risks for the protocol, as offboarding a term requires force-closing all positions, leading to potential losses for lenders and missed interest payments. Enforcing a check of debtPerCollateralToken < maxDebtPerCollateral in \_partialRepay, or in \_call to prevent underwater positions, when partial repays are off. However, this may limit users from borrowing up to the maximum initially, posing trade-offs.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1057) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+    function testBreakMaxDebtPerCollateralToken() public {
+            // prepare
+            uint256 borrowAmount = 30_000e18;
+            uint256 collateralAmount = 15e18;
+            collateral.mint(address(this), collateralAmount);
+            collateral.approve(address(term), collateralAmount);
+            credit.approve(address(term), type(uint256).max);
+            // borrow
+            bytes32 loanId = term.borrow(borrowAmount, collateralAmount);
+            vm.warp(block.timestamp + (term.YEAR() * 3));
+            // 3 years have passed, and now position's debt is 39_000
+            uint256 loanDebt = term.getLoanDebt(loanId);
+            assertEq(loanDebt, 39_000e18);
+            // A user is able to call partialRepays even if he missed partialRepays deadline
+            term.partialRepay(
+                loanId,
+                (loanDebt * _MIN_PARTIAL_REPAY_PERCENT) / 1e18
+            );
+            // After repaying just minPartialRepayPercent, a debtPerCollateralToken of the position is 2080, which is greater than maxDebtPerCollateral
+            uint256 newLoanDebt = term.getLoanDebt(loanId);
+            assertEq((newLoanDebt / 15e18) * 1e18, 2080000000000000000000);
+            assertGt((newLoanDebt / 15e18) * 1e18, _CREDIT_PER_COLLATERAL_TOKEN);
+            // A position cannot be called
+            vm.expectRevert("LendingTerm: cannot call");
+            term.call(loanId);
+        }
+
+  ```
+
+  </details>
