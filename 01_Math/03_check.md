@@ -423,3 +423,36 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 6.[Medium] LendingTerm debtCeiling function uses creditMinterBuffer incorrectly
+
+## Buffer sets a limit on additional borrows
+
+- Summary: Buffer sets a limit on additional borrows, rather than on the total of current issuance and additional borrows. This results in a revert in `GuildToken::_decrementGaugeWeight` whenever a gauge's current issuance surpasses the remaining buffer, regardless of whether the post-decrement true `debtCeiling` exceeds the `issuance`.
+
+- Impact & Recommendation: Guild voters and surplusGuildMinder stakers are unfairly unable to withdraw their votes/stakes due to a flaw where borrowing demand or malicious actors keep a term's issuance above the remaining buffer, blocking exits. The use of creditMinterBuffer causes debtCeiling to be lower than it should, so that creditMinterBuffer should be removed from the debt ceiling calculation.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/868) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+    function testDebtCeilingBufferError() public {
+        //causes this contract to vote on term
+        testAllocateGaugeToSDAI();
+        //borrow 51% of the credit buffer to simulate issuance being above
+        //remaining buffer
+        uint256 borrowAmount = rateLimitedCreditMinter.buffer() * 51 / 100;
+        uint128 supplyAmount = uint128(borrowAmount);
+        bytes32 loanId = _supplyCollateralUserOne(borrowAmount, supplyAmount);
+        //try to remove 2%  of the vote
+        uint256 decrementAmount = guild.balanceOf(address(this)) * 2 / 100;
+        vm.expectRevert("GuildToken: debt ceiling used");
+        guild.decrementGauge(address(term), decrementAmount);
+        //Reverts due to finding error. Decrementing 2% should succeed in the case
+        //of a single term but fails because current issuance is above the remaining buffer.
+    }
+
+  ```
+
+  </details>
