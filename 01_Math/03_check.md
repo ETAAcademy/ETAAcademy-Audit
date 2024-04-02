@@ -426,7 +426,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 6.[Medium] LendingTerm debtCeiling function uses creditMinterBuffer incorrectly
 
-## Buffer sets a limit on additional borrows
+### Buffer sets a limit on additional borrows
 
 - Summary: Buffer sets a limit on additional borrows, rather than on the total of current issuance and additional borrows. This results in a revert in `GuildToken::_decrementGaugeWeight` whenever a gauge's current issuance surpasses the remaining buffer, regardless of whether the post-decrement true `debtCeiling` exceeds the `issuance`.
 
@@ -451,6 +451,92 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
         guild.decrementGauge(address(term), decrementAmount);
         //Reverts due to finding error. Decrementing 2% should succeed in the case
         //of a single term but fails because current issuance is above the remaining buffer.
+    }
+
+  ```
+
+  </details>
+
+## 7.[Medium] LendingTerm::debtCeiling() can return wrong debt as the min() is evaluated incorrectlybt.
+
+### Incorrect **`min()`** calculation
+
+- Summary: The `LendingTerm::debtCeiling()` function calculates the min of `creditMinterBuffer, _debtCeiling and _hardCap` , which is flawed, as it does not always return the minimum of the 3 values.
+
+- Impact & Recommendation: Due to the incorrect `min()` calculation, the `LendingTerm::debtCeiling()` function may return an incorrect value, potentially resulting in a higher debt ceiling than intended. It is recommended to review and correct the calculation to ensure the function returns the actual debt ceiling value as intended.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/708) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    -   if (creditMinterBuffer < _debtCeiling) {
+    -      return creditMinterBuffer;
+    -   }
+    -   if (_hardCap < _debtCeiling) {
+    -      return _hardCap;
+    -   }
+    -   return _debtCeiling;
+    +   if (creditMinterBuffer < _debtCeiling && creditMinterBuffer < _hardCap) {
+    +       return creditMinterBuffer;
+    +   } else if (_debtCeiling < _hardCap) {
+    +       return _debtCeiling;
+    +   } else {
+    +       return _hardCap;
+    +   }
+
+  ```
+
+  </details>
+
+## 8.[Low] IncrementGauge can be called with 0 weight
+
+### 0 weight result in infinite loops
+
+- Summary: The code doesn't check if the passed weight is greater than 0, leading to potential infinite loops, especially in \_decrementWeightUntilFree. This allows users to avoid slashing and grief those calling applyGaugeLoss for them. Additionally, operations like transfer, transferFrom, and burn may cause infinite loops if the user lacks sufficient balance and weight to be freed but has a weight of 0 in the first iteration of the loop.
+
+- Impact & Recommendation: Implementing a verification check to ensure that the passed weight is greater than 0 would mitigate the potential for infinite loops.
+  🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function incrementGauge(address gauge, uint256 weight) public virtual returns (uint256 newUserWeight) {
+            require(isGauge(gauge), "ERC20Gauges: invalid gauge");
+            _incrementGaugeWeight(msg.sender, gauge, weight);
+            return _incrementUserAndGlobalWeights(msg.sender, weight);
+        }
+
+    function _decrementWeightUntilFree(address user, uint256 weight) internal {
+        uint256 userFreeWeight = balanceOf(user) - getUserWeight[user];
+            // early return if already free
+        if (userFreeWeight >= weight) return;
+        // cache totals for batch updates
+        uint256 userFreed;
+        uint256 totalFreed;
+        // Loop through all user gauges, live and deprecated
+        address[] memory gaugeList = _userGauges[user].values();
+        // Free gauges until through entire list or underweight
+        uint256 size = gaugeList.length;
+        for (
+            uint256 i = 0;
+            i < size && (userFreeWeight + userFreed) < weight;
+        ) {
+            address gauge = gaugeList[i];
+            uint256 userGaugeWeight = getUserGaugeWeight[user][gauge];
+            if (userGaugeWeight != 0) {
+                userFreed += userGaugeWeight;
+                _decrementGaugeWeight(user, gauge, userGaugeWeight);
+                // If the gauge is live (not deprecated), include its weight in the total to remove
+                if (!_deprecatedGauges.contains(gauge)) {
+                    totalTypeWeight[gaugeType[gauge]] -= userGaugeWeight;
+                    totalFreed += userGaugeWeight;
+                }
+                unchecked {
+                    ++i; //@audit only in case userGaugeWeight != 0
+                }
+            }
+        }
+        totalWeight -= totalFreed;
     }
 
   ```

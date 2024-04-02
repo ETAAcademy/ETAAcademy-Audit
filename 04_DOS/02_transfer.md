@@ -127,3 +127,129 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 3. [Medium] Auction manipulation by block stuffing and reverting on ERC-777 hooks
+
+### Block stuffing attack on the auction
+
+- Summary: A low immutable auction duration set in the deployment script can enable profitable block stuffing attacks on desired Layer 2 (L2) chains. The attacker borrows a loan to receive credit tokens and deposit collateral into the protocol. After the first partial duration, the attacker fails to repay the loan and initiates an auction. The attacker exploits the system by preventing bids until the midpoint, reducing costs, then begins block stuffing to acquire collateral by less credit tokens. Ultimately, the attacker may acquire almost the full loan amount, surpassing the gas cost for block stuffing.
+
+- Impact & Recommendation: The attacker can manipulate the auction to acquire full collateral for almost zero credit tokens, resulting in loss for all stakers on the term. Increasing auction duration and implementing fixes to prevent bad debt from collateral token blacklisting can mitigate such attacks and prevent total loss of stake for lenders.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/685) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+    function bid(bytes32 loanId) external {
+        ...
+        LendingTerm(_lendingTerm).onBid(
+            loanId,
+            msg.sender,
+            auctions[loanId].collateralAmount - collateralReceived, // collateralToBorrower
+            collateralReceived, // collateralToBidder
+            creditAsked // creditFromBidder
+        );
+        ...
+    }
+    function onBid(
+        bytes32 loanId,
+        address bidder,
+        uint256 collateralToBorrower,
+        uint256 collateralToBidder,
+        uint256 creditFromBidder
+    ) external {
+        ...
+        int256 pnl;
+        uint256 interest;
+        if (creditFromBidder >= principal) {
+            interest = creditFromBidder - principal;
+            pnl = int256(interest);
+        } else {
+            pnl = int256(creditFromBidder) - int256(principal);
+            principal = creditFromBidder;
+            require(
+                collateralToBorrower == 0,
+                "LendingTerm: invalid collateral movement"
+            );
+        }
+        ...
+        // handle profit & losses
+        if (pnl != 0) {
+            // forward profit, if any
+            if (interest != 0) {
+                CreditToken(refs.creditToken).transfer(
+                    refs.profitManager,
+                    interest
+                );
+            }
+            ProfitManager(refs.profitManager).notifyPnL(address(this), pnl);
+        }
+        ...
+    }
+    function notifyPnL(
+        address gauge,
+        int256 amount
+    ) external onlyCoreRole(CoreRoles.GAUGE_PNL_NOTIFIER) {
+        ...
+        // handling loss
+        if (amount < 0) {
+            uint256 loss = uint256(-amount);
+            // save gauge loss
+            GuildToken(guild).notifyGaugeLoss(gauge);
+            // deplete the term surplus buffer, if any, and
+            // donate its content to the general surplus buffer
+            if (_termSurplusBuffer != 0) {
+                termSurplusBuffer[gauge] = 0;
+                emit TermSurplusBufferUpdate(block.timestamp, gauge, 0);
+                _surplusBuffer += _termSurplusBuffer;
+            }
+            if (loss < _surplusBuffer) {
+                // deplete the surplus buffer
+                surplusBuffer = _surplusBuffer - loss;
+                emit SurplusBufferUpdate(
+                    block.timestamp,
+                    _surplusBuffer - loss
+                );
+                CreditToken(_credit).burn(loss);
+            }
+        } ...
+    }
+    function notifyGaugeLoss(address gauge) external {
+        require(msg.sender == profitManager, "UNAUTHORIZED");
+        // save gauge loss
+        lastGaugeLoss[gauge] = block.timestamp;
+        emit GaugeLoss(gauge, block.timestamp);
+    }
+    /// @notice apply a loss that occurred in a given gauge
+    /// anyone can apply the loss on behalf of anyone else
+    function applyGaugeLoss(address gauge, address who) external {
+        // check preconditions
+        uint256 _lastGaugeLoss = lastGaugeLoss[gauge];
+        uint256 _lastGaugeLossApplied = lastGaugeLossApplied[gauge][who];
+        require(
+            _lastGaugeLoss != 0 && _lastGaugeLossApplied < _lastGaugeLoss,
+            "GuildToken: no loss to apply"
+        );
+        // read user weight allocated to the lossy gauge
+        uint256 _userGaugeWeight = getUserGaugeWeight[who][gauge];
+        // remove gauge weight allocation
+        lastGaugeLossApplied[gauge][who] = block.timestamp;
+        _decrementGaugeWeight(who, gauge, _userGaugeWeight);
+        if (!_deprecatedGauges.contains(gauge)) {
+            totalTypeWeight[gaugeType[gauge]] -= _userGaugeWeight;
+            totalWeight -= _userGaugeWeight;
+        }
+        // apply loss
+        _burn(who, uint256(_userGaugeWeight));
+        emit GaugeLossApply(
+            gauge,
+            who,
+            uint256(_userGaugeWeight),
+            block.timestamp
+        );
+    }
+
+  ```
+
+  </details>

@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 2. Governance
+# ETAAcademy-Adudit: 1. DAO
 
 <table>
   <tr>
@@ -6,14 +6,14 @@
     <th>tags</th>
   </tr>
   <tr>
-    <td>02. Block</td>
+    <td>01. DAO</td>
     <td>
       <table>
         <tr>
           <th>audit</th>
           <th>basic</th>
           <th>Governance</th>
-          <td>governance</td>
+          <td>DAO</td>
         </tr>
       </table>
     </td>
@@ -24,36 +24,7 @@
 
 Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
-## 1.[Medium] Governance logic may enter a deadlock
-
-### Key actors manipulate governance mechanism
-
-- Summary: If compromised, key actors like the security council or owner could prevent upgrades or manipulate the governance mechanism, leading to operational challenges.
-- Impact & Recommendation: To mitigate this the possibility of a governance deadlock , suggested solutions include restricting the cancel permission to only the owner, and implementing a minimum upgrade delay to prevent instant upgrades, giving users time to react in case of malicious actions.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/260) & [Report](https://code4rena.com/reports/2023-10-zksync)
-
-  <details><summary>POC</summary>
-
-  ```solidity
-
-    -   function cancel(bytes32 _id) external onlyOwnerOrSecurityCouncil {
-    +   function cancel(bytes32 _id) external onlyOwner {
-            require(isOperationPending(_id), "Operation must be pending");
-            delete timestamps[_id];
-            emit OperationCancelled(_id);
-        }
-
-        function updateDelay(uint256 _newDelay) external onlySelf {
-    +       require(_newDelay >= MINIMUM_UPGRADE_DELAY, "whatever";)
-            emit ChangeMinDelay(minDelay, _newDelay);
-            minDelay = _newDelay;
-        }
-
-  ```
-
-  </details>
-
-## 2. [Medium] Re-triggering the canOffboard[term] flag to bypass the DAO vote of the lending term offboarding mechanism
+## 1. [Medium] Re-triggering the canOffboard[term] flag to bypass the DAO vote of the lending term offboarding mechanism
 
 ### Offboarding lending term
 
@@ -147,6 +118,86 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
         assertEq(guild.isGauge(address(term)), false);
         assertEq(psm.redemptionsPaused(), true);
         assertEq(offboarder.nOffboardingsInProgress(), 1);
+    }
+
+  ```
+
+  </details>
+
+## 2. [Medium] The gauge status wasn’t checked before reducing the user’s gauge weight.
+
+### Reduce weight to transfer loss
+
+- Summary: In the event of any loss triggered by **`ProfitManager#notifyPnL()`**, all staked guild tokens on the lending term will be entirely slashed through **`GuildToken#notifyGaugeLoss()`**, with termSurplusBuffer[gauge] depleting and donating to surplusBuffer. Loss will first decrease from surplusBuffer, and if surplusBuffer is insufficient, the remaining loss will reduce the creditMultiplier for each credit token. A term can be offboarded if deemed unsafe, pausing the redemption function of the corresponding SimplePSM. Once offboarded, potential losses are distributed to all credit token holders, as exiting in advance is not possible. However, guild holders can reduce their weight on the offboarded term, transferring potential losses to other holders.
+
+- Impact & Recommendation: Preventing gauge weight deprecation upon offboarding a lending term is advisable, particularly with surplus GUILD minter, as it ensures protection for passive lenders by retaining surplus buffer capital that may otherwise escape.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/651) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function testOffboardTermAndDecrementGauge() public {
+        //@audit-info term2 is deployed
+        LendingTerm term2 = LendingTerm(Clones.clone(address(new LendingTerm())));
+        term2.initialize(
+            address(core),
+            LendingTerm.LendingTermReferences({
+                profitManager: address(profitManager),
+                guildToken: address(guild),
+                auctionHouse: address(auctionHouse),
+                creditMinter: address(rlcm),
+                creditToken: address(credit)
+            }),
+            LendingTerm.LendingTermParams({
+                collateralToken: address(collateral),
+                maxDebtPerCollateralToken: _CREDIT_PER_COLLATERAL_TOKEN,
+                interestRate: _INTEREST_RATE,
+                maxDelayBetweenPartialRepay: 0,
+                minPartialRepayPercent: 0,
+                openingFee: 0,
+                hardCap: _HARDCAP
+            })
+        );
+        vm.startPrank(governor);
+        core.grantRole(CoreRoles.RATE_LIMITED_CREDIT_MINTER, address(term2));
+        core.grantRole(CoreRoles.GAUGE_PNL_NOTIFIER, address(term2));
+        vm.stopPrank();
+        //@audit-info active term2, which has the same gauge type with term1
+        guild.addGauge(1, address(term2));
+        //@audit-info mint 2e18 guild token to carol
+        guild.mint(carol, 2e18);
+        vm.startPrank(carol);
+        guild.incrementGauge(address(term), 1e18);
+        guild.incrementGauge(address(term2), 1e18);
+        vm.stopPrank();
+        // prepare (1)
+        guild.mint(bob, _QUORUM);
+        vm.startPrank(bob);
+        guild.delegate(bob);
+        uint256 snapshotBlock = block.number;
+        //@audit-info bob propose to offboard term
+        offboarder.proposeOffboard(address(term));
+        vm.roll(block.number + 1);
+        vm.warp(block.timestamp + 13);
+        //@audit-info term is able to be offboarded with enough votes.
+        offboarder.supportOffboard(snapshotBlock, address(term));
+        assertEq(offboarder.polls(snapshotBlock, address(term)), _QUORUM + 1);
+        assertEq(offboarder.canOffboard(address(term)), true);
+        assertEq(guild.isGauge(address(term)), true);
+        assertEq(psm.redemptionsPaused(), false);
+        assertEq(offboarder.nOffboardingsInProgress(), 0);
+        offboarder.offboard(address(term));
+        //@audit-info term is offboarded
+        assertEq(guild.isGauge(address(term)), false);
+        //@audit-info the redemption function is paused, no one can redeem their credit token
+        assertEq(psm.redemptionsPaused(), true);
+        assertEq(offboarder.nOffboardingsInProgress(), 1);
+        vm.stopPrank();
+        assertEq(guild.getUserGaugeWeight(carol, address(term)), 1e18);
+        vm.prank(carol);
+        //@audit-info however, carol can decrement their gauge weight on term
+        guild.decrementGauge(address(term), 1e18);
+        assertEq(guild.getUserGaugeWeight(carol, address(term)), 0);
     }
 
   ```
