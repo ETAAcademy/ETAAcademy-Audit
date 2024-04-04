@@ -26,7 +26,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 1.[Low] MinBorrow must be based on the market token
 
-## MinBorrow
+### MinBorrow
 
 - Summary: In LendingTerm.sol, initializing minBorrow to 100e18 upon deployment poses an issue, especially with expensive assets like ETH or BTC.
 
@@ -52,7 +52,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 2.[Medium] LendingTerm.sol `_partialRepay()` A user cannot partial repay a loan with 0 interest
 
-## Partial repay zero interest
+### Partial repay zero interest
 
 - Summary: The problem arises from a requirement in the code that checks if `interestRepaid != 0`. This condition, meant to prevent small repayments, creates an issue when the loan has zero interest, making partial repayment impossible despite being feasible through `_repay()`.
 
@@ -111,7 +111,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 3.[Low] If borrower becomes blacklisted for his collateral his loan needs to be forgiven in case to receive it
 
-## Blacklisted collateral
+### Blacklisted collateral
 
 - Summary: If a user's collateral is blacklisted, repay() will revert, requiring the Governor to initiate forgive() and manually transfer the tokens to the user, which may not be ideal if the user needs the tokens urgently.
 
@@ -120,7 +120,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 4.[Medium] Over 90% of the Guild staked in a gauge can be unstaked, despite the gauge utilizing its full debt allocation
 
-## Manipulate the gauge's debt allocation by tolerance
+### Manipulate the gauge's debt allocation by tolerance
 
 - Summary: The mentioned protocol utilizes a tolerance factor to extend a gauge's debt ceiling by 20%. By exploiting this tolerance, it becomes possible to manipulate the gauge's debt allocation. Specifically, if a gauge's debt allocation is at 100%, it's feasible to decrease the gaugeWeight by a specific amount. After applying the tolerance, the gauge's debt allocation remains unchanged. This manipulation allows unstaking approximately 16.6666% of the totalWeight at a time, given the current operational state.
 
@@ -442,9 +442,9 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
   </detail>
 
-## 4.[Low] Credit rewards accrue for slashed users
+## 5.[Low] Credit rewards accrue for slashed users
 
-## Set creditReward to 0
+### Set creditReward to 0
 
 - Summary: Slashed stakers lose their GUILD tokens but still receive CREDIT tokens, leading to potential bad debt in the system.
 
@@ -486,6 +486,136 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
                 }
     ... More code
         }
+
+  ```
+
+  </details>
+
+## 6.[Medium] LendingTerm inconsistency between debt ceiling as calculated in borrow() and debtCeiling()
+
+### DebtCeiling calculation
+
+- Summary: There's a discrepancy in debtCeiling calculation between the borrow() and debtCeiling() functions in the LendingTerm contract. This inconsistency not only causes operational differences but also affects liquidity utilization. The borrow() function calculates a more restrictive debtCeiling, leading to underutilized liquidity compared to the debtCeiling() function.
+
+- Impact & Recommendation: Unify the debtCeiling calculation method across the protocol to avoid lost income opportunities for lenders due to unused liquidity not generating interest
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/308) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  - `borrow()` function calculates the `debtCeiling` using a simpler formula:
+
+    - debtCeiling = $\frac{(Gauge Weight × (Total Borrowed Credit + Borrow Amount))}{Total Weight} × Gauge Weight Tolerance$
+
+  - `debtCeiling()` function's calculation method is more complex:
+    - debtCeiling = $(((\frac{Total BorrowedCredit × (Gauge Weight × 1.2e18)}{Total Weight}) - Issuance) × \frac{Total Weight}{Other Cauges Weight}) + Issuance$
+
+  </details>
+
+## 7.[Medium] ProfitManager’s creditMultiplier calculation does not count undistributed rewards; this can cause value losses to users
+
+### CreditMultiplier calculation consider undistributed rewards
+
+- Summary: The ProfitManager's creditMultiplier calculation doesn't consider undistributed rewards, leading to potential losses for users. When losses occur, excess amounts are attributed to credit token holders by slashing the creditMultiplier, `newCreditMultiplier = (creditMultiplier *  (creditTotalSupply - loss)) / creditTotalSupply;` . However, using totalSupply() can be problematic if a significant portion of the supply is in undistributed rewards, resulting in higher-than-necessary creditMultiplier slashing.
+
+- Impact & Recommendation: CreditMultiplier slashing is higher than necessary due to incorrect accounting, penalizing credit token holders and locking value in the protocol. Consider using targetTotalSupply() instead of totalSupply() to rectify this issue.
+  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/292) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+      function testH2() external {
+        uint ts = block.timestamp;
+        // Set ProfitManager to 100% rewards for rebasing users
+        pm.setProfitSharingConfig(
+            0,          // surplusBufferSplit,
+            1e18,       // creditSplit,
+            0,          // guildSplit,
+            0,          // otherSplit,
+            address(0)  // otherRecipient
+        );
+
+        // User 1 deposit 3000 USDC in PSM, gets 3000 gUSDC, enters rebase
+        address user1 = address(1);
+        vm.startPrank(user1);
+        coll.mint(user1, 3_000e18);
+        coll.approve(address(sPsm), 3_000e18);
+        sPsm.mintAndEnterRebase(3_000e18);
+        // User 2 open Loan A, 1000 gUSDC, redeems for 1000 USDC
+        address user2 = address(2);
+        vm.startPrank(user2);
+        coll.mint(user2, 1_000e18);
+        coll.approve(address(lt), 1_000e18);
+        bytes32 loanA = lt.borrow(1_000e18, 1_000e18);
+        ct.approve(address(sPsm), 1_000e18);
+        sPsm.redeem(user2, 1_000e18);
+        // User 3 open Loan B, 1000 gUSDC, redeems for 1000 USDC
+        address user3 = address(3);
+        vm.startPrank(user3);
+        coll.mint(user3, 1_000e18);
+        coll.approve(address(lt), 1_000e18);
+        bytes32 loanB = lt.borrow(1_000e18, 1_000e18);
+        ct.approve(address(sPsm), 1_000e18);
+        sPsm.redeem(user3, 1_000e18);
+        // User 4 open Loan C, 1000 gUSDC, redeems for 1000 USDC
+        address user4 = address(4);
+        vm.startPrank(user4);
+        coll.mint(user4, 1_000e18);
+        coll.approve(address(lt), 1_000e18);
+        bytes32 loanC = lt.borrow(1_000e18, 1_000e18);
+        ct.approve(address(sPsm), 1_000e18);
+        sPsm.redeem(user4, 1_000e18);
+        // Time passes, all loans accrue 50% interest, loan B gets called
+        ts += lt.YEAR() - 3 weeks;
+        vm.warp(ts);
+        lt.call(loanB);
+        ts += 3 weeks;
+        vm.warp(ts);
+        // User 2 deposit 1500 USDC in PSM, gets 1500 gUSDC, and repay Loan A (500 profit) -> 1500 USDC in PSM
+        vm.startPrank(user2);
+        coll.mint(user2, 500e18);
+        coll.approve(address(sPsm), 1500e18);
+        sPsm.mint(user2, 1500e18);
+        ct.approve(address(lt), 1500e18);
+        lt.repay(loanA);
+        // Now User 1's 3000 gUSDC balance is interpolating towards 3500 gUSDC
+        assertEq(3_000e18, ct.totalSupply());
+        assertEq(ct.totalSupply(), ct.balanceOf(user1));
+        assertEq(3_500e18, ct.targetTotalSupply());
+        // ---  Everything good till here; now we get to the bug:
+        // User 3 completely defaults on Loan B, 1000 gUSDC loss is reported,
+        // creditMultiplier becomes 1e18 * (3000 - 1000) / 3000 = 0.6667e18
+        // 🚨 if targetTotalSupply was used, this would be 1e18 * (3500 - 1000) / 3500 = 0.714285e18
+        ah.forgive(loanB);
+        assertApproxEqRel(pm.creditMultiplier(), 0.6667e18, 0.0001e18 /* 0.01% */);
+        // User 4's Loan C now owes 1500 / 0.66667 = 2250 gUSDC
+        uint loanCdebt = lt.getLoanDebt(loanC);
+        assertApproxEqRel(loanCdebt, 2250e18, 0.0001e18 /* 0.01% */);
+        // User 4 deposit 1500 USDC in PSM, gets 2250 gUSDC, and repay Loan C (750 profit) -> 3000 USDC in PSM
+        vm.startPrank(user4);
+        coll.mint(user4, 500e18);
+        coll.approve(address(sPsm), 1500e18);
+        sPsm.mint(user4, 1500e18);
+        ct.approve(address(lt), loanCdebt);
+        lt.repay(loanC);
+
+        // Now User 1's 3000 gUSDC balance is interpolating towards 4250
+        assertEq(3_000e18, ct.totalSupply());
+        assertEq(ct.totalSupply(), ct.balanceOf(user1));
+        assertApproxEqRel(4_250e18, ct.targetTotalSupply(), 0.0001e18 /* 0.01% */);
+        // User 1 waits for the interpolation to end
+        ts += ct.DISTRIBUTION_PERIOD();
+        vm.warp(ts);
+        // User 1 redeems 4250 gUSDC for 4250 * 0.66667 = 2833 USDC -> 167 USDC in PSM (🚨 there should be no leftover)
+        vm.startPrank(user1);
+        ct.approve(address(sPsm), ct.balanceOf(user1));
+        sPsm.redeem(user1, ct.balanceOf(user1));
+        assertApproxEqRel(2833.3e18, coll.balanceOf(user1), 0.0001e18 /* 0.01% */);
+        // 🚨 this value remains locked in the SimplePSM contract as a result of the incorrect accounting
+        assertApproxEqRel(166.66e18, coll.balanceOf(address(sPsm)), 0.0001e18 /* 0.01% */);
+        // ℹ️ if ProfitManager used targetTotalSupply, the value locked would be ~2e4 lost to rounding
+
+  }
 
   ```
 
