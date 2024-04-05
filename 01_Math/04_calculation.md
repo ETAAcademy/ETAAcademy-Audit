@@ -30,7 +30,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: It only records the loan's debt at the start of an auction, using the current `creditMultiplier`. If the creditMultiplier changes during the auction, callDebt may underestimate the actual debt. This could lead to only accepting bids during the auction's second phase if the borrower's debt exceeds available credit. Additionally, if the debt surpasses available credit, bad debt may occur during the auction.
 - Impact & Recommendation: All other loans in auction at that time will also be forced to create bad debt. It suggests dynamically calculating callDebt during auctions based on the current creditMultiplier, rather than using a fixed snapshot, for more accurate debt assessment.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/476) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/476) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -264,7 +264,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: If the gauge has experienced a loss in the past, even if the user staked during a profitable period, they may be immediately slashed upon staking. This happens because the code initializes the user's stake struct with default values, which will identify this user as being slashed, i.e. slashed = true, due to lastGaugeLoss > userStake.lastGaugeLoss.
 
 - Impact: The `SurplusGuildMinter` should initialize a user's **`lastGaugeLoss`** to the current block timestamp, so that comparisons with **`lastGaugeLoss`** won't be made against a freshly initialized user stake struct, preventing potential issues with loss of stake and rewards.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/473) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/473) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -347,7 +347,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: each time the distribute call occurs, the endTimestamp gets extended. An attacker could exploit this by repeatedly calling distribute(1) to distribute 1 wei of a credit token daily, thereby extending the distribution period by approximately three times.
 
 - Impact & Recommendation: Add a minimum required amount for calling distribute if it's not done by the ProfitManager, or change how rewards are interpolated.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/966) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/966) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 

@@ -30,7 +30,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: When the ECRECOVER precompile contract is invoked using delegatecall, it does not behave consistently with other zkSync Era operations like call and staticcall.
 - Impact & Recommendation: This divergence from expected EVM behavior can lead to incorrect signature validation, potentially compromising data integrity and user funds. If the **`_address`** matches the ECRECOVER precompile contract (0x01), it's recommended to perform a static call (**`rawStaticCall`**) instead of a delegate call to ensure consistent behavior with the ECRECOVER contract.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/175) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/175) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -76,7 +76,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: Default accounts mimic externally owned accounts (EOAs) on Ethereum, but a discrepancy arises when custom accounts delegate-calls to them, triggering a revert due to an `assert(msg.sender != BOOTLOADER_FORMAL_ADDRESS)` in the default account's fallback function.
 - Impact & Recommendation: One proposed solution is to add a modifier called **`ignoreInDelegateCall`** to the fallback function of default accounts, which prevents the assertion check from executing when the fallback function is invoked via a delegate call.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/168) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/168) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -106,9 +106,9 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: The **`CREATE3`** library facilitates EVM contract creation similar to **`CREATE2`**, but it excludes the contract **`initCode`** from the address derivation formula. It involves deploying a new proxy contract using the **`CREATE2`** method, which then deploys the child contract using **`CREATE`**. The child contract's address is computed based on the proxy contract's address and its hardcoded nonce `**hex"01”**` ,which aligns with EIP-161. However, in the zkSync Era, where the nonce does not increment by one as expected, this mechanism unexpectedly fails compared to the EVM.
 - Impact & Recommendation: It is recommended to increase the deployment nonce of a contract by one before calling its constructor.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/92) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/92) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
-  🐬: Others
+  <br> 🐬: Others
 
   - [Medium] Deployment Nonce Does not Increment For a Reverted Child Contract < Divisor: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/91) & [Report](https://code4rena.com/reports/2023-10-zksync)
 

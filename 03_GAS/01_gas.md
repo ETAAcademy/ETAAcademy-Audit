@@ -30,7 +30,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: An incorrect check allows an **`L1->L2`** transaction to be sent without covering the total gas limit required, including both overhead and intrinsic costs for the operator. **`{totalGasLimit} = {overhead + actualGasLimit} = {overhead + (intrinsicCosts + executionCosts)}`**
 - Impact & Recommendation: This leads to situations where transactions may not have enough gas to be executed on L2, despite incurring overhead and intrinsic costs.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/1108) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/1108) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -79,7 +79,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: A discrepancy in units used for calculating transaction leads to the overhead being 32 times larger than it should be.
 - Impact & Recommendation: Users may be charged significantly more than they should for certain transactions, causing potential financial implications and inaccuracies in cost assessments.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/1105) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/1105) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -104,7 +104,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: When an L1->L2 transaction is initiated, zkSync employs a near call opcode to execute the transaction on the L2 network. This opcode is exempt from certain gas usage limitations, such as the 63/64 rule. The discrepancy arises from zkSync's failure to return unspent gas to the caller when a transaction fails due to a REVERT opcode, resembling the behavior of Ethereum's deprecated THROW opcode.
 - Impact & Recommendation: L1->L2 transactions that revert will consume all gas, posing inconsistency with the EVM and potential risk for end users.
 
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/979) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/979) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -267,7 +267,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: Malicious operators abuse the gas refund system to stealing all gas provided by users for L1→L2 transactions, due to inadequate overflow checks in the refund calculation, allowing the operator to inflate the refundGas value.
 - Impact & Recommendation: To mitigate this risk, the recommended solution is to replace the **`add`** function with **`safeAdd`** to ensure overflow checks are performed, preventing malicious operators from claiming more gas than provided by users, resulting in a loss of gas funds for them.
 
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/255) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/255) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -289,7 +289,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: Gas consumption is determined by the length of the transmitted message, but malicious operators could exploit this by inflating gas costs through manipulation of the compression method, potentially leading to increased gas costs for message publication in L1 and undermining the intended efficiency and cost-effectiveness of the compression mechanism.
 - Impact & Recommendation: The function **`publishCompressedBytecode`** is updated to include an array called **`usedDictionaryIndex`** to track the usage of dictionary chunks and ensure that all chunks in the dictionary are utilized.
 
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/71) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/71) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -334,6 +334,34 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
         bytecodeHash = Utils.hashL2Bytecode(_bytecode);
         L1_MESSENGER_CONTRACT.sendToL1(_rawCompressedData);
         KNOWN_CODE_STORAGE_CONTRACT.markBytecodeAsPublished(bytecodeHash);
+    }
+
+  ```
+
+  </details>
+
+## 5. [Medium] Incorrect gas claiming logic in ThrusterPoolDeployer
+
+### Blast gas claim logic
+
+- Summary: The ThrusterPoolDeployer contract has a flaw in its claimGas() implementation. It incorrectly attempts to claim gas for the zero address instead of its own address. This prevents the contract from reclaiming any gas, as the claimMaxGas() call always fails with the zero address, according to the Blast gas claim logic.
+
+- Impact & Recommendation: Use `address(this)` rather than `0`.
+
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-thruster#m-04-incorrect-gas-claiming-logic-in-thrusterpooldeployer) & [Report](https://code4rena.com/reports/2024-02-thruster)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+  /**
+     * @notice Claims gas available to be claimed at max claim rate for a specific contract. Called by an authorized user
+    * @param contractAddress The address of the contract for which maximum gas is to be claimed
+    * @param recipientOfGas The address of the recipient of the gas
+    * @return The amount of gas that was claimed
+    */
+    function claimMaxGas(address contractAddress, address recipientOfGas) external returns (uint256) {
+        require(isAuthorized(contractAddress), "Not allowed to claim max gas");
+        return IGas(GAS_CONTRACT).claimMax(contractAddress, recipientOfGas);
     }
 
   ```

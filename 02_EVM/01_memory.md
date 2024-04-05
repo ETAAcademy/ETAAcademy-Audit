@@ -30,7 +30,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: Enforce that the first popped element is write(only a write log, or a write log and a rollback log) and there are no two consecutive rollbacks in the sorted queue.
 - Impact & Recommendation: Two adjacent letters share the same timestamp and the same written value. if someone submit `wr rw wr rw` as the sorted queue, All the four logs here are reverted, so no log should be added to the result queue. However, this sorted queue satisfy all the constraints, and it will add the second and the fourth log to the result queue.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/761) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/761) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -103,7 +103,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: When overflow or offset `>=` length, the memory access should be skipped and return zeros to prevent potential manipulation of the read result by attackers.
 - Impact & Recommendation: without performing memory reads and activating relevant memory access mechanisms, attackers could potentially manipulate the variables used in calculations.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/702) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/702) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -220,7 +220,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: The updated revision of ZkSync Era still refers to the old maximum precompile address, making the new precompiles **`ECADD`** and **`ECMUL`** unrecognized as precompiles due to their higher addresses, thus breaking the system's invariant.
 - Impact & Recommendation: It causes unexpected behavior in the system where **`getCodeHash()`** returns zero instead of the expected hash value for these precompiles.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/888) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/888) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -250,7 +250,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary : The absence of checks on unsafe arithmetic operations opens the door for operators to manipulate data, enabling them to pass incorrect compressed calldata and manipulate gas costs, potentially resulting in end users being overcharged.
 - Impact & Recommendation: This manipulation could lead to the insertion of incorrect or vulnerable data.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/807) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/807) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -276,7 +276,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: In the code unpacker where the enforcement of the version hash is not correctly implemented by the constraint system.
 - Impact & Recommendation: Any changes or updates to the version hash would not pass the validation process, rendering the system unable to accommodate future hash versions effectively.
 
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/716) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/716) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 

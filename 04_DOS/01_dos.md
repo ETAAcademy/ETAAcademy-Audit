@@ -31,7 +31,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: Attackers and malicious operators profit from replaying transactions due to the absence of enforcement of **`EIP-155`**, which prevents replay attacks by including the chain ID in the transaction's signature.
 
 - Impact & Recommendation: Attackers can replay transactions from networks not protected by EIP-155, while operators can replay early user transactions from other EVM networks to collect gas fees or profit directly.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/882) & [Report](https://github.com/code-423n4/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/882) & [Report](https://github.com/code-423n4/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -66,7 +66,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: **`Emergency()`** lack of assembly to handle returned data leaves it vulnerable to returnbomb attacks, especially when interacting with untrusted external contracts.
 
 - Impact & Recommendation: Consider using the ExcessivelySafeCall library or assembly to mitigate the vulnerability.
-  🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -104,7 +104,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: In GuildToken.sol, setting profitManager in the constructor causes problems as different markets have different ProfitManagers. Calling `notifyPnL()` with negative values from other term types triggers `notifyGaugeLoss()`, leading to reverts because the caller differs from the constructor-set ProfitManager.
 
 - Impact & Recommendation: In GuildToken.sol, ProfitManager should be dynamically called to accommodate different ProfitManagers for each market.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1001) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1001) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -129,7 +129,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: A borrower initiates a loan with the minimum amount in a term without mandatory partial repayment and transfers the funds to `EXPLOITER` after interest accrual. `EXPLOITER` then utilizes a flash loan to stake the amount into the same term via SurplusGuildMinter, repays the original loan, triggering `notifyPnL()`, which reduces rewards for other Guild holders by updating the `_gaugeProfitIndex`. Finally, `EXPLOITER` unstakes and returns the flash loan.
 
 - Impact & Recommendation: To prevent attackers from instantly accumulating rewards without being long-term stakeholders like others in the system, several protective measures can be implemented. These include disallowing staking and unstaking in the same block, introducing staking/unstaking fees, or implementing a "warm-up period" during which stakers are unable to accumulate interest.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/994) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/994) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 

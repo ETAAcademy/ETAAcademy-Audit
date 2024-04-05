@@ -30,7 +30,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary : Users are unable to access their ETH stored on L2 through L1->L2 transactions, because the msg.value is generated solely from the ETH on Layer 1, not from the active balance of the user's account on Layer 2.
 - Impact & Recommendation: Users cannot access their ETH on Layer 2 to withdraw funds from the rollup before a scheduled malicious upgrade, if a malicious operator only processes L1->L2 transactions, effectively trapping their funds.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/803) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/803) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
 ## 2. [Medium] Vulnerabilities in Deposit Limit Enforcement and the Impact on Failed Deposits
 
@@ -38,7 +38,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: Users may struggle to claim failed deposits if a deposit limit is later imposed on a token, while malicious actors can exploit the system by intentionally failing deposits before limits are introduced, resetting their total deposited amount and exceeding caps once enforced.
 - Impact & Recommendation: To mitigate these risks, the system should be updated to track deposited amounts regardless of existing limits, preventing difficulties in claiming failed deposits and thwarting attempts to bypass deposit restrictions.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/425) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/425) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -65,7 +65,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: When an L2 upgrade fails but is executed on L1 without verifying its outcome, the protocol version advances despite the L2 system remaining unchanged, because the protocol mandates unique transaction hashes for L2 upgrades, with the nonce matching the new protocol version, causing a disparity between recorded and actual states.
 - Impact & Recommendation:A potential solution involves integrating L2 upgrade outcomes into batch executions, allowing for a rollback of the protocol version if an upgrade fails. However, in cases involving both L1 and L2 components, directly reverting to a previous protocol version is challenging, as the L1 upgrade succeeds while the L2 counterpart encounters issues.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/214) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/214) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -94,7 +94,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: The current protocol design forces EOA repayers to mint CreditTokens before repaying loans, causing issues if bad debt is generated and the creditMultiplier decreases between minting and repayment. This unfairly burdens repayers, who are already paying interest and fees. Bad debt should be covered by other mechanisms, not by repayers forced to mint additional tokens due to protocol design flaws.
 
 - Impact & Recommendation: Allow repayers to mint the exact amount of CreditTokens needed to repay loans in the same transaction, protecting against bad debt. Alternatively, they can follow the current method. The LendingTerm will pull the required PeggedTokens for minting CreditTokens, handled by the PSM module.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1041) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1041) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 

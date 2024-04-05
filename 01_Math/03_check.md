@@ -30,7 +30,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary : The deposit limit check is based on the **`msg.sender`** (bridge) rather than the actual depositor. Consequently, when the bridge's deposit limit is met, further deposits are blocked, even if individual depositors haven't reached their personal limits.
 - Impact & Recommendation: This flaw could prevent anyone from using Zksync to deposit WETH from L1 to L2. To address this issue, the deposit limit check should be based on the real depositor's limit instead of the bridge's.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/246) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/246) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -91,7 +91,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: This vulnerability arises from a flaw in the **`ProfitManager`** contract where the **`userGaugeProfitIndex`** is not correctly initialized, if the user's gauge weight is zero.
 - Impact & Recommendation: As a result, the attacker can drain rewards, potentially depriving other users of their entitled rewards. To address this issue, it's crucial to ensure that the **`userGaugeProfitIndex`** is correctly set to the current `gaugeProfitIndex` when initially accessed, later when the `gaugeProfitIndex` grows the user will be able to claim the rewards.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1253) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1253) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -150,7 +150,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: The AuctionHouse contract doesn't check sequencer uptime, risking failed auctions or unfavorable prices. Without bids for over 10 minutes, the protocol faces losses or loan forgiveness, impacting users during network outages.
 
 - Impact & Recommendation : Consider using Chainlink’s L2 Sequencer Feeds or implementing a mechanism to restart auctions if no bids are received.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1194) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1194) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -173,9 +173,9 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: The SurplusGuildMinter::stake() function lacks a check to ensure that the provided term's CREDIT token matches the one in the called SurplusGuildMinter contract. A potential exploit arises where a user stakes in SurplusGuildMinter(gUSDC) using a gWETH term. This action generates Guild tokens based on staked gUSDC but increases the gaugeWeight for gWETH. Consequently, other guild token holders in the gWETH market may receive reduced rewards.
 
 - Impact & Recommendation: To prevent manipulation, include a verification in the stake() function to confirm that the provided term belongs to the same market as the SurplusGuildMinter.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1032) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1032) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
-  🐬: Others
+  <br> 🐬: Others
 
   - [Low] ProfitManager::donateToTermSurplusBuffer() does not check if the term is from the same market: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
@@ -387,7 +387,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: The lending protocol aims to maintain a healthy debt-to-collateral ratio. However, over time, accrued interest can push users' debt beyond this ratio. Even though the ratio is breached, positions can't be called unless users miss repayment deadlines. In addition, In the current setup, periodic repayments aren't enforced for every term, making it possible for malicious users to avoid repayments and keep their positions unliquidatable.
 - Impact & Recommendation: This loophole creates risks for the protocol, as offboarding a term requires force-closing all positions, leading to potential losses for lenders and missed interest payments. Enforcing a check of debtPerCollateralToken < maxDebtPerCollateral in \_partialRepay, or in \_call to prevent underwater positions, when partial repays are off. However, this may limit users from borrowing up to the maximum initially, posing trade-offs.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1057) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1057) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -431,7 +431,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: Buffer sets a limit on additional borrows, rather than on the total of current issuance and additional borrows. This results in a revert in `GuildToken::_decrementGaugeWeight` whenever a gauge's current issuance surpasses the remaining buffer, regardless of whether the post-decrement true `debtCeiling` exceeds the `issuance`.
 
 - Impact & Recommendation: Guild voters and surplusGuildMinder stakers are unfairly unable to withdraw their votes/stakes due to a flaw where borrowing demand or malicious actors keep a term's issuance above the remaining buffer, blocking exits. The use of creditMinterBuffer causes debtCeiling to be lower than it should, so that creditMinterBuffer should be removed from the debt ceiling calculation.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/868) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/868) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -464,7 +464,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: The `LendingTerm::debtCeiling()` function calculates the min of `creditMinterBuffer, _debtCeiling and _hardCap` , which is flawed, as it does not always return the minimum of the 3 values.
 
 - Impact & Recommendation: Due to the incorrect `min()` calculation, the `LendingTerm::debtCeiling()` function may return an incorrect value, potentially resulting in a higher debt ceiling than intended. It is recommended to review and correct the calculation to ensure the function returns the actual debt ceiling value as intended.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/708) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/708) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -495,7 +495,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: The code doesn't check if the passed weight is greater than 0, leading to potential infinite loops, especially in \_decrementWeightUntilFree. This allows users to avoid slashing and grief those calling applyGaugeLoss for them. Additionally, operations like transfer, transferFrom, and burn may cause infinite loops if the user lacks sufficient balance and weight to be freed but has a weight of 0 in the first iteration of the loop.
 
 - Impact & Recommendation: Implementing a verification check to ensure that the passed weight is greater than 0 would mitigate the potential for infinite loops.
-  🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -550,7 +550,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: The system restricts proposing the offboarding of a lending term more than once within a 7-day period to prevent abuse. However, if a term is offboarded and re-onboarded quickly due to market conditions, voters won't be able to offboard it again if needed, potentially leading to the creation of bad debt and market impact.
 
 - Impact & Recommendation: Currently, voters cannot offboard the same term twice within a 7-day window, potentially leading to bad debt and market impact if loans default. To address this, it's suggested to modify proposeOffboard() to allow a second offboarding if the previous one is completed.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/370) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/370) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -603,7 +603,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: SurplusGuildMinter's `getReward()` function invokes ProfitManager's `claimRewards()` that in a loop for all gauges/terms. With no limit set on the number of gauges and terms by `GuildToken.setMaxGauges(max)`, excessive gas consumption or Out-Of-Gas reverts may occur.
 - Impact & Recommendation: In `SurplusGuildMinter's getReward(user, term)` call, use `ProfitManager(profitManager).claimRewards(address(this), term)` to ensure specific updating of the profit index for the given term instead of updating all available terms.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/69) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/69) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -639,6 +639,51 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
         // getRewards() consumes more gas than block gas limit of 30Mil
         // reverts with OOG
         require(gasBefore - gasAfter > BLOCK_GAS_LIMIT);
+    }
+
+
+
+  ```
+
+  </details>
+
+## 11.[Medium] Dynamic modification of maxPrizeCount affects prize claims
+
+### Change the length of loop
+
+- Summary: There's a variable called maxPrizeCount, set by the owner, defining the maximum number of prize winners for a round. The issue arises when maxPrizeCount is decreased after setting prizes but before they're claimed. This causes winners of prizes with indices higher than the new maxPrizeCount to be unable to claim their winnings.
+
+- Impact & Recommendation: To address this issue, it's advisable to implement a require check ensuring that maxPrizeCount cannot be decreased, as that aligns with the intended functionality.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-thruster#proof-of-concept-2) & [Report](https://code4rena.com/reports/2024-02-thruster)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+    /*
+    1. The contract owner sets maxPrizeCount to 5 and configures five prizes for a given round.
+    2.Users participate in the round, and the round concludes with winners determined for all five prizes.
+    3.The contract owner reduces maxPrizeCount to 3 for the next round.
+    4.Winners of prizes 4 and 5 attempt to claim their prizes but are unable to do so because the claimPrizesForRound
+    (uint256 roundToClaim) function now iterates only up to the new maxPrizeCount of 3.
+    */
+
+    function setMaxPrizeCount(uint256 _maxPrizeCount) external onlyOwner {
+        maxPrizeCount = _maxPrizeCount;
+        emit SetMaxPrizeCount(_maxPrizeCount);
+
+
+    }
+
+    function claimPrizesForRound(uint256 roundToClaim) external {
+        ...
+
+        uint256 maxPrizeCount_ = maxPrizeCount;
+        for (uint256 i = 0; i < maxPrizeCount_; i++) {
+            [claim prize]
+        }
+        entered[msg.sender][roundToClaim] = Round(0, 0, roundToClaim); // Clear user's tickets for the round
+        emit CheckedPrizesForRound(msg.sender, roundToClaim);
     }
 
 

@@ -31,7 +31,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: This method converts a constraint system variable (representing a value in the prime field) directly into a **`UInt8`** value without performing any overflow checks.
 
 - Impact & Recommendation: This means that if the original value exceeds the range of **`UInt8`** (0 to 255), an attacker could inject unexpected or malicious behavior into the circuit by manipulating the overflowed **`xor_result`**.
-  🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/679) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/679) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -97,7 +97,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: Changes in the creditMultiplier can cause issues in the totalBorrowedCredit function, potentially leading to reverting due to underflow. This affects debt ceiling calculations and can break borrow operations, impacting functionality.
 
 - Impact & Recommendation: To prevent failures, either cap totalBorrowedCredit at 0 or track total tokens minted and burned by the PSM module to remove dependence on creditMultiplier.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1170) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1170) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -137,7 +137,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: The notifyPnL function in ProfitManager.sol calculates the credit multiplier based on creditTotalSupply minus loss. If the loss exceeds creditTotalSupply, it causes a revert, breaking gauge slashing and voting systems.
 
 - Impact & Recommendation: Excessive losses cause gauge vote slashing, decrease the creditMultiplier, and disrupt the auction process. If the loss exceeds creditTotalSupply, setting the creditMultiplier to 0 prevents system breakdown.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1166) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1166) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -176,7 +176,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: Rounding issues in ERC20RebaseDistributor can cause transfers to fail if there's a discrepancy in share calculations. This can be exploited to disrupt operations like liquidations, as affected addresses cannot exit rebase to fix transfers.
 
 - Impact & Recommendation: Transfers and mints involving rebasing addresses may fail. To fix this, consider adjusting share calculations to tolerate rounding fluctuations, like flooring the relevant subtractions to 0.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/294) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/294) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 

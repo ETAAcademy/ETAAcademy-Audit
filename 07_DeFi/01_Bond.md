@@ -31,7 +31,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: In LendingTerm.sol, initializing minBorrow to 100e18 upon deployment poses an issue, especially with expensive assets like ETH or BTC.
 
 - Impact & Recommendation: Set the minBorrow from the ProfitManager constructor to enhance contract versatility and eliminate the wait period for executing the setMinBorrow() function.
-  🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -57,7 +57,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: The problem arises from a requirement in the code that checks if `interestRepaid != 0`. This condition, meant to prevent small repayments, creates an issue when the loan has zero interest, making partial repayment impossible despite being feasible through `_repay()`.
 
 - Impact & Recommendation: A possible solution would be to remove the `interestRepaid != 0` from the require in `_partialRepay()` .
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/756) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/756) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -116,7 +116,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: If a user's collateral is blacklisted, repay() will revert, requiring the Governor to initiate forgive() and manually transfer the tokens to the user, which may not be ideal if the user needs the tokens urgently.
 
 - Impact & Recommendation: Consider adding a parameter to enable borrowers to designate another recipient for collateral when making a full repayment.
-  🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
 ## 4.[Medium] Over 90% of the Guild staked in a gauge can be unstaked, despite the gauge utilizing its full debt allocation
 
@@ -125,7 +125,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: The mentioned protocol utilizes a tolerance factor to extend a gauge's debt ceiling by 20%. By exploiting this tolerance, it becomes possible to manipulate the gauge's debt allocation. Specifically, if a gauge's debt allocation is at 100%, it's feasible to decrease the gaugeWeight by a specific amount. After applying the tolerance, the gauge's debt allocation remains unchanged. This manipulation allows unstaking approximately 16.6666% of the totalWeight at a time, given the current operational state.
 
 - Impact: By repetitively exploiting this vulnerability, it's possible to unstake over 90% of the total staked Guild from the gauge, effectively evading potential slashing penalties. Before adjusting the gaugeWeight, an initial check can be implemented to determine if the gauge is already utilizing its full debt allocation. If it is, any attempt to unstake Guild should be prevented to avoid potential issues.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/475) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/475) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -449,7 +449,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: Slashed stakers lose their GUILD tokens but still receive CREDIT tokens, leading to potential bad debt in the system.
 
 - Impact & Recommendation: Set creditReward to 0 for staked users to prevent transfer of CREDIT tokens upon slashing.
-  🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -498,7 +498,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: There's a discrepancy in debtCeiling calculation between the borrow() and debtCeiling() functions in the LendingTerm contract. This inconsistency not only causes operational differences but also affects liquidity utilization. The borrow() function calculates a more restrictive debtCeiling, leading to underutilized liquidity compared to the debtCeiling() function.
 
 - Impact & Recommendation: Unify the debtCeiling calculation method across the protocol to avoid lost income opportunities for lenders due to unused liquidity not generating interest
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/308) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/308) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -518,7 +518,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: The ProfitManager's creditMultiplier calculation doesn't consider undistributed rewards, leading to potential losses for users. When losses occur, excess amounts are attributed to credit token holders by slashing the creditMultiplier, `newCreditMultiplier = (creditMultiplier *  (creditTotalSupply - loss)) / creditTotalSupply;` . However, using totalSupply() can be problematic if a significant portion of the supply is in undistributed rewards, resulting in higher-than-necessary creditMultiplier slashing.
 
 - Impact & Recommendation: CreditMultiplier slashing is higher than necessary due to incorrect accounting, penalizing credit token holders and locking value in the protocol. Consider using targetTotalSupply() instead of totalSupply() to rectify this issue.
-  🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/292) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/292) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
