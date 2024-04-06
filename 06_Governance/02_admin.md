@@ -30,7 +30,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: If compromised, key actors like the security council or owner could prevent upgrades or manipulate the governance mechanism, leading to operational challenges.
 - Impact & Recommendation: To mitigate this the possibility of a governance deadlock , suggested solutions include restricting the cancel permission to only the owner, and implementing a minimum upgrade delay to prevent instant upgrades, giving users time to react in case of malicious actions.
-  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/260) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-10-zksync#m-13-governance-logic-may-enter-a-deadlock) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 

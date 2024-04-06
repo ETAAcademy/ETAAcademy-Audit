@@ -30,7 +30,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: This vulnerability enables the manipulation of an Externally Owned Account (EOA)'s nonce ordering to an arbitrary state through an L1 priority transaction, leading to the permanent freezing of the user's account.
 - Impact & Recommendation: Once the nonce ordering is updated to an arbitrary state, it becomes permanent, rendering the account unable to initiate any new transactions.
-  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/861) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-10-zksync#m-06-nonce-ordering-of-eoa-can-be-updated-to-arbitrary-through-an-l1-tx) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 
@@ -150,7 +150,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: In the zkSync Era, adherence to EIP-161 criteria determines whether an account is considered "empty" `bytes32(0)`, with no code, zero nonce, and zero balance. However, regardless of the account's balance, zkSync returns bytes32(0) for extcodehash, only considering the nonce and code presence, which diverges from keccak256("") for such accounts with no code in EVM.
 - Impact & Recommendation: It accurately emulates the extcodehash EVM opcode as specified by EIP-1051. To mitigate this issue, a recommended solution is provided to precisely simulate the extcodehash EVM opcode based on EIP-1052.
-  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/133) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-10-zksync#m-19-divergences-in-the-simulation-of-the-extcodehash-evm-opcode) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 

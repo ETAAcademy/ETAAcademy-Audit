@@ -30,7 +30,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: The circuit needs to verify that the remainder is less than the divisor by subtracting the divisor from the remainder and enforcing that the borrow flow is true.
 - Impact & Recommendation: A malicious validator could generate and submit a proof with incorrect behavior of smart contracts. For example, the validator could manipulate the calculated price during the execution of an on-chain DEX and steal all of the assets in the DEX.
-  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/1133) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-10-zksync#h-01-missing-range-constraint-on-remainder-check-in-div-opcode-implementation) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <br> 🐬: Others
 
@@ -219,7 +219,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: When the `**div**` opcode is applied, and the dividend is nonzero while the divisor is zero, both the quotient and remainder become zero, `**src0 = q * src1 + rem**`.
 - Impact & Recommendation: In such cases, enforcing the multiplication/division relation results in an unprovable transaction, which may disrupt the processing of the priority queue.
-  <br> 🐬: [Source](https://github.com/code-423n4/2023-10-zksync-findings/issues/598) & [Report](https://code4rena.com/reports/2023-10-zksync)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-10-zksync#h-06-muldiv-relation-should-not-be-enforced-when-divisor-is-zero) & [Report](https://code4rena.com/reports/2023-10-zksync)
 
   <details><summary>POC</summary>
 

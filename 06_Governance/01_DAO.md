@@ -31,7 +31,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: The vulnerability allows an attacker to repeatedly trigger offboarding a re-onboarding lending term, bypassing the DAO vote offboarding mechanism. Even after the term is offboarded and cleaned up, the attacker can trigger another offboarding vote before the poll ends, to re-trigger the `canOffboard[term]` flag. This enables the attacker to force offboarding of the re-onboarded term at any time, overriding the DAO vote.
 
 - Impact & Recommendation: The attack not only manipulates offboarding but also triggers silent auctions for existing loans. If a loan fails to attract bids, causing a loss, stakers who voted for the term via the SurplusGuildMinter contract are slashed, impacting both borrowers and stakers significantly. Prevent the offboarding poll from reactivating the `canOffboard[term]` flag after the lending term cleanup, or end the poll if the term has been cleaned up.
-  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1141) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild#m-06-re-triggering-the-canoffboardterm-flag-to-bypass-the-dao-vote-of-the-lending-term-offboarding-mechanism) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -131,7 +131,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: In the event of any loss triggered by **`ProfitManager#notifyPnL()`**, all staked guild tokens on the lending term will be entirely slashed through **`GuildToken#notifyGaugeLoss()`**, with termSurplusBuffer[gauge] depleting and donating to surplusBuffer. Loss will first decrease from surplusBuffer, and if surplusBuffer is insufficient, the remaining loss will reduce the creditMultiplier for each credit token. A term can be offboarded if deemed unsafe, pausing the redemption function of the corresponding SimplePSM. Once offboarded, potential losses are distributed to all credit token holders, as exiting in advance is not possible. However, guild holders can reduce their weight on the offboarded term, transferring potential losses to other holders.
 
 - Impact & Recommendation: Preventing gauge weight deprecation upon offboarding a lending term is advisable, particularly with surplus GUILD minter, as it ensures protection for passive lenders by retaining surplus buffer capital that may otherwise escape.
-  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/651) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild#m-17-the-gauge-status-wasnt-checked-before-reducing-the-users-gauge-weight) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -211,7 +211,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: ProfitManager and SimplePSM contracts don't use rate limiter so that the `RateLimitedMinter` buffer is never replenished. Attacker mints gUSDC tokens in the PSM contract without rate limiter, then using them to take malicious voting action in GuildVetoGovernor and cancel actions in the queue quickly without any consequences, because `ProfitManager.creditMultiplier` doesn’t decline.
 
 - Impact & Recommendation: Use rate limiter across all contracts in the protocol when minting or burning Credit and Guild tokens.
-  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/335) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild#m-21-ratelimitedminter-isnt-used-by-simplepsm-resulting-in-governance-attacks) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 

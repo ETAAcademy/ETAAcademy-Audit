@@ -26,11 +26,11 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 1.[High] The creation of bad debt (mark-down of Credit) can force other loans in auction to also create bad debt
 
-## Calculating debt during auctions
+### Calculating debt during auctions
 
 - Summary: It only records the loan's debt at the start of an auction, using the current `creditMultiplier`. If the creditMultiplier changes during the auction, callDebt may underestimate the actual debt. This could lead to only accepting bids during the auction's second phase if the borrower's debt exceeds available credit. Additionally, if the debt surpasses available credit, bad debt may occur during the auction.
 - Impact & Recommendation: All other loans in auction at that time will also be forced to create bad debt. It suggests dynamically calculating callDebt during auctions based on the current creditMultiplier, rather than using a fixed snapshot, for more accurate debt assessment.
-  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/476) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild#h-03-the-creation-of-bad-debt-mark-down-of-credit-can-force-other-loans-in-auction-to-also-create-bad-debt) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -259,12 +259,12 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 2.[High] Users staking via the SurplusGuildMinter can be immediately slashed when staking into a gauge that had previously incurred a loss
 
-## Initialization user's lastLoss
+### Initialization user's lastLoss
 
 - Summary: If the gauge has experienced a loss in the past, even if the user staked during a profitable period, they may be immediately slashed upon staking. This happens because the code initializes the user's stake struct with default values, which will identify this user as being slashed, i.e. slashed = true, due to lastGaugeLoss > userStake.lastGaugeLoss.
 
 - Impact: The `SurplusGuildMinter` should initialize a user's **`lastGaugeLoss`** to the current block timestamp, so that comparisons with **`lastGaugeLoss`** won't be made against a freshly initialized user stake struct, preventing potential issues with loss of stake and rewards.
-  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/473) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild#h-04-users-staking-via-the-surplusguildminter-can-be-immediately-slashed-when-staking-into-a-gauge-that-had-previously-incurred-a-loss) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -342,12 +342,12 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 3.[Medium] Anyone can prolong the time for the rewards to get distributed
 
-## Minimum distribution
+### Minimum distribution
 
 - Summary: each time the distribute call occurs, the endTimestamp gets extended. An attacker could exploit this by repeatedly calling distribute(1) to distribute 1 wei of a credit token daily, thereby extending the distribution period by approximately three times.
 
 - Impact & Recommendation: Add a minimum required amount for calling distribute if it's not done by the ProfitManager, or change how rewards are interpolated.
-  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/966) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild#m-12-anyone-can-prolong-the-time-for-the-rewards-to-get-distributed) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -385,6 +385,61 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
         console.log("----------------------------------------------------");
         console.log("Distributed supply         : ", distributedSupply);
         console.log("Expected distributes supply: ", amountToDistribute);
+    }
+
+  ```
+
+  </details>
+
+## 4.[High] Any fee claim lesser than the total yieldFeeBalance as unit of shares is lost and locked in the PrizeVault contract
+
+### Fee claimed less than the accrued balance
+
+- Summary: If the fee claimed is less than the accrued balance, the remaining funds are locked in the PrizeVault with no way to retrieve them.
+
+- Impact & Recommendation: If they claim less than the full amount, they forfeit the remainder, which can lead to loss of funds if not claimed in full. It is recommended to adjust the `claimYieldFeeShares` to only deduct the amount claimed/minted.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-pooltogether#h-01-any-fee-claim-lesser-than-the-total-yieldfeebalance-as-unit-of-shares-is-lost-and-locked-in-the-prizevault-contract) & [Report](https://code4rena.com/reports/2024-03-pooltogether)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function testUnclaimedFeesLostPOC() public {
+        vault.setYieldFeePercentage(1e8); // 10%
+        vault.setYieldFeeRecipient(bob); // fee recipient bob
+        assertEq(vault.totalDebt(), 0); // no deposits in vault yet
+        // alice makes an initial deposit of 100 WETH
+        underlyingAsset.mint(alice, 100e18);
+        vm.startPrank(alice);
+        underlyingAsset.approve(address(vault), 100e18);
+        vault.deposit(100e18, alice);
+        vm.stopPrank();
+        console.log("Shares balance of Alice post mint: ", vault.balanceOf(alice));
+        assertEq(vault.totalAssets(), 100e18);
+        assertEq(vault.totalSupply(), 100e18);
+        assertEq(vault.totalDebt(), 100e18);
+        // mint yield to the vault and liquidate
+        underlyingAsset.mint(address(vault), 100e18);
+        vault.setLiquidationPair(address(this));
+        uint256 maxLiquidation = vault.liquidatableBalanceOf(address(underlyingAsset));
+        uint256 amountOut = maxLiquidation / 2;
+        uint256 yieldFee = (100e18 - vault.yieldBuffer()) / (2 * 10); // 10% yield fee + 90% amountOut = 100%
+        vault.transferTokensOut(address(0), bob, address(underlyingAsset), amountOut);
+        console.log("Accrued yield post in the contract to be claimed by Bob: ", vault.yieldFeeBalance());
+        console.log("Yield fee: ", yieldFee);
+        // yield fee: 4999999999999950000
+        // alice mint: 100000000000000000000
+        assertEq(vault.totalAssets(), 100e18 + 100e18 - amountOut); // existing balance + yield - amountOut
+        assertEq(vault.totalSupply(), 100e18); // no change in supply since liquidation was for assets
+        assertEq(vault.totalDebt(), 100e18 + yieldFee); // debt increased since we reserved shares for the yield fee
+        vm.startPrank(bob);
+        vault.claimYieldFeeShares(1e17);
+
+        console.log("Accrued yield got reset to 0: ", vault.yieldFeeBalance());
+        console.log("But the shares minted to Bob (yield fee recipient) should be 4.9e18 but he only has 1e17 and the rest is lost: ", vault.balanceOf(bob));
+        // shares bob: 100000000000000000
+        assertEq(vault.totalDebt(), vault.totalSupply());
+        assertEq(vault.yieldFeeBalance(), 0);
+        vm.stopPrank();
     }
 
   ```

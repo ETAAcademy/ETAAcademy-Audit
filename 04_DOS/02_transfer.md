@@ -30,7 +30,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 - Summary: By executing a self-transfer of tokens while in rebase, an attacker can mint additional tokens for themselves, effectively stealing all distributed rewards until that point. This occurs due to a discrepancy in updating share balances during the transfer process, leading to an incorrect calculation of token balances.
 - Impact & Recommendation: Consequently, an attacker can repeatedly exploit this flaw to siphon off rewards intended for other users.To mitigate this issue, preventing self-transfers is recommended to prevent further exploitation and potential loss of funds.
-  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/991) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild#h-02-anyone-can-steal-all-distributed-rewards) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -81,7 +81,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: The GUARDIAN role is meant to freeze new protocol usage but allow fund withdrawals. However, the whenNotPaused modifier in the RateLimitedMinter.mint() function prevents users from withdrawing funds if they have CREDIT tokens staked with pending guild rewards. This occurs because the SurplusGuildMinter.unstake() function, called during withdrawal, tries to mint rewards through RateLimitedMinter.mint() by getRewards(), which fails if the protocol is paused.
 
 - Impact & Recommendation: Introduce emergencyWithdraw for users to withdraw funds, excluding rewards when the protocol is paused.
-  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/1249) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild#m-02-inability-to-withdraw-funds-for-certain-users-due-to-whennotpaused-modifier-in-ratelimitedminter) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
@@ -135,7 +135,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: A low immutable auction duration set in the deployment script can enable profitable block stuffing attacks on desired Layer 2 (L2) chains. The attacker borrows a loan to receive credit tokens and deposit collateral into the protocol. After the first partial duration, the attacker fails to repay the loan and initiates an auction. The attacker exploits the system by preventing bids until the midpoint, reducing costs, then begins block stuffing to acquire collateral by less credit tokens. Ultimately, the attacker may acquire almost the full loan amount, surpassing the gas cost for block stuffing.
 
 - Impact & Recommendation: The attacker can manipulate the auction to acquire full collateral for almost zero credit tokens, resulting in loss for all stakers on the term. Increasing auction duration and implementing fixes to prevent bad debt from collateral token blacklisting can mitigate such attacks and prevent total loss of stake for lenders.
-  <br> 🐬: [Source](https://github.com/code-423n4/2023-12-ethereumcreditguild-findings/issues/685) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild#m-16-auction-manipulation-by-block-stuffing-and-reverting-on-erc-777-hooks) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
   <details><summary>POC</summary>
 
