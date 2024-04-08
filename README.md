@@ -2,13 +2,15 @@
 
 ## Web3.0 Audit Resources and Competition Materials
 
+### ETAAcademy-Audit version 0.4.8 version analyzes and summarizes challenging and interesting points from the full audit report, covers eight sections: math, EVM, gas, DOS, context, governance, DeFi, and library, with more to come. This is one small step for humans, but one giant leap for 🐬. Let's study and climb mountains together!
+
 This repository provides a comprehensive collection of resources and code for Web3.0 auditing, especially ZK security, including:
 
 - Tutorials and guides: Learn the fundamentals of Web3.0 security and auditing.
 - Reference materials: Access industry-standard security best practices and documentation.
 - Sample code: Explore real-world examples of Web3.0 smart contracts and applications.
 - Competition materials: Participate in exciting Web3.0 auditing challenges and test your skills.
-  
+
 Whether you're a seasoned security professional or just starting out, this repository is a valuable resource for anyone interested in Web3.0 security.
 
 Here are some of the benefits of using this repository:
