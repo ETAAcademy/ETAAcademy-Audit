@@ -222,3 +222,95 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 4.[Medium] PrizeVault.maxDeposit() doesn’t take into account produced fees
+
+### Overflow by fees
+
+- Summary: The current implementation of PrizeVault.maxDeposit() does not account for produced fees, potentially leading to an overflow issue when yieldFeeRecipient tries to withdraw shares. This can occur with low-price tokens, where the deposit amount calculated by maxDeposit() can easily exceed the limit of type(uint96).max.
+
+- Impact & Recommendation: Ensure users can mint when making maximum deposits by adjusting PrizeVault.maxDeposit() to factor in produced fees or by adding a function to withdraw fees in assets.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-pooltogether#m-07-prizevaultmaxdeposit-doesnt-take-into-account-produced-fees) & [Report](https://code4rena.com/reports/2024-03-pooltogether)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function _deposit(address account, uint256 amount) private {
+        underlyingAsset.mint(account, amount);
+        vm.startPrank(account);
+        underlyingAsset.approve(address(vault), amount);
+        vault.deposit(amount, account);
+        vm.stopPrank();
+    }
+    function testMaxDeposit_CalculatesWithoutTakingIntoAccountGeneratedFees() public {
+        vault.setYieldFeePercentage(1e8); // 10%
+        vault.setYieldFeeRecipient(bob);
+        // alice make initial deposit
+        _deposit(alice, 1e18);
+        // mint yield to the vault and liquidate
+        underlyingAsset.mint(address(vault), 1e18);
+        vault.setLiquidationPair(address(this));
+        uint256 maxLiquidation = vault.liquidatableBalanceOf(address(underlyingAsset));
+        uint256 amountOut = maxLiquidation / 2;
+        uint256 yieldFee = (1e18 - vault.yieldBuffer()) / (2 * 10); // 10% yield fee + 90% amountOut = 100%
+        // bob transfers tokens out and increase fee
+        vault.transferTokensOut(address(0), bob, address(underlyingAsset), amountOut);
+        // alice make deposit with maximum available value for deposit
+        uint256 maxDeposit = vault.maxDeposit(address(this));
+        _deposit(alice, maxDeposit);
+        // then bob want to withdraw earned fee but he can't do that
+        vm.prank(bob);
+        vm.expectRevert();
+        vault.claimYieldFeeShares(yieldFee);
+    }
+
+  ```
+
+  </details>
+
+## 5.[Medium] yieldFeeBalance wouldn’t be claimed after calling transferTokensOut()
+
+### Overflow by fees
+
+- Summary: When `_tokenOut ==  address(this)`, `liquidatableBalanceOf()` mints shares and accumulates `yieldFeeBalance` accordingly. However, the maximum liquidatable amount is checked only against `liquidYield` without `_yieldFee`, potentially reaching the supply limit while minting `yieldFeeBalance`. As a result, `yieldFeeBalance` can't be claimed even though it's added to the balance.
+
+- Impact & Recommendation: `liquidatableBalanceOf()` shouldn’t apply `yieldFeePercentage` to compare with `_maxAmountOut` when `_tokenOut == address(this)`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-pooltogether#m-05-yieldfeebalance-wouldnt-be-claimed-after-calling-transfertokensout) & [Report](https://code4rena.com/reports/2024-03-pooltogether)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+      function liquidatableBalanceOf(address _tokenOut) public view returns (uint256) {
+        uint256 _totalSupply = totalSupply();
+        uint256 _maxAmountOut;
+        if (_tokenOut == address(this)) {
+            // Liquidation of vault shares is capped to the TWAB supply limit.
+            _maxAmountOut = _twabSupplyLimit(_totalSupply);
+        } else if (_tokenOut == address(_asset)) {
+            // Liquidation of yield assets is capped at the max yield vault withdraw plus any latent balance.
+            _maxAmountOut = _maxYieldVaultWithdraw() + _asset.balanceOf(address(this));
+        } else {
+            return 0;
+        }
+        // The liquid yield is computed by taking the available yield balance and multiplying it
+        // by (1 - yieldFeePercentage), rounding down, to ensure that enough yield is left for the
+        // yield fee.
+        uint256 _liquidYield = _availableYieldBalance(totalAssets(), _totalDebt(_totalSupply));
+        if (_tokenOut == address(this)) {
+            if (_liquidYield >= _maxAmountOut) { //compare before applying yieldFeePercentage
+                _liquidYield = _maxAmountOut;
+            }
+            _liquidYield = _liquidYield.mulDiv(FEE_PRECISION - yieldFeePercentage, FEE_PRECISION);
+        } else {
+            _liquidYield = _liquidYield.mulDiv(FEE_PRECISION - yieldFeePercentage, FEE_PRECISION);
+            if (_liquidYield >= _maxAmountOut) { //same as before
+                _liquidYield = _maxAmountOut;
+            }
+        }
+        return _liquidYield;
+    }
+
+  ```
+
+  </details>

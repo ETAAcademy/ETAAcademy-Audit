@@ -131,3 +131,25 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 4.[Medium] Permit doesn’t work with DAI
+
+### DAI permit
+
+- Summary: The issue arises from using the depositWithPermit function in PrizeVault.sol with permit options, intending to utilize sDAI but encountering discrepancies with DAI's permit signature. The problem stems from the missing nonce field in DAI's permit function, causing permit transactions to revert due to incorrect parameters.
+
+- Impact & Recommendation: For the special case of DAI token, allow a different implementation of the permit function which allows a nonce variable.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-pooltogether#m-08-permit-doesnt-work-with-dai) & [Report](https://code4rena.com/reports/2024-03-pooltogether)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    IERC20Permit(address(_asset)).permit(_owner, address(this), _assets, _deadline, _v, _r, _s);
+
+    function permit(address holder, address spender, uint256 nonce, uint256 expiry,
+                        bool allowed, uint8 v, bytes32 r, bytes32 s) external
+
+
+  ```
+
+  </details>
