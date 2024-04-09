@@ -175,6 +175,8 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Impact & Recommendation: To prevent manipulation, include a verification in the stake() function to confirm that the provided term belongs to the same market as the SurplusGuildMinter.
   <br> 🐬: [Source](https://code4rena.com/reports/2023-12-ethereumcreditguild#m-09-users-can-deflate-other-markets-guild-holders-rewards-by-staking-less-priced-token) & [Report](https://code4rena.com/reports/2023-12-ethereumcreditguild)
 
+  <details><summary>POC</summary>
+
   ```solidity
 
     pragma solidity 0.8.13;
