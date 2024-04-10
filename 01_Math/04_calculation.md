@@ -445,3 +445,84 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 5.[Medium] LiquidInfrastructureERC20.sol disapproved holders keep part of the supply, diluting approved holders revenue
+
+### Dilute revenue
+
+- Summary: Disapproving a holder in the LiquidInfrastructureERC20 contract stops them from receiving revenue, but they still keep part of the token supply, diluting revenue for approved holders. This happens because entitlements per token are calculated based on the total supply and ERC20 balances in the contract.
+
+- Impact & Recommendation: To prevent dilution of revenue, burn tokens of disapproved holders in LiquidInfrastructureERC20. Track their balance at disapproval and mint the same amount upon reapproval.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-althea-liquid-infrastructure#m-01-liquidinfrastructureerc20sol-disapproved-holders-keep-part-of-the-supply-diluting-approved-holders-revenue) & [Report](https://code4rena.com/reports/2024-02-althea-liquid-infrastructure)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function test_dilutedDistribution() public {
+        address nftOwner1 = makeAddr("nftOwner1");
+        uint256 rewardAmount1 = 1000000;
+        nftOwners = [nftOwner1];
+        vm.prank(nftOwner1);
+        LiquidInfrastructureNFT nft1 = new LiquidInfrastructureNFT("nftAccount1");
+        nfts = [nft1];
+        // Register one NFT as a source of reward erc20s
+        uint256 accountId = nft1.AccountId();
+        thresholdAmounts = [0];
+        // Transfer the NFT to ERC20 and manage
+        vm.startPrank(nftOwner1);
+        nft1.setThresholds(erc20Addresses, thresholdAmounts);
+        nft1.transferFrom(nftOwner1, address(infraERC20), accountId);
+
+        vm.stopPrank();
+        assertEq(nft1.ownerOf(accountId), address(infraERC20));
+        vm.expectEmit(address(infraERC20));
+        emit AddManagedNFT(address(nft1));
+        vm.startPrank(erc20Owner);
+        infraERC20.addManagedNFT(address(nft1));
+        vm.roll(1);
+        // Allocate rewards to the NFT
+        erc20A.transfer(address(nft1), rewardAmount1);
+        assertEq(erc20A.balanceOf(address(nft1)), rewardAmount1);
+        // And then send the rewards to the ERC20
+        infraERC20.withdrawFromAllManagedNFTs();
+        // Approve holders
+        infraERC20.approveHolder(address(holder1));
+        infraERC20.approveHolder(address(holder2));
+        // Mint LiquidInfrastructureERC20 tokens to holders
+        // 200 total supply of LiquidInfrastructureERC20 tokens
+        infraERC20.mint(address(holder1), 100);
+        infraERC20.mint(address(holder2), 100);
+        // Wait for the minimum distribution period to pass
+        vm.roll(vm.getBlockNumber() + 500);
+        // Distribute revenue to holders
+        infraERC20.distributeToAllHolders();
+        console.log("First distribution (2 approved holders) \n  balance of holder 1: %s", erc20A.balanceOf(address(holder1)));
+        console.log("balance of holder 2: %s", erc20A.balanceOf(address(holder2)));
+        console.log("balance remaining in infraERC20: %s", erc20A.balanceOf(address(infraERC20)));
+        // Wait for the minimum distribution period to pass
+        vm.roll(vm.getBlockNumber() + 500);
+        // Allocate more rewards to the NFT
+        erc20A.transfer(address(nft1), rewardAmount1);
+        infraERC20.withdrawFromAllManagedNFTs();
+        // Holder 2 is no longer approved
+        infraERC20.disapproveHolder(address(holder2));
+        // Now there is 1 holder remaining, but the rewards are diluted
+        infraERC20.distributeToAllHolders();
+        console.log("\n  Second distribution (1 approved holder) \n  balance of holder 1: %s", erc20A.balanceOf(address(holder1)));
+        console.log("balance of holder 2: %s", erc20A.balanceOf(address(holder2)));
+        // There is remaining unallocated rewards in the contract
+        console.log("balance remaining in infraERC20: %s", erc20A.balanceOf(address(infraERC20)));
+        // holder 2 has 100 LiquidInfrastructureERC20 tokens, this dilutes the rewards
+        assertEq(infraERC20.balanceOf(address(holder2)), 100);
+        // Wait for the minimum distribution period to pass
+        vm.roll(vm.getBlockNumber() + 500);
+        // Distribute revenue to holders
+        infraERC20.distributeToAllHolders();
+        console.log("\n  Third distribution (1 approved holder) \n  balance of holder 1: %s", erc20A.balanceOf(address(holder1)));
+        console.log("balance of holder 2: %s", erc20A.balanceOf(address(holder2)));
+        console.log("balance remaining in infraERC20: %s", erc20A.balanceOf(address(infraERC20)));
+    }
+
+  ```
+
+  </details>

