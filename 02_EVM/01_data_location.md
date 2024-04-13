@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 1. Memory
+# ETAAcademy-Adudit: 1. Data Location
 
 <table>
   <tr>
@@ -6,14 +6,14 @@
     <th>tags</th>
   </tr>
   <tr>
-    <td>01. Memory</td>
+    <td>01. Data Location</td>
     <td>
       <table>
         <tr>
           <th>audit</th>
           <th>basic</th>
           <th>EVM</th>
-          <td>memory</td>
+          <td>data_location</td>
         </tr>
       </table>
     </td>
@@ -304,6 +304,36 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
             unimplemented!()
         }
     }
+
+  ```
+
+  </details>
+
+## 6. [Medium] A cache that times out can be recovered
+
+### Recover cache
+
+- Summary: The `LocalCache#set_expire` function doesn't check if a key has expired before setting a timeout, allowing expired values to be reactivated. This could be exploited by malicious users to deceive others or cause inconsistencies in cached data. Similarly, the `LocalCache#get` function inconsistently handles expired keys, potentially allowing ttackers to trick victims into believing expired values no longer exist. This vulnerability could lead to various attack scenarios, including indefinite expiration of values deemed expired by developers.
+
+- Impact & Recommendation: Ensures that expired values are promptly removed, reducing the risk of malicious exploitation and data inconsistency.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-phala-network#m-03-a-cache-that-times-out-can-be-recovered) & [Report](https://code4rena.com/reports/2024-03-phala-network)
+
+  <details><summary>POC</summary>
+
+  ```rust
+        pub fn set_expire(&mut self, id: Cow<[u8]>, key: Cow<[u8]>, expire: u64) {
+    -       self.maybe_clear_expired();
+    +       self.clear_expired();
+            if expire == 0 {
+                let _ = self.remove(id.as_ref(), key.as_ref());
+            } else if let Some(v) = self
+                .storages
+                .get_mut(id.as_ref())
+                .and_then(|storage| storage.kvs.get_mut(key.as_ref()))
+            {
+                v.expire_at = now().saturating_add(expire)
+            }
+        }
 
   ```
 

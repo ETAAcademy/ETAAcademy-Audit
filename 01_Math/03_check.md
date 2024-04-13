@@ -823,3 +823,32 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 13.[Medium] Limited availability of balance_of(...) method
+
+### Not consistent with document or notice
+
+- Summary: The balance_of() method is supposed to be available to any contract but is currently restricted to the system contract due to the ensure_system check, causing issues for user contracts.
+
+- Impact & Recommendation: Remove the ensure_system check from the balance_of(…) method to ensure availability for any contract.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-phala-network#m-01-limited-availability-of-balance_of-method) & [Report](https://code4rena.com/reports/2024-03-phala-network)
+
+  <details><summary>POC</summary>
+
+  ```rust
+    #[test]
+    fn test_balance_of() {
+        const TEST_ADDRESS: AccountId32 = AccountId32::new([255u8; 32]);
+        let (mut cluster, checker) = create_cluster();
+        let balance = 114514;
+        cluster.tx().deposit(TEST_ADDRESS.clone(), balance);
+        let result = checker
+            .call()
+            .direct_balance_of(TEST_ADDRESS.convert_to())
+            .query(&mut cluster);
+        assert_eq!(result.unwrap(), (balance, balance));
+    }
+
+  ```
+
+  </details>

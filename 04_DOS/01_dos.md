@@ -294,3 +294,22 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 4. [Medium] An attacker can bloat the Pink runtime storage with zero costs
+
+### Bloat attack by dust accounts
+
+- Summary: The Pink runtime's low Existential Deposit (ED) enables attackers to bloat storage with minimal cost by creating many low-balance accounts. This increases storage costs and fees for all users, posing a significant problem.
+
+- Impact & Recommendation: Consider using a reasonable Existential Deposit. I recommend at least one CENTS (i.e. 1_000_000_000). When an account falls below the ED, it's removed from storage, resetting the nonce.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-phala-network#m-02-an-attacker-can-bloat-the-pink-runtime-storage-with-zero-costs) & [Report](https://code4rena.com/reports/2024-03-phala-network)
+
+  <details><summary>POC</summary>
+
+  ```rust
+    -    pub const ExistentialDeposit: Balance = 1;
+    +    pub const ExistentialDeposit: Balance = 1 * CENTS;
+
+  ```
+
+  </details>

