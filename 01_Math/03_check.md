@@ -852,3 +852,34 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 14.[High] Anyone can update the address of the Router in the DcntEth contract to any address they would like to set.
+
+### Access control
+
+- Summary: Allowing users to set the Router address in the DcntEth contract could let malicious users access mint and burn functions meant only for the router contract. This could lead to unauthorized minting of DcntEth tokens, disrupting crosschain accounting or stealing deposited WETH in the DecentEthRouter contract, burning all DcntEth tokens issued to it, affecting liquidity providers, or causing a DOS attack on the add and remove liquidity functions of DecentEthRouter if the router address differs.
+
+- Impact & Recommendation: Make sure to add an Access Control mechanism to `setRouter` function.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-01-decent#h-01-anyone-can-update-the-address-of-the-router-in-the-dcnteth-contract-to-any-address-they-would-like-to-set) & [Report](https://code4rena.com/reports/2024-01-decent)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    //@audit-issue => No access control to restrict who can set the address of the router contract
+    function setRouter(address _router) public {
+        router = _router;
+    }
+
+    //@audit-info => Only the router can call the mint()
+    function mint(address _to, uint256 _amount) public onlyRouter {
+        _mint(_to, _amount);
+    }
+    //@audit-info => Only the router can call the burn()
+    function burn(address _from, uint256 _amount) public onlyRouter {
+        _burn(_from, _amount);
+    }
+
+
+  ```
+
+  </details>
