@@ -526,3 +526,36 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 6.[High] Improper precision of strike price calculation can result in broken protocol
+
+### Calculation precision
+
+- Summary: Due to precision issues, the protocol's calculation of the strike price for a PUT option on rDPX is flawed. The rounding function used imposes a minimum value, leading to incorrect premium calculations. For instance, a strike price intended to be 25% out-of-the-money (OTM) is rounded up, resulting in an in-the-money (ITM) strike price and inflated premiums.
+
+- Impact & Recommendation: The value of the `roundingPrecision` is too high considering reasonable market prices of ETH and rDPX. Consider decreasing it.
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-08-dopex#h-01-improper-precision-of-strike-price-calculation-can-result-in-broken-protocol) & [Report](https://code4rena.com/reports/2023-08-dopex)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    /// @dev the precision to round up to
+    uint256 public roundingPrecision = 1e6;
+
+    ...
+      uint256 strike = IPerpetualAtlanticVault(addresses.perpetualAtlanticVault)
+      .roundUp(rdpxPrice - (rdpxPrice / 4)); // 25% below the current price
+    ...
+
+    function roundUp(uint256 _strike) public view returns (uint256 strike) {
+        uint256 remainder = _strike % roundingPrecision;
+        if (remainder == 0) {
+        return _strike;
+        } else {
+        return _strike - remainder + roundingPrecision;
+        }
+   }
+
+  ```
+
+  </details>

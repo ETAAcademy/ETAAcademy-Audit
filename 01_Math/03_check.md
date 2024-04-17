@@ -883,3 +883,28 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 15.[High] The settle feature will be broken if attacker arbitrarily transfer collateral tokens to the PerpetualAtlanticVaultLP
+
+### `>=` instead of `==`
+
+- Summary: Arbitrarily sending collateral tokens to PerpetualAtlanticVaultLP disrupts the synchronization between total collateral and the contract's actual balance. This causes the subtractLoss function to fail, as it requires exact matching between these values. This issue cannot be resolved by the admin, as there is no function to synchronize the values without moving tokens.
+
+- Impact & Recommendation: Use `>=` instead of `==` at `PerpetualAtlanticVaultLP.subtractLoss` .
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-08-dopex#h-03-the-settle-feature-will-be-broken-if-attacker-arbitrarily-transfer-collateral-tokens-to-the-perpetualatlanticvaultlp) & [Report](https://code4rena.com/reports/2023-08-dopex)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function subtractLoss(uint256 loss) public onlyPerpVault {
+    require(
+    -   collateral.balanceOf(address(this)) == _totalCollateral - loss,
+    +   collateral.balanceOf(address(this)) >= _totalCollateral - loss,
+        "Not enough collateral was sent out"
+    );
+    _totalCollateral -= loss;
+    }
+
+  ```
+
+  </details>

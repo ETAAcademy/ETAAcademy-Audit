@@ -337,3 +337,44 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 6.[High] UniV3LiquidityAMO::recoverERC721 will cause ERC721 tokens to be permanently locked in rdpxV2Core
+
+### Lacks ERC721-related functions
+
+- Summary: UniV3LiquidityAMO's recoverERC721 function allows only the admin to transfer ERC721 tokens to the RdpxV2Core contract. However, the transfer of ERC721 tokens to RdpxV2Core is ineffective as RdpxV2Core and its inherited contracts lack the logic to handle ERC721 tokens. Additionally, transferring ERC721 tokens with tokenId == 0 is not feasible due to validation checks.
+
+- Impact & Recommendation: RdpxV2Core lacks ERC721-related functions, as evident from its code. Solutions include implementing additional ERC721 recovery functions in RdpxV2Core or modifying UniV3LiquidityAMO::recoverERC721 to transfer all NFTs to msg.sender instead of RdpxV2Core.
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-08-dopex#h-04-univ3liquidityamorecovererc721-will-cause-erc721-tokens-to-be-permanently-locked-in-rdpxv2core) & [Report](https://code4rena.com/reports/2023-08-dopex)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+  pragma solidity ^0.8.19;
+    import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+    contract MockERC721 is ERC721
+    {
+        constructor() ERC721("...", "...")
+        {
+        }
+        function giveNFT() public
+        {
+            _mint(msg.sender, 1);
+        }
+    }
+
+    function testNFT() public
+    {
+        // needed `import "../../contracts/mocks/MockERC721.sol";` at the beginning of the file
+        MockERC721 mockERC721 = new MockERC721();
+        mockERC721.giveNFT();
+        mockERC721.transferFrom(address(this), address(rdpxV2Core), 1);
+
+        // approveContractToSpend won't be possible to use
+        vm.expectRevert();
+        rdpxV2Core.approveContractToSpend(address(mockERC721), address(this), 1);
+    }
+
+  ```
+
+  </details>
