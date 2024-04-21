@@ -908,3 +908,41 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 15.[High] Development Team might receive less SALT because there is no access control on VestingWallet#release()
+
+### Absence of access control on the `release()` function
+
+- Summary: the Development Team could have the potential loss of SALT distribution rewards for due to the absence of access control on the `release()` function in `estingWallet`. This oversight allows anyone to call `release()` and distribute SALT without informing the `Upkeep` contract, resulting in the locked distribution of SALT in `Upkeep` indefinitely.
+
+- Impact & Recommendation: Configured `managedTeamWallet` as beneficiary for `teamVestingWallet` deployment. Added function in `managedTeamWallet` to transfer SALT balance to mainWallet.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-01-salty#h-01-development-team-might-receive-less-salt-because-there-is-no-access-control-on-vestingwalletrelease) & [Report](https://code4rena.com/reports/2024-01-salty)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+  function testTeamRewardIsLockedInUpkeep() public {
+    uint releasableAmount = teamVestingWallet.releasable(address(salt));
+    uint upKeepBalance = salt.balanceOf(address(upkeep));
+    uint mainWalletBalance = salt.balanceOf(address(managedTeamWallet.mainWallet()));
+    //@audit-info a certain amount of SALT is releasable
+    assertTrue(releasableAmount != 0);
+    //@audit-info there is no SALT in upkeep
+    assertEq(upKeepBalance, 0);
+    //@audit-info there is no SALT in mainWallet
+    assertEq(mainWalletBalance, 0);
+    //@audit-info call release() before performUpkeep()
+    teamVestingWallet.release(address(salt));
+    upkeep.performUpkeep();
+
+    upKeepBalance = salt.balanceOf(address(upkeep));
+    mainWalletBalance = salt.balanceOf(address(managedTeamWallet.mainWallet()));
+    //@audit-info all released SALT is locked in upKeep
+    assertEq(upKeepBalance, releasableAmount);
+    //@audit-info development team receive nothing
+    assertEq(mainWalletBalance, 0);
+  }
+
+  ```
+
+  </details>

