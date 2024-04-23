@@ -229,3 +229,83 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 5.[Medium] Vault.claimRewards can break if Convex changes the operator
+
+### Convex protocol shutdown
+
+- Summary: The Convex protocol allows for a shutdown scenario that doesn't disrupt the BaseRewardPool, but the Vault implementation overlooks this possibility. That means if the operator changes in the Convex protocol, CVX tokens may not be minted as expected, causing the claim to fail and preventing the payout of CRV and extra rewards.
+
+- Impact & Recommendation: Verify the CVX balance of the vault before and after the claim to ensure the correct amount has been minted.
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-07-amphora#m-01-vaultclaimrewards-can-break-if-convex-changes-the-operator) & [Report](https://code4rena.com/reports/2023-07-amphora)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+  ...
+  _totalCvxReward += _calculateCVXReward(_crvReward);
+  ...
+  // Claim AMPH tokens depending on how much CRV and CVX was claimed
+  _amphClaimer.claimAmph(this.id(), _totalCvxReward, _totalCrvReward, _msgSender());
+  ...
+  if (_totalCvxReward > 0) CVX.transfer(_msgSender(), _totalCvxReward);
+
+  function mint(address _to, uint256 _amount) external {
+    if(msg.sender != operator){
+        //dont error just return. if a shutdown happens, rewards on old system
+        //can still be claimed, just wont mint cvx
+        return;
+    }
+
+  ```
+
+  </details>
+
+## 6.[Medium] When Convex pool is shut down while collateral type is CurveLPStakedOnConvex, users unable to deposit that asset and protocol lose the ability to accept the asset as collateral further
+
+### Convex protocol shutdown
+
+- Summary: When a Convex pool associated with a collateral type is shut down, users can no longer deposit that asset into a vault due to reverts on Convex booster deposit function. Without a method to update it, the protocol loses the ability to accept it as collateral, and users may face liquidation risks. The same issue arises if Convex itself shuts down their booster contract.
+
+- Impact & Recommendation: Update collateral type to Single and pool id to 0 when a pool or booster contract shuts down. This prevents manual staking and skips Convex deposit. Adjust withdrawERC20 to set isTokenStaked to false when withdrawing all assets, avoiding failed liquidation.
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-07-amphora#m-03-when-convex-pool-is-shut-down-while-collateral-type-is-curvelpstakedonconvex-users-unable-to-deposit-that-asset-and-protocol-lose-the-ability-to-accept-the-asset-as-collateral-further-) & [Report](https://code4rena.com/reports/2023-07-amphora)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    import {CommonE2EBase} from '@test/e2e/Common.sol';
+    import {IERC20} from 'isolmate/interfaces/tokens/IERC20.sol';
+    import {IVault} from '@interfaces/core/IVault.sol';
+    interface IBoosterAdmin {
+    function poolManager() external view returns (address);
+    function shutdownPool(uint256 _pid) external;
+    }
+    contract VaultCollateralTypeVulnPoC is CommonE2EBase {
+    function setUp() public override {
+        super.setUp();
+    }
+    function testCannotDepositWhenConvexPoolIsShutDown() public {
+        // Prepare Convex LP for user
+        deal(USDT_LP_ADDRESS, bob, 2 ether);
+        // User mints vault
+        IVault bobVault = IVault(vaultController.vaultIdVaultAddress(_mintVault(bob)));
+        // User deposit Convex LP to vault
+        vm.startPrank(bob);
+        IERC20(USDT_LP_ADDRESS).approve(address(bobVault), 1 ether);
+        bobVault.depositERC20(USDT_LP_ADDRESS, 1 ether);
+        vm.stopPrank();
+        // Convex pool of the asset is shut down
+        vm.prank(IBoosterAdmin(address(BOOSTER)).poolManager());
+        IBoosterAdmin(address(BOOSTER)).shutdownPool(1);
+        // User can no longer deposit that LP to vault
+        vm.startPrank(bob);
+        IERC20(USDT_LP_ADDRESS).approve(address(bobVault), 1 ether);
+        vm.expectRevert('pool is closed');
+        bobVault.depositERC20(USDT_LP_ADDRESS, 1 ether);
+        vm.stopPrank();
+    }
+    }
+
+  ```
+
+  </details>

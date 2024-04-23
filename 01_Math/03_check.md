@@ -946,3 +946,40 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 16.[High] crvRewardsContract getReward can be called directly, breaking vaults claimRewards functionallity
+
+### Absence of access control on the `getReward()` function
+
+- Summary: The `crvRewardsContract` of Convex can be accessed by anyone, enabling malicious users to call the `getReward` function and disrupt the Vault's `claimRewards` functionality. As a result, malicious users can prevent Vaults from receiving their deserved rewards, thereby undermining the integrity of the system.
+
+- Impact & Recommendation: Create another functionality inside Vault that similar to claimRewards, but used CVX, CRV balance inside the contract, to perform the AMPH claim and claim the rewards.
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-07-amphora#h-02-crvrewardscontract-getreward-can-be-called-directly-breaking-vaults-claimrewards-functionallity) & [Report](https://code4rena.com/reports/2023-07-amphora)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function claimRewards(address[] memory _tokenAddresses) external override onlyMinter {
+    uint256 _totalCrvReward;
+    uint256 _totalCvxReward;
+    IAMPHClaimer _amphClaimer = CONTROLLER.claimerContract();
+    for (uint256 _i; _i < _tokenAddresses.length;) {
+      IVaultController.CollateralInfo memory _collateralInfo = CONTROLLER.tokenCollateralInfo(_tokenAddresses[_i]);
+      if (_collateralInfo.tokenId == 0) revert Vault_TokenNotRegistered();
+      if (_collateralInfo.collateralType != IVaultController.CollateralType.CurveLPStakedOnConvex) {
+        revert Vault_TokenNotCurveLP();
+      }
+      IBaseRewardPool _rewardsContract = _collateralInfo.crvRewardsContract;
+      uint256 _crvReward = _rewardsContract.earned(address(this));
+      if (_crvReward != 0) {
+        // Claim the CRV reward
+        _totalCrvReward += _crvReward;
+        _rewardsContract.getReward(address(this), false);
+        _totalCvxReward += _calculateCVXReward(_crvReward);
+      }
+   ...
+  }
+
+  ```
+
+  </details>

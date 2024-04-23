@@ -153,3 +153,27 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 5.[Medium] Reorg attack on user’s Vault deployment and deposit may lead to theft of funds
+
+### Create & chain reorgs
+
+- Summary: Attacks exploiting chain reorganizations can steal deployed Vaults and deposits. By front-running a user's Vault deployment, including their deposit, and then withdrawing the funds, attackers can exploit vulnerabilities in the deployment process. This medium-severity issue poses a high impact but is less likely to occur.
+
+- Impact & Recommendation: Vault instances should use create2 with a salt based on id, minter, and msg.sender for deployment.
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-07-amphora#m-02-reorg-attack-on-users-vault-deployment-and-deposit-may-lead-to-theft-of-funds) & [Report](https://code4rena.com/reports/2023-07-amphora)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+  /// @notice Deploys a new Vault
+  /// @param _id The id of the vault
+  /// @param _minter The address of the minter of the vault
+  /// @return _vault The vault that was created
+  function deployVault(uint96 _id, address _minter) external returns (IVault _vault) {
+    _vault = IVault(new Vault(_id, _minter, msg.sender, CVX, CRV));
+  }
+
+  ```
+
+  </details>
