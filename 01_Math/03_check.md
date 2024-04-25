@@ -983,3 +983,132 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 17.[Medium] Integration issue in ousgInstantManager with BUIDL if minUSTokens is set by blackrock
+
+### Minimum token requirements
+
+- Summary: Integration issues may arise with BUIDL if Blackrock sets a minimum requirement for BUIDL tokens to be held by holders. Currently, the OUSGInstantManager contract does not ensure it always maintains the required minimum amount of BUIDL tokens during redemptions, potentially leading to unexpected reverts and violating Ondo's main functionalities.
+
+- Impact & Recommendation: Implement an interface for the minUSTokens function and adjusting the redemption logic to ensure compliance with the minimum token requirements, thus preventing unexpected reverts and ensuring compatibility with potential future changes.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-ondo-finance#m-01-integration-issue-in-ousginstantmanager-with-buidl-if-minustokens-is-set-by-blackrock) & [Report](https://code4rena.com/reports/2024-03-ondo-finance)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    //SPDX-License-Identifier: MIT
+    pragma solidity ^0.8.24;
+    import {Test, console} from "forge-std/Test.sol";
+    import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+    interface IBUILDPause {
+        function pause() external;
+        function isPaused() external returns(bool);
+
+    }
+    interface IBUiLDRedeemer {
+        function redeem(uint256 amount) external;
+    }
+    // 0x1e695A689CF29c8fE0AF6848A957e3f84B61Fe69
+    contract testBUILD is Test {
+        // holders of BUILD tokens; just for test
+        address holder1 = 0x72Be8C14B7564f7a61ba2f6B7E50D18DC1D4B63D;
+        address holder2 = 0xEd71aa0dA4fdBA512FfA398fcFf9db8C49A5Cf72;
+        address holder3 = 0xdc77C1D2A1dC61A31BE81e4840368DffEFAC3add;
+        address holder4 = 0x1e695A689CF29c8fE0AF6848A957e3f84B61Fe69;
+        address holder5 = 0xBc2cb4bF5510A1cc06863C96196a2361C8462525;
+        address holder6 = 0xc02Ac677e58e40b66f100be3a721bA944807C2D7;
+        address holder7 = 0x12c0de58D3b720024324d5B216DDFE8B29adB0b4;
+        address holder8 = 0xb3c62fbe3E797502A978f418582ee92a5F327C23;
+        address holder9 = 0x568430C66F9A256f609Ac07190d70c2c2573E065;
+
+        // we get the owner form etherscan
+        address ownerOfBUILD = 0xe01605f6b6dC593b7d2917F4a0940db2A625b09e;
+
+        address build = 0x7712c34205737192402172409a8F7ccef8aA2AEc; // build token address
+        IERC20 BUILD;
+        uint256 MAINNET_FORK;
+        function setUp() external {
+            MAINNET_FORK = vm.createFork("https://eth-mainnet.g.alchemy.com/v2/IrK2bvsF-q028QswCasD1dQqxV8nqGMs");
+            vm.selectFork(MAINNET_FORK);
+            BUILD = IERC20(build);
+        }
+        function testBUILDHolderTransfer() public {
+            address sender = holder1;
+            address to = holder9;
+            uint amountToSend = 90000000e6;
+            uint totalBalance = BUILD.balanceOf(sender);
+
+            vm.startPrank(sender); // random 5 million holder
+            BUILD.transfer(to, amountToSend); // transfer 1 million to alice
+            console.log(totalBalance);
+            console.log(BUILD.balanceOf(sender));
+            console.log(BUILD.balanceOf(to));
+        }
+        function testMinTokensUS() external { //0x1dc378568cefD4596C5F9f9A14256D8250b56369
+            COMPLIANCE compliance = COMPLIANCE(0x1dc378568cefD4596C5F9f9A14256D8250b56369); // compliance configuration service
+            console.log(compliance.getMinUSTokens());
+            console.log(compliance.getUSLockPeriod());
+            vm.startPrank(0xe01605f6b6dC593b7d2917F4a0940db2A625b09e); // owner address form etherscan
+            compliance.setMinUSTokens(10000000e6);
+            console.log(compliance.getMinUSTokens());
+            vm.stopPrank();
+            address sender = holder1;
+            address to = holder9;
+            uint amountToSend = 90000000e6;
+
+
+            vm.startPrank(sender);
+            BUILD.transfer(to, amountToSend);
+            uint totalBalance = BUILD.balanceOf(sender);
+            console.log(totalBalance);
+            console.log(BUILD.balanceOf(sender));
+            console.log(BUILD.balanceOf(to));
+        }
+
+
+  ```
+
+  </details>
+
+## 18.[Medium] The BURNER cannot burn tokens from accounts not KYC verified due to the check in `_beforeTokenTransfer`.
+
+### Burn tokens & KYC
+
+- Summary: When attempting to burn tokens, the contract checks the KYC status of the sender and recipient accounts using `_beforeTokenTransfer`, leading to reverts if either account is not KYC verified. This prevents the BURNER_ROLE from burning tokens of accounts removed from the KYC list.
+
+- Impact & Recommendation: Allow the `BURNER` to burn tokens without checking the KYC of `from` address.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-ondo-finance#m-04-the-burner-cannot-burn-tokens-from-accounts-not-kyc-verified-due-to-the-check-in-_beforetokentransfer) & [Report](https://code4rena.com/reports/2024-03-ondo-finance)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    diff --git a/forge-tests/ousg/rOUSG.t.sol b/forge-tests/ousg/rOUSG.t.sol
+    index 67faa15..b39b4ac 100644
+    --- a/forge-tests/ousg/rOUSG.t.sol
+    +++ b/forge-tests/ousg/rOUSG.t.sol
+    @@ -13,6 +13,7 @@ contract Test_rOUSG_ETH is OUSG_BasicDeployment {
+        CashKYCSenderReceiver ousgProxied = CashKYCSenderReceiver(address(ousg));
+        vm.startPrank(OUSG_GUARDIAN);
+        ousgProxied.grantRole(ousgProxied.MINTER_ROLE(), OUSG_GUARDIAN);
+    +    ousgProxied.grantRole(ousgProxied.BURNER_ROLE(), OUSG_GUARDIAN);
+        vm.stopPrank();
+        // Sanity Asserts
+    @@ -26,6 +27,15 @@ contract Test_rOUSG_ETH is OUSG_BasicDeployment {
+        assertTrue(registry.getKYCStatus(OUSG_KYC_REQUIREMENT_GROUP, alice));
+    }
+    +  function test_burn_with_NOKYC() public dealAliceROUSG(1e18) {
+    +      vm.startPrank(OUSG_GUARDIAN);
+    +      _removeAddressFromKYC(OUSG_KYC_REQUIREMENT_GROUP, alice);
+    +      vm.stopPrank();
+    +
+    +      vm.startPrank(OUSG_GUARDIAN);
+    +      rOUSGToken.burn(alice, 1e18);
+    +      vm.stopPrank();
+    +  }
+    /*//////////////////////////////////////////////////////////////
+                            rOUSG Metadata Tests
+    //////////////////////////////////////////////////////////////*/
+
+  ```
+
+  </details>

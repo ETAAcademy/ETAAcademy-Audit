@@ -598,3 +598,61 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 8.[High] userTotalStaked invariant will be broken due to vulnerable implementations in release()
+
+### Not properly update the userTotalStaked
+
+- Summary: The release() function in the IdentityStaking contract does not properly update the userTotalStaked invariant, potentially leading to underflow errors in withdraw methods and resulting in users losing funds. This occurs because userTotalStaked is not updated when selfStakes[address].amount or communityStakes[address][x].amount are updated.
+
+- Impact & Recommendation: In `release()`, also update `userTotalStaked`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-gitcoin#h-01-usertotalstaked-invariant-will-be-broken-due-to-vulnerable-implementations-in-release) & [Report](https://code4rena.com/reports/2024-03-gitcoin)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    it.only("userTotalStaked is broken, user lose funds", async function(){
+    //Step2: Round1 - slash Alice's self and community stake of 80000 each
+    await this.identityStaking
+    .connect(this.owner)
+    .slash(
+        this.selfStakers.slice(0, 1),
+        this.communityStakers.slice(0, 1),
+        this.communityStakees.slice(0, 1),
+        80,
+    );
+    //Step2: Round1 - Alice's community/self stake is 20000 after slashing
+    expect(
+        (
+        await this.identityStaking.communityStakes(
+            this.communityStakers[0],
+            this.communityStakees[0],
+        )
+        ).amount,
+    ).to.equal(20000);
+    //Step2: Round1 - total slashed amount 80000 x 2
+    expect(await this.identityStaking.totalSlashed(1)).to.equal(160000);
+    //Step3: Round1 - Alice appealed and full slash amount is released 80000 x 2
+    await this.identityStaking
+    .connect(this.owner)
+    .release(this.selfStakers[0], this.selfStakers[0], 80000, 1);
+    await this.identityStaking
+    .connect(this.owner)
+    .release(this.communityStakers[0], this.communityStakees[0], 80000, 1);
+    //Step3: Round1 - After release, Alice has full staked balance 100000 x 2
+    expect((await this.identityStaking.selfStakes(this.selfStakers[0])).amount).to.equal(100000);
+    expect((await this.identityStaking.communityStakes(this.communityStakers[0],this.communityStakees[0])).amount).to.equal(100000);
+    expect(await this.identityStaking.totalSlashed(1)).to.equal(0);
+    // Alice's lock expired
+    await time.increase(twelveWeeksInSeconds + 1);
+    //Step4: Alice trying to withdraw 100000 x 2 from selfStake and communityStake. Tx reverted with underflow error.
+    await  expect((this.identityStaking.connect(this.userAccounts[0]).withdrawSelfStake(100000))).to.be.revertedWithPanic(PANIC_CODES.ARITHMETIC_UNDER_OR_OVERFLOW);
+    await  expect((this.identityStaking.connect(this.userAccounts[0]).withdrawCommunityStake(this.communityStakees[0],100000))).to.be.revertedWithPanic(PANIC_CODES.ARITHMETIC_UNDER_OR_OVERFLOW);
+    //Step4: Alice could only withdraw 20000 x 2. Alice lost 80000 x 2.
+    await this.identityStaking.connect(this.userAccounts[0]).withdrawSelfStake(20000);
+    await this.identityStaking.connect(this.userAccounts[0]).withdrawCommunityStake(this.communityStakees[0],20000);
+    })
+
+  ```
+
+  </details>

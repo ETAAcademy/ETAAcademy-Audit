@@ -270,3 +270,44 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 2.[High] OUSGInstantManager will allow excessive OUSG token minting during USDC depeg event
+
+### Excessive OUSG token minting during USDC depeg
+
+- Summary: OUSGInstantManager allows users to mint OUSG tokens using USDC, based on a fixed conversion rate, without validation checks on the current USDC price. The minting logic relies on the OUSG price obtained from an oracle, constrained to ensure stability. During a USDC depeg event, where USDC's value deviates from 1 USD, users can potentially mint excessive OUSG tokens, leading to a significant impact on token supply.
+
+- Impact & Recommendation: Excessive OUSG token minting during USDC depeg events. Implement an additional Oracle to consider current USDC price when calculating OUSG token minting.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-ondo-finance#h-01-ousginstantmanager-will-allow-excessive-ousg-token-minting-during-usdc-depeg-event) & [Report](https://code4rena.com/reports/2024-03-ondo-finance)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+       function setPrice(int256 newPrice) external onlyRole(SETTER_ROLE) {
+       if (newPrice <= 0) {
+         revert InvalidPrice();
+       }
+   @-> if (block.timestamp - priceTimestamp < MIN_PRICE_UPDATE_WINDOW) {
+         revert PriceUpdateWindowViolation();
+       }
+   @-> if (_getPriceChangeBps(rwaPrice, newPrice) > MAX_CHANGE_DIFF_BPS) {
+         revert DeltaDifferenceConstraintViolation();
+       }
+       // Set new price
+       int256 oldPrice = rwaPrice;
+       rwaPrice = newPrice;
+       priceTimestamp = block.timestamp;
+       emit RWAPriceSet(oldPrice, newPrice, block.timestamp);
+     }
+
+       function _getMintAmount(
+           uint256 usdcAmountIn,
+           uint256 price
+       ) internal view returns (uint256 ousgAmountOut) {
+           uint256 amountE36 = _scaleUp(usdcAmountIn) * 1e18;
+           ousgAmountOut = amountE36 / price;
+       }
+
+  ```
+
+  </details>
