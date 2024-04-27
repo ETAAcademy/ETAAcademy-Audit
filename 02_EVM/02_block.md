@@ -63,3 +63,110 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 2. [High] Validity and contests bond ca be incorrectly burned for the correct and ultimately verified transition
+
+### Verify transition
+
+- Summary: Both validity and contest bonds can be erroneously slashed even if the transition is ultimately correct and verified. This occurs because the history of the final verified transition is not considered, leading to situations where participants lose their bonds unjustly. In such scenarios, ts.prover acts as the guardian and is responsible for the final proof of the block.
+
+- Impact & Recommendation: It suggests to enable guardians to refund validity and contest bonds similar to liveness bonds, ensuring bond recovery if a prover or contester is proven correct. Additionally, rewards sent to guardians during proof verification should not be recovered to avoid locking funds in TaikoL1.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2024-03-taiko#h-02-validity-and-contests-bond-ca-be-incorrectly-burned-for-the-correct-and-ultimately-verified-transition) & [Report](https://code4rena.com/reports/2024-03-taiko)
+
+  <details><summary>POC</summary>
+ 
+  ```solidity
+      function testProverLoss() external{
+        giveEthAndTko(Alice, 1e7 ether, 1000 ether);
+        giveEthAndTko(Carol, 1e7 ether, 1000 ether);
+        giveEthAndTko(Bob, 1e6 ether, 100 ether);
+        console2.log("Bob balance:", tko.balanceOf(Bob));
+        uint256 bobBalanceBefore = tko.balanceOf(Bob);
+        vm.prank(Bob, Bob);
+        bytes32 parentHash = GENESIS_BLOCK_HASH;
+        uint256 blockId = 1;
+        
+        (TaikoData.BlockMetadata memory meta,) = proposeBlock(Alice, Bob, 1_000_000, 1024);
+        console2.log("Bob balance After propose:", tko.balanceOf(Bob));
+        mine(1);
+        bytes32 blockHash = bytes32(1e10 + blockId);
+        bytes32 stateRoot = bytes32(1e9 + blockId);
+        (, TaikoData.SlotB memory b) = L1.getStateVariables();
+        uint64 lastVerifiedBlockBefore = b.lastVerifiedBlockId;
+        // Bob proves transition T1 for parent P1
+        proveBlock(Bob, Bob, meta, parentHash, blockHash, stateRoot, meta.minTier, "");
+        console2.log("Bob balance After proof:", tko.balanceOf(Bob));
+        uint16 minTier = meta.minTier;
+        // Higher Tier contests by proving transition T2 for same parent P1
+        proveHigherTierProof(meta, parentHash, bytes32(uint256(1)), bytes32(uint256(1)), minTier);
+        // Guardian steps in to prove T1 is correct transition for parent P1
+        proveBlock(
+            David, David, meta, parentHash, blockHash, stateRoot, LibTiers.TIER_GUARDIAN, ""
+        );
+        vm.roll(block.number + 15 * 12);
+        vm.warp(
+            block.timestamp + tierProvider().getTier(LibTiers.TIER_GUARDIAN).cooldownWindow * 60
+                + 1
+        );
+        vm.roll(block.number + 15 * 12);
+        vm.warp(
+            block.timestamp + tierProvider().getTier(LibTiers.TIER_GUARDIAN).cooldownWindow * 60
+                + 1
+        );
+        // When the correct transition T1 is verified Bob does permantley loses his validitybond
+        // even though it is the correct transition for the verified parent P1.
+        verifyBlock(Carol, 1);
+        parentHash = blockHash;
+        (, b) = L1.getStateVariables();
+        uint64 lastVerifiedBlockAfter = b.lastVerifiedBlockId;
+        assertEq(lastVerifiedBlockAfter, lastVerifiedBlockBefore + 1 ); // Verification completed
+        uint256 bobBalanceAfter = tko.balanceOf(Bob);
+        assertLt(bobBalanceAfter, bobBalanceBefore);
+        console2.log("Bob Loss:", bobBalanceBefore - bobBalanceAfter);
+        console2.log("Bob Loss without couting livenessbond:", bobBalanceBefore - bobBalanceAfter - 1e18); // Liveness bond is 1 ETH in tests
+    }
+  ```
+  </details>
+
+## 3. [High] Taiko L1 - Proposer can maliciously cause loss of funds by forcing someone else to pay prover’s fee
+
+### Pay prover’s fee
+
+- Summary: The libProposing library lets a proposer set the person for assigned prover fees. Malicious actors can exploit this by setting the person to another user's address, forcing them to pay fees for block proposals made by the malicious actor. This can happen if a user's approval allowance for spending tokens exceeds the actual fee they intend to pay.
+
+- Impact & Recommendation: To prevent malicious actors from forcing others to pay fees for block proposals, a simple fix is to ensure that the block proposer always remains the msg.sender.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2024-03-taiko#h-04-taiko-l1---proposer-can-maliciously-cause-loss-of-funds-by-forcing-someone-else-to-pay-provers-fee) & [Report](https://code4rena.com/reports/2024-03-taiko)
+
+<details><summary>POC</summary> 
+  
+    ```solidity
+  
+            if (params.coinbase == address(0)) {
+        params.coinbase = msg.sender;
+    }
+
+    // When a hook is called, all ether in this contract will be send to the hook.
+    // If the ether sent to the hook is not used entirely, the hook shall send the Ether
+    // back to this contract for the next hook to use.
+    // Proposers shall choose use extra hooks wisely.
+    IHook(params.hookCalls[i].hook).onBlockProposed{ value: address(this).balance }(
+        blk, meta_, params.hookCalls[i].data
+    );
+
+    // The proposer irrevocably pays a fee to the assigned prover, either in
+    // Ether or ERC20 tokens.
+    if (assignment.feeToken == address(0)) {
+        // Paying Ether
+        _blk.assignedProver.sendEther(proverFee, MAX_GAS_PAYING_PROVER);
+    } else {
+        // Paying ERC20 tokens
+        IERC20(assignment.feeToken).safeTransferFrom(
+            _meta.coinbase, _blk.assignedProver, proverFee
+        );
+    }
+
+    ```
+
+</details>

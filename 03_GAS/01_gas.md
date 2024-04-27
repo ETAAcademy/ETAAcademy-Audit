@@ -367,3 +367,78 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 6. [High] Gas issuance is inflated and will halt the chain or lead to incorrect base fee
+
+### Gas issuance
+
+- Summary: The `anchor()` function's base fee calculation is flawed, leading to inflated issuance. If called consecutively on 5 blocks, it erroneously issues 15 times the gas target per L1 block instead of the expected 5 times, potentially causing the chain to halt or suffer from a significantly deflated base fee.
+
+- Impact & Recommendation: Issue `_config.gasTargetPerL1Block` for each L1 block instead of issuing `uint256 issuance = (_l1BlockOd - lastSyncedBlock) * _config.gasTargetPerL1Block`.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2024-03-taiko#h-01-gas-issuance-is-inflated-and-will-halt-the-chain-or-lead-to-incorrect-base-fee) & [Report](https://code4rena.com/reports/2024-03-taiko)
+
+  <details><summary>POC</summary>
+ 
+  ```solidity
+      struct Config {
+        uint32 gasTargetPerL1Block;
+        uint8 basefeeAdjustmentQuotient;
+    }
+    function getConfig() public view virtual returns (Config memory config_) {
+        config_.gasTargetPerL1Block = 15 * 1e6 * 4;
+        config_.basefeeAdjustmentQuotient = 8;
+    }
+    uint256 lastSyncedBlock = 1;
+    uint256 gasExcess = 10;
+    function _calc1559BaseFee(
+        Config memory _config,
+        uint64 _l1BlockId,
+        uint32 _parentGasUsed
+    )
+        private
+        view
+        returns (uint256 issuance, uint64 gasExcess_)
+    {
+        if (gasExcess > 0) {
+            uint256 excess = uint256(gasExcess) + _parentGasUsed;
+            uint256 numL1Blocks;
+            if (lastSyncedBlock > 0 && _l1BlockId > lastSyncedBlock) {
+                numL1Blocks = _l1BlockId - lastSyncedBlock;
+            }
+            if (numL1Blocks > 0) {
+                issuance = numL1Blocks * _config.gasTargetPerL1Block;
+                excess = excess > issuance ? excess - issuance : 1;
+            }
+			// I have commented out the below basefee calculation
+			// and return issuance instead to show the actual
+			// accumulated issuance over 5 L1 blocks.
+			// nothing else is changed
+		
+            //gasExcess_ = uint64(excess.min(type(uint64).max));
+			
+            //basefee_ = Lib1559Math.basefee(
+            //    gasExcess_, uint256(_config.basefeeAdjustmentQuotient) * _config.gasTargetPerL1Block
+            //);
+        }
+        //if (basefee_ == 0) basefee_ = 1;
+    }
+        
+    function testIssuance() external {
+        uint256 issuance;
+        uint256 issuanceAdded;
+        Config memory config = getConfig();
+        for (uint64 x=2; x <= 6 ;x++){
+            
+            (issuanceAdded ,) = _calc1559BaseFee(config, x, 0);
+            issuance += issuanceAdded;
+            console2.log("added", issuanceAdded);
+        }
+        uint256 expectedIssuance = config.gasTargetPerL1Block*5;
+        console2.log("Issuance", issuance);
+        console2.log("Expected Issuance", expectedIssuance);
+        
+        assertEq(expectedIssuance*3, issuance);
+  
+  ```
+  </details>
