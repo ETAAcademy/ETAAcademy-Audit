@@ -170,3 +170,79 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
     ```
 
 </details>
+
+## 3. [Medium] Taiko L1 - Proposer can maliciously cause loss of funds by forcing someone else to pay prover’s fee
+
+### Proving tier
+
+- Summary: The `getMinTier()` function determines the minimum proving tier required for proposing a block based on a random number `_rand`. If this number meets a specific condition, a more expensive tier is required; otherwise, a cheaper one suffices. However, since the random number can be predicted in advance, proposers may choose to wait for a cheaper tier, causing delays in transaction finalization.
+
+- Impact & Recommendation: Consider using VRF like solutions to make `_rand` truly random.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2024-03-taiko#m-11-proposers-would-choose-to-avoid-higher-tier-by-exploiting-non-randomness-of-parameter-used-in-getmintier) & [Report](https://code4rena.com/reports/2024-03-taiko)
+
+<details><summary>POC</summary> 
+  
+    ```solidity
+
+        File: contracts/L1/tiers/MainnetTierProvider.sol
+    66:               function getMinTier(uint256 _rand) public pure override returns (uint16) {
+    67:                   // 0.1% require SGX + ZKVM; all others require SGX
+    68: @--->             if (_rand % 1000 == 0) return LibTiers.TIER_SGX_ZKVM;
+    69:                   else return LibTiers.TIER_SGX;
+    70:               }
+
+        File: contracts/L1/libs/LibProposing.sol
+    199:                  // Following the Merge, the L1 mixHash incorporates the
+    200:                  // prevrandao value from the beacon chain. Given the possibility
+    201:                  // of multiple Taiko blocks being proposed within a single
+    202:                  // Ethereum block, we choose to introduce a salt to this random
+    203:                  // number as the L2 mixHash.
+    204: @--->            meta_.difficulty = keccak256(abi.encodePacked(block.prevrandao, b.numBlocks, block.number));
+    205:
+    206:                  // Use the difficulty as a random number
+    207:                  meta_.minTier = ITierProvider(_resolver.resolve("tier_provider", false)).getMinTier(
+    208: @--->                uint256(meta_.difficulty)
+    209:                  );
+
+
+    ```
+
+</details>
+
+## 4. [Medium] Taiko SGX Attestation - Improper validation in certchain decoding
+
+### Improper validation
+
+- Summary: In Taiko's ZK proof setup, SGX provers leverage remote attestation via Automata's modular attestation layer. The process involves decoding the certificate chain, validating notBefore and notAfter tags. However, a flaw in the validation logic allows an attestor to pass any value for the notBefore tag, compromising the integrity of the attestation process. This oversight poses a significant risk to the security and trustworthiness of SGX provers within Taiko's setup, highlighting the importance of rectifying the validation issue promptly.
+
+- Impact & Recommendation: Updating the condition to `(notBeforeTag != 0x17 && notBeforeTag != 0x18)` will prevent improper validation and mitigate unforeseen consequences.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2024-03-taiko#m-13-taiko-sgx-attestation---improper-validation-in-certchain-decoding) & [Report](https://code4rena.com/reports/2024-03-taiko)
+
+<details><summary>POC</summary> 
+  
+    ```solidity
+                {
+            uint256 notBeforePtr = der.firstChildOf(tbsPtr);
+            uint256 notAfterPtr = der.nextSiblingOf(notBeforePtr);
+            bytes1 notBeforeTag = der[notBeforePtr.ixs()];
+            bytes1 notAfterTag = der[notAfterPtr.ixs()];
+            if (
+                (notBeforeTag != 0x17 && notBeforeTag == 0x18)
+                    || (notAfterTag != 0x17 && notAfterTag != 0x18)
+            ) {
+                return (false, cert);
+            }
+            cert.notBefore = X509DateUtils.toTimestamp(der.bytesAt(notBeforePtr));
+            cert.notAfter = X509DateUtils.toTimestamp(der.bytesAt(notAfterPtr));
+        }
+                if (
+                (notBeforeTag != 0x17 && notBeforeTag != 0x18)
+                    || (notAfterTag != 0x17 && notAfterTag != 0x18)
+            ) {
+                return (false, cert);
+
+    ```
+
+</details>

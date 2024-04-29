@@ -378,3 +378,43 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 7.[Medium] Malicious caller of processMessage() can pocket the fee while forcing excessivelySafeCall() to fail
+
+### EIP150: 63/64
+
+- Summary: The logic in the processMessage() function rewards the msg.sender even if the `_invokeMessageCall()` fails and the message enters a RETRIABLE state. This flaw can be exploited by a malicious user leveraging the 63/64th rule to provide just enough gas to execute the reward logic. The user can then receive rewards while saving on gas costs. This vulnerability allows for gaming the protocol and reduces incentives for external users to provide more gas than necessary.
+- Impact & Recommendation: Only reward msg.sender with `_message.fee` if `_invokeMessageCall()` returns true. Hold the reward until a successful retryMessage(), then release it to the caller of `retryMessage()`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-taiko#m-14-malicious-caller-of-processmessage-can-pocket-the-fee-while-forcing-excessivelysafecall-to-fail) & [Report](https://code4rena.com/reports/2024-03-taiko)
+
+<details><summary>POC</summary>
+
+```solidity
+  File: contracts/bridge/Bridge.sol
+  278:                          // Use the specified message gas limit if called by the owner, else
+  279:                          // use remaining gas
+  280: @--->                    uint256 gasLimit = msg.sender == _message.destOwner ? gasleft() : _message.gasLimit;
+  281:
+  282: @--->                    if (_invokeMessageCall(_message, msgHash, gasLimit)) {
+  283:                              _updateMessageStatus(msgHash, Status.DONE);
+  284:                          } else {
+  285: @--->                        _updateMessageStatus(msgHash, Status.RETRIABLE);
+  286:                          }
+  287:                      }
+  288:
+  289:                      // Determine the refund recipient
+  290:                      address refundTo =
+  291:                          _message.refundTo == address(0) ? _message.destOwner : _message.refundTo;
+  292:
+  293:                      // Refund the processing fee
+  294:                      if (msg.sender == refundTo) {
+  295:                          refundTo.sendEther(_message.fee + refundAmount);
+  296:                      } else {
+  297:                          // If sender is another address, reward it and refund the rest
+  298: @--->                    msg.sender.sendEther(_message.fee);
+  299:                          refundTo.sendEther(refundAmount);
+  300:                      }
+
+```
+
+</details>

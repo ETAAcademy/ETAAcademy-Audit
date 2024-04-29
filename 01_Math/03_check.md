@@ -1112,3 +1112,48 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 19.[Medium] Invocation delays are not honoured when protocol unpauses
+
+### delays & pauses
+
+- Summary: Pause durations are not consistently considered in protocol processes like `processMessage()`, allowing non-preferred executors to front-run preferred ones after unpausing. Similar issues exist in other functions and contracts, risking fairness and security. Update the protocol to consistently account for pause durations, adjusting invocation delays and implementing pause duration checks to prevent exploitation and ensure fairness and security.
+
+- Impact & Recommendation: Introduce a new variable to track time spent in the valid wait window before a pause, and track the timestamp of the last unpause.
+
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-taiko#m-13-taiko-sgx-attestation---improper-validation-in-certchain-decoding) & [Report](https://code4rena.com/reports/2024-03-taiko)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+        File: contracts/bridge/Bridge.sol
+    233: @--->            (uint256 invocationDelay, uint256 invocationExtraDelay) = getInvocationDelays();
+    234:
+    235:                  if (!isMessageProven) {
+    236:                      if (!_proveSignalReceived(signalService, msgHash, _message.srcChainId, _proof)) {
+    237:                          revert B_NOT_RECEIVED();
+    238:                      }
+    239:
+    240:                      receivedAt = uint64(block.timestamp);
+    241:
+    242:                      if (invocationDelay != 0) {
+    243:                          proofReceipt[msgHash] = ProofReceipt({
+    244:                              receivedAt: receivedAt,
+    245:                              preferredExecutor: _message.gasLimit == 0 ? _message.destOwner : msg.sender
+    246:                          });
+    247:                      }
+    248:                  }
+    249:
+    250:                  if (invocationDelay != 0 && msg.sender != proofReceipt[msgHash].preferredExecutor) {
+    251:                      // If msg.sender is not the one that proved the message, then there
+    252:                      // is an extra delay.
+    253:                      unchecked {
+    254:                          invocationDelay += invocationExtraDelay;
+    255:                      }
+    256:                  }
+    257:
+    258: @--->            if (block.timestamp >= invocationDelay + receivedAt) {
+
+  ```
+
+  </details>
