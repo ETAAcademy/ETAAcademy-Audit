@@ -246,3 +246,36 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
     ```
 
 </details>
+
+## 5. [Medium] Improper adjustment of Lending Ledger configuration
+
+### Improper configuration for both rewards and block time parameters
+
+- Summary: The LendingLedger's method for adjusting time-related parameters and rewards is insecure, potentially leading to retroactive application of adjustments to markets not yet updated. While warnings exist in the code, they are deemed insufficient to prevent over- or under-estimations of rewards attributed to markets.
+
+- Impact & Recommendation: Track and update all markets together when adjusting parameters or rewards in LendingLedger. This can be done by iterating through all markets to ensure simultaneous updates, either by tracking the total number of markets or by providing an input array of markets. Additionally, for setRewards function, restrict mutations to future epochs to prevent retroactive adjustments.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2024-03-neobase#m-04-improper-adjustment-of-lending-ledger-configuration) & [Report](https://code4rena.com/reports/2024-03-neobase)
+
+<details><summary>POC</summary> 
+  
+    ```solidity
+    function testInsecureRewardUpdate() public {
+        setupStateBeforeClaim();
+        // Based on `LendingLedger.t.sol::testClaimValidLenderOneBlock`, the reward of the `lender` should be `amountPerBlock - 1` at this time point
+        vm.roll(BLOCK_EPOCH * 5 + 1);
+        // We update the rewards of the epochs without updating the markets
+        vm.prank(governance);
+        uint256 newRewardPerBlock = amountPerBlock * 2;
+        ledger.setRewards(fromEpoch, toEpoch, newRewardPerBlock);
+        // We claim the `lender` rewards, should be `amountPerBlock` based on `LendingLedger.t.sol::testClaimValidLenderOneBlock`
+        uint256 balanceBefore = address(lender).balance;
+        vm.prank(lender);
+        vm.roll(BLOCK_EPOCH * 5 + 1);
+        ledger.claim(lendingMarket);
+        uint256 balanceAfter = address(lender).balance;
+        // Assertion will fail
+        assertEq(balanceAfter - balanceBefore, amountPerBlock - 1);
+    }
+    ```
+</details>

@@ -324,46 +324,78 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Impact & Recommendation: Consider using `saturating_add` instead of `+`
   <br> 🐬: [Source](https://code4rena.com/reports/2024-03-phala-network#m-04-an-attacker-can-crash-the-cluster-system-by-sending-an-http-request-with-a-huge-timeout) & [Report](https://code4rena.com/reports/2024-03-phala-network)
 
-    <details><summary>POC</summary>
+<details><summary>POC</summary>
 
-  ```rust
-    #[cfg(test)]
-    mod tests {
-        use crate::PinkRuntimeEnv;
-        use pink::chain_extension::{HttpRequest, PinkExtBackend};
-        use super::*;
-        #[test]
-        fn http_timeout_panics() {
-            mock_all_ext();
-            let ext = MockExtension;
-            assert_eq!(ext.address(), &AccountId32::new([0; 32]));
-            let responses = ext
-                .batch_http_request(
-                    vec![
-                        HttpRequest {
-                            method: "GET".into(),
-                            url: "https://httpbin.org/get".into(),
-                            body: Default::default(),
-                            headers: Default::default(),
-                        },
-                        HttpRequest {
-                            method: "GET".into(),
-                            url: "https://httpbin.org/get".into(),
-                            body: Default::default(),
-                            headers: Default::default(),
-                        },
-                    ],
-                    u64::MAX, //@audit this will cause an overflow
-                )
-                .unwrap()
-                .unwrap();
-            assert_eq!(responses.len(), 2);
-            for response in responses {
-                assert!(response.is_ok());
-            }
+```rust
+  #[cfg(test)]
+  mod tests {
+      use crate::PinkRuntimeEnv;
+      use pink::chain_extension::{HttpRequest, PinkExtBackend};
+      use super::*;
+      #[test]
+      fn http_timeout_panics() {
+          mock_all_ext();
+          let ext = MockExtension;
+          assert_eq!(ext.address(), &AccountId32::new([0; 32]));
+          let responses = ext
+              .batch_http_request(
+                  vec![
+                      HttpRequest {
+                          method: "GET".into(),
+                          url: "https://httpbin.org/get".into(),
+                          body: Default::default(),
+                          headers: Default::default(),
+                      },
+                      HttpRequest {
+                          method: "GET".into(),
+                          url: "https://httpbin.org/get".into(),
+                          body: Default::default(),
+                          headers: Default::default(),
+                      },
+                  ],
+                  u64::MAX, //@audit this will cause an overflow
+              )
+              .unwrap()
+              .unwrap();
+          assert_eq!(responses.len(), 2);
+          for response in responses {
+              assert!(response.is_ok());
+          }
+      }
+  }
+
+```
+
+</details>
+
+## 7. [Medium] In case a gauge weight reduction is performed via GaugeController::change_gauge_weight, it is possible that all functions will stop functioning permanently for that gauge
+
+### Underflow by gauge weight reduction
+
+- Summary: The "\_get_weight" function, operating in a loop, may result in an integer underflow when a gauge's weight is reduced by governance. This flaw renders the gauge unusable and locks its voting powers, posing a significant risk. Despite attempts to address such scenarios in the protocol, the likelihood of governance actions to decrease a gauge's weight suggests a high-severity vulnerability.
+
+- Impact & Recommendation: Whenever pt.slope is less than d.slope, set the value of pt.slope to 0
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-neobase#m-01-in-case-a-gauge-weight-reduction-is-performed-via-gaugecontrollerchange_gauge_weight-it-is-possible-that-all-functions-will-stop-functioning-permanently-for-that-gauge) & [Report](https://code4rena.com/reports/2024-03-neobase)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+          if (pt.bias > d_bias) {
+            pt.bias -= d_bias;
+            uint256 d_slope = changes_weight[_gauge_addr][t];
+
+   -           pt.slope -= d_slope;
+
+   *           if(pt.slope >= d.slope) {
+   *               pt.slope -= d_slope;
+   *           } else {
+   *               pt.slope = 0;
+   *           }
+        } else {
+            pt.bias = 0;
+            pt.slope = 0;
         }
-    }
 
   ```
 
-    </details>
+  </details>

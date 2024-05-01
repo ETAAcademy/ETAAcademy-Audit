@@ -356,3 +356,97 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 4. [High] If a gauge that a user has voted for gets removed, their voting power allocated for that gauge will be lost
+
+### Vote requirement for gauge
+
+- Summary: The GaugeController, based on Curve DAO's Vyper implementation, allows users to vote for incentive allocation using the vote_for_gauge_weights() function. However, governance can remove gauges, preventing further voting but leaving existing users' voting power intact. Specifically, a new require statement has been added to check if the gauge type is greater than 0, but this fix doesn't address the issue effectively because the gauge type for a nonexistent gauge is always 0.
+
+- Impact & Recommendation: Remove the requirement checking for nonzero gauge types at the specified address to allow users to reclaim their votes from removed gauges.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-neobase#h-01-if-a-gauge-that-a-user-has-voted-for-gets-removed-their-voting-power-allocated-for-that-gauge-will-be-lost) & [Report](https://code4rena.com/reports/2024-03-neobase)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+      function testLostVotingPower() public {
+        // prepare
+        uint256 v = 10 ether;
+        vm.deal(gov, v);
+        vm.startPrank(gov);
+        ve.createLock{value: v}(v);
+        // add gauges
+        gc.add_gauge(gauge1, 0);
+        gc.add_type("", 0);
+        gc.add_gauge(gauge2, 1);
+        // all-in on gauge1
+        gc.vote_for_gauge_weights(gauge1, 10000);
+        // governance removes gauge1
+        gc.remove_gauge_weight(gauge1);
+        gc.remove_gauge(gauge1);
+        // cannot vote for gauge2
+        vm.expectRevert("Used too much power");
+        gc.vote_for_gauge_weights(gauge2, 10000);
+        // cannot remove vote for gauge1
+        vm.expectRevert("Gauge not added"); // @audit remove after mitigation
+        gc.vote_for_gauge_weights(gauge1, 0);
+        // cannot vote for gauge2 (to demonstrate again that voting power is not removed)
+        vm.expectRevert("Used too much power");  // @audit remove after mitigation
+        gc.vote_for_gauge_weights(gauge2, 10000);
+    }
+
+    function testLostVotingPower() public {
+        // prepare
+        uint256 v = 10 ether;
+        vm.deal(gov, v);
+        vm.startPrank(gov);
+        ve.createLock{value: v}(v);
+        // add gauges
+        gc.add_gauge(gauge1, 0);
+        gc.change_gauge_weight(gauge1, 100);
+        gc.add_type("", 100);
+        gc.add_gauge(gauge2, 1);
+        gc.change_gauge_weight(gauge2, 100);
+        // all-in on gauge1
+        gc.vote_for_gauge_weights(gauge1, 10000);
+        // governance removes gauge1
+        gc.remove_gauge_weight(gauge1);
+        gc.remove_gauge(gauge1);
+        // cannot vote for gauge2
+        vm.expectRevert("Used too much power");
+        gc.vote_for_gauge_weights(gauge2, 10000);
+        // cannot remove vote for gauge1
+        vm.expectRevert("Gauge not added"); // @audit remove after mitigation
+        gc.vote_for_gauge_weights(gauge1, 0);
+        // cannot vote for gauge2 (to demonstrate again that voting power is not removed)
+        vm.expectRevert("Used too much power");  // @audit remove after mitigation
+        gc.vote_for_gauge_weights(gauge2, 10000);
+    }
+
+
+  ```
+
+  </details>
+
+## 5. [Medium] Issue from previous audit still present: Gauge can have bigger weight than was intended by protocol
+
+### Change gauge weight
+
+- Summary: Users can exploit the "change_gauge_weight" function by monitoring the mempool for calls and front-running them to remove their voting power before the change occurs. This allows them to manipulate the gauge's weight, increasing it beyond the intended value set by governance.
+
+- Impact & Recommendation: Remove `change_gauge_weight` function.
+  <br> 🐬: [Source](hhttps://code4rena.com/reports/2024-03-neobase#m-03-issue-from-previous-audit-still-present-gauge-can-have-bigger-weight-than-was-intended-by-protocol) & [Report](https://code4rena.com/reports/2024-03-neobase)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+      /// @notice Allows governance to overwrite gauge weights
+    /// @param _gauge Gauge address
+    /// @param _weight New weight
+    function change_gauge_weight(address _gauge, uint256 _weight) public onlyGovernance {
+        _change_gauge_weight(_gauge, _weight);
+    }
+
+  ```
+
+  </details>
