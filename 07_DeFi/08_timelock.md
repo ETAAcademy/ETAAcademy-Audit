@@ -54,3 +54,54 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
     }
   ```
   </details>
+
+## 2. [Medium] Incentive accumulation can be sandwiched with additional shares to gain advantage over long-term depositors
+
+### No enforced unbonding period
+
+- Summary: In this system, rewards accumulate periodically and are distributed among deposited shares. Users can swiftly deposit, claim rewards, and withdraw shares, incentivizing rapid turnover rather than long-term holding. However, this setup allows adversaries to borrow shares and unfairly claim a disproportionate share of rewards during accumulation periods. Unlike in the earnings module, there's no enforced waiting period for share withdrawals.
+
+- Impact & Recommendation: It's recommended to track deposited shares between accumulation intervals and adjust incentive rewards based on the actual deposit duration.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2024-03-acala#m-02-incentive-accumulation-can-be-sandwiched-with-additional-shares-to-gain-advantage-over-long-term-depositors) & [Report](https://code4rena.com/reports/2024-03-acala)
+
+  <details><summary>POC</summary>
+ 
+  ```rust
+    diff --git a/src/modules/incentives/src/tests.rs b/src/modules/incentives/src/tests.rs
+    index 1370d5b..fa16a08 100644
+    --- a/src/modules/incentives/src/tests.rs
+    +++ b/src/modules/incentives/src/tests.rs
+    @@ -1171,10 +1171,11 @@ fn transfer_reward_and_update_rewards_storage_atomically_when_accumulate_incenti
+            assert_eq!(TokensModule::free_balance(AUSD, &VAULT::get()), 0);
+    
+            RewardsModule::add_share(&ALICE::get(), &PoolId::Loans(LDOT), 1);
+    +		RewardsModule::add_share(&BOB::get(), &PoolId::Loans(LDOT), 1);
+            assert_eq!(
+                RewardsModule::pool_infos(PoolId::Loans(LDOT)),
+                PoolInfo {
+    -				total_shares: 1,
+    +				total_shares: 2,
+                    ..Default::default()
+                }
+            );
+    @@ -1188,7 +1189,7 @@ fn transfer_reward_and_update_rewards_storage_atomically_when_accumulate_incenti
+            assert_eq!(
+                RewardsModule::pool_infos(PoolId::Loans(LDOT)),
+                PoolInfo {
+    -				total_shares: 1,
+    +				total_shares: 2,
+                    rewards: vec![(ACA, (30, 0)), (AUSD, (90, 0))].into_iter().collect()
+                }
+            );
+    @@ -1202,7 +1203,7 @@ fn transfer_reward_and_update_rewards_storage_atomically_when_accumulate_incenti
+            assert_eq!(
+                RewardsModule::pool_infos(PoolId::Loans(LDOT)),
+                PoolInfo {
+    -				total_shares: 1,
+    +				total_shares: 2,
+                    rewards: vec![(ACA, (60, 0)), (AUSD, (90, 0))].into_iter().collect()
+                }
+            );
+  ```
+  </details>

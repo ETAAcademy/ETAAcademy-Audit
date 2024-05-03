@@ -536,3 +536,36 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 5. [Medium] Unbond_instant removes incorrect amount of shares
+
+### Removes shares without fees
+
+- Summary: The problem lies in the `unbond_instant` function, where users can immediately unbond their shares but must pay a fee. However, a mistake in the code results in the fee not being considered when removing shares by `final_amount`, leaving some shares stuck in the system and continuing to accumulate rewards. This creates an unfair advantage for users who unbond instantly, as their shares still receive rewards while others cannot access them and one share no longer corresponds to one underlying token due to this issue.
+
+- Impact & Recommendation: For the unbond_instant function, the code mistakenly uses the final_amount instead of change.change to remove shares.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2024-03-acala#m-03-unbond_instant-removes-incorrect-amount-of-shares) & [Report](https://code4rena.com/reports/2024-03-acala)
+
+<details><summary>POC</summary>
+
+```solidity
+
+  + println!("change.change: {:?}", change.change);
+  144: T::OnBonded::happened(&(who.clone(), change.change));
+  145: Self::deposit_event(Event::Bonded {
+  146: 	who,
+  147: 	amount: change.change,
+  148: });
+
+  + println!("final_amount: {:?}", final_amount);
+  196: T::OnUnbonded::happened(&(who.clone(), final_amount));
+  197: Self::deposit_event(Event::InstantUnbonded {
+  198: 	who,
+  199: 	amount: final_amount,
+  200: 	fee,
+  201: });
+
+```
+
+</details>

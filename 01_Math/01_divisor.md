@@ -262,3 +262,24 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 3. [High] transfer_share_and_rewards can be used to transfer out shares without transferring reward debt due to rounding
+
+### Rounding issue in the reward debt transfer calculation
+
+- Summary : The `transfer_share_and_rewards` function allows splitting a position into multiple accounts, but a rounding issue can occur in the reward debt transfer calculation. If the `balance* move_share` is lower than `share`, the `move_balance` evaluates to 0, leaving the receiving account with shares but no reward debt. This enables the receiver to claim rewards already claimed, which can be done multiple times to drain the reward pool.
+- Impact & Recommendation: Change the calculation of move_balance to use saturated rounding up instead of rounding down to prevents underflow errors. Alternatively, revert transfer_share_and_rewards operations if the receiving account's reward debt is calculated to be 0, unless the sending account also has a reward debt of 0.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2024-03-acala#h-03-transfer_share_and_rewards-can-be-used-to-transfer-out-shares-without-transferring-reward-debt-due-to-rounding) & [Report](https://code4rena.com/reports/2024-03-acala)
+
+<details><summary>POC</summary>
+
+```rust
+    let move_balance = U256::from(balance.to_owned().saturated_into::<u128>())
+        * U256::from(move_share.to_owned().saturated_into::<u128>())
+        / U256::from(share.to_owned().saturated_into::<u128>());
+
+
+```
+
+</details>

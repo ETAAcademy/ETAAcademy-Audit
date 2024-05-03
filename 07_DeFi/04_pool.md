@@ -309,3 +309,27 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 7. [High] Early user can break pool via inflation attack due to no minimum liquidity check in the incentive contract
+
+### Inflation attack by no minimum liquidity
+
+- Summary: The incentive contract's absence of a minimum liquidity requirement allows users to exploit an inflation attack. By withdrawing most shares, claiming rewards, and depositing a small amount, users can inflate total shares without increasing reward inflation. This leads to older users losing rewards, especially impactful in low liquidity pools.
+
+- Impact: Implementing a minimum liquidity limit to prevent significant rounding errors caused by dangerously low liquidity.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2024-03-acala#h-02-early-user-can-break-pool-via-inflation-attack-due-to-no-minimum-liquidity-check-in-the-incentive-contract) & [Report](https://code4rena.com/reports/2024-03-acala)
+
+<details><summary>POC</summary>
+
+```rust
+    U256::from(add_amount.to_owned().saturated_into::<u128>())
+        .saturating_mul(total_reward.to_owned().saturated_into::<u128>().into())
+        .checked_div(initial_total_shares.to_owned().saturated_into::<u128>().into())
+        .unwrap_or_default()
+        .as_u128()
+        .saturated_into()
+
+```
+
+</details>
