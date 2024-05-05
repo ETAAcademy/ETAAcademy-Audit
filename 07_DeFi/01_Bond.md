@@ -742,7 +742,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 7. [High] Liquidators can pay less than required to completely liquidate the private collateral balance of an uncollateralized position
 
-### Check uncollateralized positionPrivate
+### Check uncollateralized position
 
 - Summary: users can choose to collateralize or uncollateralize their positions. During liquidation, the liquidator's receive amount is calculated as a percentage of the full collateral, which includes the user's private deposit. However, the reduction of the user's normal balance doesn't account for whether the position is uncollateralized, so that the liquidator can drain the user's private collateral while paying for only a portion of the liquidation, resulting in financial losses for the user and an increase in bad debt for the protocol.
 
