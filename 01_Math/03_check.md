@@ -1157,3 +1157,149 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 20.[High] User can erase their position debt for free
+
+### Inadequate validation of token
+
+- Summary: The vulnerability allows attackers to remove data about user borrowings or zero out debt by exploiting inadequate validation in the `_removePositionData` function and the `paybackBadDebtNoReward` function. Attackers can manipulate the system to steal borrowed funds by triggering the removal of borrowing information through a specific sequence of actions.
+
+- Impact & Recommendation: Add verification if the token that is passed to `_removePositionData()` exists in user tokens.
+
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-wise-lending#h-02-user-can-erase-their-position-debt-for-free) & [Report](https://code4rena.com/reports/2024-02-wise-lending)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+        function _removePositionData(
+            uint256 _nftId,
+            address _poolToken,
+            function(uint256) view returns (uint256) _getPositionTokenLength,
+            function(uint256, uint256) view returns (address) _getPositionTokenByIndex,
+            function(uint256, address) internal _deleteLastPositionData,
+            bool isLending
+        )
+            private
+        {
+            uint256 length = _getPositionTokenLength(
+                _nftId
+            );
+            if (length == 1) {
+                _deleteLastPositionData(
+                    _nftId,
+                    _poolToken
+                );
+                return;
+            }
+            uint8 i;
+            uint256 endPosition = length - 1;
+            while (i < length) {
+                if (i == endPosition) {
+                    _deleteLastPositionData(
+                        _nftId,
+                        _poolToken
+                    );
+                    break;
+                }
+                if (_getPositionTokenByIndex(_nftId, i) != _poolToken) {
+                    unchecked {
+                        ++i;
+                    }
+                    continue;
+                }
+                address poolToken = _getPositionTokenByIndex(
+                    _nftId,
+                    endPosition
+                );
+                isLending == true
+                    ? positionLendTokenData[_nftId][i] = poolToken
+                    : positionBorrowTokenData[_nftId][i] = poolToken;
+                _deleteLastPositionData(
+                    _nftId,
+                    _poolToken
+                );
+                break;
+            }
+        }
+
+        function paybackBadDebtNoReward(
+            uint256 _nftId,
+            address _paybackToken,
+            uint256 _shares
+        )
+            external
+            returns (uint256 paybackAmount)
+        {
+            updatePositionCurrentBadDebt(
+                _nftId
+            );
+            if (badDebtPosition[_nftId] == 0) {
+                return 0;
+            }
+            if (WISE_LENDING.getTotalDepositShares(_paybackToken) == 0) {
+                revert PoolNotActive();
+            }
+            paybackAmount = WISE_LENDING.paybackAmount(
+                _paybackToken,
+                _shares
+            );
+            WISE_LENDING.corePaybackFeeManager(
+                _paybackToken,
+                _nftId,
+                paybackAmount,
+                _shares
+            );
+            _updateUserBadDebt(
+                _nftId
+            );
+            // [...]
+
+        function _corePayback(
+            uint256 _nftId,
+            address _poolToken,
+            uint256 _amount,
+            uint256 _shares
+        )
+            internal
+        {
+            _updatePoolStorage(
+                _poolToken,
+                _amount,
+                _shares,
+                _increaseTotalPool,
+                _decreasePseudoTotalBorrowAmount,
+                _decreaseTotalBorrowShares
+            );
+            _decreasePositionMappingValue(
+                userBorrowShares,
+                _nftId,
+                _poolToken,
+                _shares
+            );
+            if (userBorrowShares[_nftId][_poolToken] > 0) {
+                return;
+            }
+            _removePositionData({
+                _nftId: _nftId,
+                _poolToken: _poolToken,
+                _getPositionTokenLength: getPositionBorrowTokenLength,
+                _getPositionTokenByIndex: getPositionBorrowTokenByIndex,
+                _deleteLastPositionData: _deleteLastPositionBorrowData,
+                isLending: false
+            });
+
+            uint256 length = _getPositionTokenLength(
+                _nftId
+            );
+            if (length == 1) {
+                _deleteLastPositionData(
+                    _nftId,
+                    _poolToken
+                );
+                return;
+            }
+
+
+  ```
+
+  </details>

