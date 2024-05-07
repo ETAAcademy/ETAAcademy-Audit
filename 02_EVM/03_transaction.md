@@ -177,3 +177,40 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 6.[Medium] Reorg attack on user’s Vault deployment and deposit may lead to theft of funds
+
+### src == msg.sender
+
+- Summary: In mimswap's Router.sol file, the createPoolETH method wraps native tokens to their "wrapped" counterpart before sending them to a new pool. However, on chains like Blast, Wrapped Arbitrum, and Wrapped Fantom, using address(weth).safeTransferFrom causes approval issues due to differences in WETH implementations that lacks this src == msg.sender handling.
+
+- Impact & Recommendation: To fix the issue preventing the creation of native token pools on multiple chains like Blast due to Router contract's failure to approve spending WETH tokens, modify Router.sol by replacing `safeTransferFrom` with `safeTransfer`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-abracadabra-money#m-01-pool-creation-failure-due-to-weth-transfer-compatibility-issue-on-some-chains) & [Report](https://code4rena.com/reports/2024-03-abracadabra-money)
+
+<details><summary>POC</summary>
+
+```solidity
+  pragma solidity ^0.8.0;
+  import "forge-std/Test.sol";
+  import "forge-std/console.sol";
+  import {IERC20} from "forge-std/interfaces/IERC20.sol";
+  contract PairTest is Test {
+      address alice = address(0xf683Ce59521AA464066783d78e40CD9412f33D21);
+      address bob = address(0x2);
+      // WETH address on Blast network
+      IERC20 public constant WETH = IERC20(0x4300000000000000000000000000000000000004);
+      error InsufficientAllowance();
+      function testPoC_TransferFromRevert() public {
+          // stdstore write for packed slot is complex so we use a real address that has tokens in blaset main net weth
+          // if this fails we need to update alice address to an address that has more than 1 ether balance in weth blast main net
+          assert(WETH.balanceOf(alice) > 1 ether);
+          vm.startPrank(alice);
+          vm.expectRevert(InsufficientAllowance.selector);
+          WETH.transferFrom(alice, bob, 1 ether);
+          vm.stopPrank();
+      }
+}
+
+```
+
+</details>

