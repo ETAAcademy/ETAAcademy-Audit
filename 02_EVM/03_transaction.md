@@ -214,3 +214,53 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 7.[High] Native gas tokens can become stuck in ASDRouter contract
+
+### msg.value stucked
+
+- Summary: Excess gas sent to the ASDRouter contract gets stuck there after successful ASD token transfers, which is not refunded to the sender's address, but held in the ASDRouter contract. This violates the rule that the ASDRouter's native balance should always be zero.
+
+- Impact & Recommendation: The suggested changes to the `_sendASD()` method in the ASDRouter contract will refund any leftover ether (gas) back to the specified refund address, preventing it from getting stuck in the contract after successful ASD token transfers.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-canto#h-01-native-gas-tokens-can-become-stuck-in-asdrouter-contract) & [Report](https://code4rena.com/reports/2024-03-canto)
+
+<details><summary>POC</summary>
+
+    ```solidity
+    diff --git a/test/ASDRouter.js b/test/ASDRouter.js
+    index 2a36337..eccedc0 100644
+    --- a/test/ASDRouter.js
+    +++ b/test/ASDRouter.js
+    @@ -276,6 +276,7 @@ describe("ASDRouter", function () {
+        it("lzCompose: successful deposit and send on canto", async () => {
+            // update whitelist
+            await ASDUSDC.updateWhitelist(USDCOFT.target, true);
+    +        const gas = ethers.parseEther("1");
+            // call lzCompose with valid payload
+            await expect(
+                ASDRouter.lzCompose(
+    @@ -287,12 +288,18 @@ describe("ASDRouter", function () {
+                        generatedRouterPayload(cantoLzEndpoint.id, refundAddress, TESTASD.target, TESTASD.target, "0", refundAddress, "0")
+                    ),
+                    executorAddress,
+    -                "0x"
+    +                "0x",
+    +                { value: gas }
+                )
+            )
+                .to.emit(ASDRouter, "ASDSent")
+                .withArgs(guid, refundAddress, TESTASD.target, amountUSDCSent, cantoLzEndpoint.id, false);
+            // expect ASD to be sent to canto
+            expect(await TESTASD.balanceOf(refundAddress)).to.equal(amountUSDCSent);
+    +
+    +        // expect gas to be refunded and not held in ASDRouter
+    +        expect(await ethers.provider.getBalance(ASDRouter.target)).to.equal(0);
+    +        expect(await ethers.provider.getBalance(refundAddress)).to.equal(gas);
+    +
+        });
+    });
+
+```
+
+</details>
+```

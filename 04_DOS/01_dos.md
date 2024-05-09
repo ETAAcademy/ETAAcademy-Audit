@@ -361,3 +361,41 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 6. [Medium] asdRouter.sol is at risk of DOS due to vulnerable implementation of NOTE address
+
+### Hardcoding address
+
+- Summary: The documentation advises using `CToken.underlying()` to ensure the correct NOTE token address. However, the current implementation in `asdRouter.sol` sets the noteAddress only at contract deployment, effectively hardcoding it. This poses a vulnerability as the `noteAddress` is used directly for swaps from asdUSDC to NOTE, instead of dynamically retrieving it via CToken.underlying(). Therefore, if the NOTE address changes, the `swap` and `lzcompose` functionalities will be vulnerable to denial-of-service attacks.
+
+- Impact & Recommendation: use `CNote.underlying()` instead of hardcoding.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-canto#m-01-asdroutersol-is-at-risk-of-dos-due-to-vulnerable-implementation-of-note-address) & [Report](https://code4rena.com/reports/2024-03-canto)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+  //contracts/asd/asdRouter.sol
+        constructor(address _noteAddress, uint32 _cantoLzEID, address _crocSwapAddress, address _crocImpactAddress, address _asdUSDCAddress) {
+            //@audit No method to change noteAddress after deployment.
+    |>      noteAddress = _noteAddress;
+            cantoLzEID = _cantoLzEID;
+            crocSwapAddress = _crocSwapAddress;
+            crocImpactAddress = _crocImpactAddress;
+            asdUSDC = _asdUSDCAddress;
+        }
+
+        //contracts/asd/asdRouter.sol
+        function _swapOFTForNote(address _oftAddress, uint _amount, uint _minAmountNote) internal returns (uint, bool) {
+    ...
+            if (_oftAddress < noteAddress) {
+                baseToken = _oftAddress;
+    |>          quoteToken = noteAddress;
+            } else {
+    |>          baseToken = noteAddress;
+                quoteToken = _oftAddress;
+            }
+    ...
+
+  ```
+
+  </details>

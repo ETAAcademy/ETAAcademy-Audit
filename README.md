@@ -4,6 +4,8 @@
 
 ### ETAAcademy-Audit version 0.4.8 version analyzes and summarizes challenging and interesting points from the full audit report, covers eight sections: math, EVM, gas, DOS, context, governance, DeFi, and library, with more to come. This is one small step for humans, but one giant leap for 🐬. Let's study and climb mountains together!
 
+### It provides friends interested in auditing a quick overview of common bugs in Solidity and Rust audits, covering 120 different types across 24 sub-domains in 8 major areas. It's regularly updated with the latest reports and revisions.
+
 This repository provides a comprehensive collection of resources and code for Web3.0 auditing, especially ZK security, including:
 
 - Tutorials and guides: Learn the fundamentals of Web3.0 security and auditing.
