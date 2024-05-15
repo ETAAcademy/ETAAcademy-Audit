@@ -1303,3 +1303,36 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 21. [Medium] Constraints of dailyAllowanceReplenishTime and allowanceRemaining during mint() can be bypassed by using alias accounts & safeTransferFrom()
+
+### Lacks similar checks
+
+- Summary: The `mint()` function in the GameItems contract limits users to minting 10 items per day, but this restriction can be bypassed by using the `safeTransferFrom()` function, which lacks similar checks. By creating multiple alias accounts, users can exceed the daily allowance and transfer the items back to their main account, potentially disrupting game balance.
+
+- Impact & Recommendation: Add the same check inside `safeTransferFrom()`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-ai-arena#m-09-constraints-of-dailyallowancereplenishtime-and-allowanceremaining-during-mint-can-be-bypassed-by-using-alias-accounts--safetransferfrom) & [Report](https://code4rena.com/reports/2024-02-ai-arena)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function test_MintGameItems_FromMultipleAccs_ThenTransfer() public {
+        // _ownerAddress's alternate account
+        address aliasAccount1 = makeAddr("aliasAccount1");
+        _fundUserWith4kNeuronByTreasury(_ownerAddress);
+        _gameItemsContract.mint(0, 10); //paying 10 $NRN for 10 batteries
+        assertEq(_gameItemsContract.balanceOf(_ownerAddress, 0), 10);
+
+        // transfer some $NRN to alias Account
+        _neuronContract.transfer(aliasAccount1, 10 * 10 ** 18);
+        vm.startPrank(aliasAccount1);
+        _gameItemsContract.mint(0, 10); //paying 10 $NRN for 10 batteries
+        assertEq(_gameItemsContract.balanceOf(aliasAccount1, 0), 10);
+        // transfer these game items to _ownerAddress
+        _gameItemsContract.safeTransferFrom(aliasAccount1, _ownerAddress, 0, 10, "");
+        assertEq(_gameItemsContract.balanceOf(_ownerAddress, 0), 20);
+    }
+
+  ```
+
+  </details>

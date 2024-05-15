@@ -656,3 +656,51 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 9. [Medium] Erroneous probability calculation in physical attributes can lead to significant issues
+
+### Wrong inclusion of boundary
+
+- Summary: The AiArenaHelper contract calculates user attributes using a rarityRank from their DNA. A bug in the dnaToIndex function, which uses cumProb >= rarityRank instead of cumProb > rarityRank, causes the first attribute to be slightly more likely (by 1%) and the last attribute slightly less likely (by 1%) than intended. In cases with extreme probabilities, this can significantly distort the rarity distribution, either doubling the chance of rare attributes or making them impossible to obtain.
+
+- Impact & Recommendation: Correcting it to cumProb > rarityRank results in a 50% chance for both attributes, fixing the imbalance and ensuring accurate probability distribution.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-ai-arena#m-07-erroneous-probability-calculation-in-physical-attributes-can-lead-to-significant-issues) & [Report](https://code4rena.com/reports/2024-02-ai-arena)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+                  } else {
+                    uint256 rarityRank = (dna / attributeToDnaDivisor[attributes[i]]) % 100;
+                    uint256 attributeIndex = dnaToIndex(generation, rarityRank, attributes[i]);
+                    finalAttributeProbabilityIndexes[i] = attributeIndex;
+                }
+
+
+
+     /// @dev Convert DNA and rarity rank into an attribute probability index.
+     /// @param attribute The attribute name.
+     /// @param rarityRank The rarity rank.
+     /// @return attributeProbabilityIndex attribute probability index.
+    function dnaToIndex(uint256 generation, uint256 rarityRank, string memory attribute)
+        public
+        view
+        returns (uint256 attributeProbabilityIndex)
+    {
+        uint8[] memory attrProbabilities = getAttributeProbabilities(generation, attribute);
+
+        uint256 cumProb = 0;
+        uint256 attrProbabilitiesLength = attrProbabilities.length;
+        for (uint8 i = 0; i < attrProbabilitiesLength; i++) {
+            cumProb += attrProbabilities[i];
+            if (cumProb >= rarityRank) {
+                attributeProbabilityIndex = i + 1;
+                break;
+            }
+        }
+        return attributeProbabilityIndex;
+    }
+
+
+  ```
+
+  </details>

