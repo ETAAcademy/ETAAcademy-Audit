@@ -1,4 +1,9 @@
 # ETAAcademy-Audit
+<div style="color: pink;">
+🐬Recipe: ETAAcademy-Audit
+💓Ingredients:  One to four interesting high-medium bugs are shared from each new report, which are different from the existing 120 bugs in the repository.
+🥰Tips: No new report, no update  🫡 💓 🚀 
+</div>
 
 ## Web3.0 Audit Resources and Competition Materials
 
