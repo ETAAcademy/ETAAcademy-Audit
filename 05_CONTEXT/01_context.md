@@ -153,3 +153,41 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 5. [Medium] Missing unwrap configuration when withdrawing cross-chain in the depositYBLendSGLLockXchainTOLP() function of MagnetarAssetXChainModule results in being unable to lock and participate on the destination chain
+
+### wrap & unwrap
+
+- Summary: The depositYBLendSGLLockXchainTOLP() function deposits into Singularity and withdraws its tokens cross-chain, wrapping them as TOFT tokens. But it doesn't unwrap these tokens on the destination chain, causing issues for subsequent actions like acquiring YieldBox shares.
+
+- Impact & Recommendation: Unwrapping is necessary for these actions to proceed. Update depositYBLendSGLLockXchainTOLP() to call `_withdrawToChain()` with the unwrap parameter set to true.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-tapioca#m-01-missing-unwrap-configuration-when-withdrawing-cross-chain-in-the-deposityblendsgllockxchaintolp-function-of-magnetarassetxchainmodule-results-in-being-unable-to-lock-and-participate-on-the-destination-chain) & [Report](https://code4rena.com/reports/2024-02-tapioca)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    uint256 fraction =
+        _depositYBLendSGL(data.depositData, data.singularity, IYieldBox(yieldBox), data.user, data.lendAmount);
+    // wrap SGL receipt into tReceipt
+    // ! User should approve `address(this)` for `IERC20(data.singularity)` !
+    uint256 toftAmount = _wrapSglReceipt(IYieldBox(yieldBox), data.singularity, data.user, fraction, data.assetId);
+
+    _withdrawToChain(
+        MagnetarWithdrawData({
+            yieldBox: yieldBox,
+            assetId: data.assetId,
+            unwrap: false,
+            lzSendParams: data.lockAndParticipateSendParams.lzParams,
+            sendGas: data.lockAndParticipateSendParams.lzSendGas,
+            composeGas: data.lockAndParticipateSendParams.lzComposeGas,
+            sendVal: data.lockAndParticipateSendParams.lzSendVal,
+            composeVal: data.lockAndParticipateSendParams.lzComposeVal,
+            composeMsg: data.lockAndParticipateSendParams.lzParams.sendParam.composeMsg,
+            composeMsgType: data.lockAndParticipateSendParams.lzComposeMsgType,
+            withdraw: true
+        })
+    );
+
+  ```
+
+  </details>

@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 4. Memory
+# ETAAcademy-Adudit: 4. Calculation
 
 <table>
   <tr>
@@ -704,3 +704,38 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 10. [High] `_vested()` claimable amount calculation error
+
+### `_vested()` calculation
+
+- Summary: The `_vested()` method calculates claimable amounts but doesn't properly consider the `__initialUnlockTimeOffset`, leading to potential overestimations. This flaw can cause calculated results to exceed maximum amounts, leading to unexpected behavior in vesting contracts.
+- Impact & Recommendation: Adjust the conditional statement to `if (block.timestamp >= _start -  __initialUnlockTimeOffset + _duration) return _totalAmount; // Fully vested`
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-tapioca#h-10-adversary-can-steal-approved-tolps-to-magnetar-via-_paricipateontolp) & [Report](https://code4rena.com/reports/2024-02-tapioca)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+        function _vested(uint256 _totalAmount) internal view returns (uint256) {
+            uint256 _cliff = cliff;
+            uint256 _start = start;
+            uint256 _duration = duration;
+            if (_start == 0) return 0; // Not started
+            if (_cliff > 0) {
+                _start = _start + _cliff; // Apply cliff offset
+                if (block.timestamp < _start) return 0; // Cliff not reached
+            }
+  ```
+
+  -       if (block.timestamp >= _start + _duration) return _totalAmount; // Fully vested
+
+  *       if (block.timestamp >= _start -  __initialUnlockTimeOffset + _duration) return _totalAmount; // Fully vested
+          _start = _start - __initialUnlockTimeOffset; // Offset initial unlock so it's claimable immediately
+          return (_totalAmount * (block.timestamp - _start)) / _duration; // Partially vested
+
+  }
+
+  ```
+
+  </details>
+  ```

@@ -226,7 +226,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 <details><summary>POC</summary>
 
-    ```solidity
+```solidity
     diff --git a/test/ASDRouter.js b/test/ASDRouter.js
     index 2a36337..eccedc0 100644
     --- a/test/ASDRouter.js
@@ -263,4 +263,11 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
-```
+
+## 8. Same contract multi permits fundamentally cannot be solved via the chosen standards
+
+### MEV by permit signatures
+
+- Summary: Cross-chain USDO and TOFT flows using approvals may be vulnerable to DoS attacks through permit-based griefing. Attackers can exploit front-run exploits by monitoring permit signatures in the mempool and executing them before intended transactions, rendering transactions ineffective. This limits Tapioca's architecture to single signature without revokes.
+- Impact & Recommendation: Use Permits for granting approvals(with try-catch), avoiding their use for revoking approvals to prevent front-run exploits. Suggest granting higher allowances and implementing renounceAllowance for TOFT tokens to enforce a secure allowance pattern.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-tapioca#m-25-same-contract-multi-permits-fundamentally-cannot-be-solved-via-the-chosen-standards) & [Report](https://code4rena.com/reports/2024-02-tapioca)

