@@ -614,3 +614,43 @@ index 6c5a1d7..196e3a0 100644
   ```
 
   </details>
+
+## 10.[Medium] State transition manager is unable to force upgrade a deployed ST, which invalidates the designed safeguard for ‘urgent high risk situation’
+
+### executeUpgrade() & upgradeChainFromVersion()
+
+- Summary: The StateTransitionManager (STM) cannot force upgrade a deployed State Transition (ST) in urgent high-risk situations due to incomplete implementation. Although access-controlled by both the chain admin and STM, there is no method in StateTransitionManager.sol that invokes upgradeChainFromVersion() and executeUpgrade(), which is only called during chain creation. This means executeUpgrade() cannot be invoked post-genesis for further upgrades.
+
+- Impact & Recommendation: In StateTransitionManager.sol, add a method that can call executeUpgrade() or upgradeChainFromVersion() on a local chain.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-zksync#m-03-state-transition-manager-is-unable-to-force-upgrade-a-deployed-st-which-invalidates-the-designed-safeguard-for-urgent-high-risk-situation) & [Report](https://code4rena.com/reports/2024-03-zksync)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    //code/contracts/ethereum/contracts/state-transition/chain-deps/facets/Admin.sol
+        function upgradeChainFromVersion(
+            uint256 _oldProtocolVersion,
+            Diamond.DiamondCutData calldata _diamondCut
+    |>    ) external onlyAdminOrStateTransitionManager {
+    ...
+
+    //code/contracts/ethereum/contracts/state-transition/chain-deps/facets/Admin.sol
+    function executeUpgrade(
+        Diamond.DiamondCutData calldata _diamondCut
+    |>    ) external onlyStateTransitionManager {
+        Diamond.diamondCut(_diamondCut);
+        emit ExecuteUpgrade(_diamondCut);
+    }
+
+            function _setChainIdUpgrade(
+            uint256 _chainId,
+            address _chainContract
+        ) internal {
+    ...
+            //@audit executeUpgrade of an ST will only be called once at chain deployment, because _setChainIdUpgrade() is only invoked when creating a new chain.
+    |>        IAdmin(_chainContract).executeUpgrade(cutData);
+    ...
+
+  ```
+
+  </details>

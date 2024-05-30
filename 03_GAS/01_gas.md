@@ -370,7 +370,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 6. [High] Gas issuance is inflated and will halt the chain or lead to incorrect base fee
 
-### Gas issuance
+### inflated gas calculation
 
 - Summary: The `anchor()` function's base fee calculation is flawed, leading to inflated issuance. If called consecutively on 5 blocks, it erroneously issues 15 times the gas target per L1 block instead of the expected 5 times, potentially causing the chain to halt or suffer from a significantly deflated base fee.
 
@@ -442,3 +442,99 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   
   ```
   </details>
+
+## 7. [High] paymaster will refund spentOnPubdata to user
+
+### less gas calculation
+
+- Summary: A recent update modifies how GAS spent on pubdata is collected at the transaction's final step. However, when a paymaster is involved, the `_maxRefundedGas` value calculated during `paymaster.postTransaction(_maxRefundedGas)` does not subtract the spent gas `spentOnPubdata` on pubdata, which leads to an overestimation of `_maxRefundedGas` refunding more than necessary.
+
+- Impact & Recommendation: Subtract the spentOnPubdata from the total gas calculation during the post-operation refund.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2024-03-zksync#h-01-paymaster-will-refund-spentonpubdata-to-user) & [Report](https://code4rena.com/reports/2024-03-zksync)
+
+<details><summary>POC</summary>
+
+```solidity
+            function refundCurrentL2Transaction(
+                txDataOffset,
+                transactionIndex,
+                success,
+                gasLeft,
+                gasPrice,
+                reservedGas,
+                basePubdataSpent,
+                gasPerPubdata
+            ) -> finalRefund {
+                setTxOrigin(BOOTLOADER_FORMAL_ADDR())
+                finalRefund := 0
+                let innerTxDataOffset := add(txDataOffset, 32)
+                let paymaster := getPaymaster(innerTxDataOffset)
+                let refundRecipient := 0
+                switch paymaster
+                case 0 {
+                    // No paymaster means that the sender should receive the refund
+                    refundRecipient := getFrom(innerTxDataOffset)
+                }
+                default {
+                    refundRecipient := paymaster
++                   let expectSpentOnPubdata := getErgsSpentForPubdata(
++                        basePubdataSpent,
++                        gasPerPubdata
++                    )
+                    if gt(gasLeft, 0) {
+                        checkEnoughGas(gasLeft)
+                        let nearCallAbi := getNearCallABI(gasLeft)
+                        let gasBeforePostOp := gas()
+                        pop(ZKSYNC_NEAR_CALL_callPostOp(
+                            // Maximum number of gas that the postOp could spend
+                            nearCallAbi,
+                            paymaster,
+                            txDataOffset,
+                            success,
+                            // Since the paymaster will be refunded with reservedGas,
+                            // it should know about it
+-                           safeAdd(gasLeft, reservedGas, "jkl"),
++                           saturatingSub(add(reservedGas, gasLeft), expectSpentOnPubdata),
+                            basePubdataSpent,
+                            reservedGas,
+                            gasPerPubdata
+                        ))
+                        let gasSpentByPostOp := sub(gasBeforePostOp, gas())
+                        gasLeft := saturatingSub(gasLeft, gasSpentByPostOp)
+                    }
+                }
+                // It was expected that before this point various `isNotEnoughGasForPubdata` methods would ensure that the user
+                // has enough funds for pubdata. Now, we just subtract the leftovers from the user.
+                let spentOnPubdata := getErgsSpentForPubdata(
+                    basePubdataSpent,
+                    gasPerPubdata
+                )
+                let totalRefund := saturatingSub(add(reservedGas, gasLeft), spentOnPubdata)
+                askOperatorForRefund(
+                    totalRefund,
+                    spentOnPubdata,
+                    gasPerPubdata
+                )
+                let operatorProvidedRefund := getOperatorRefundForTx(transactionIndex)
+                // If the operator provides the value that is lower than the one suggested for
+                // the bootloader, we will use the one calculated by the bootloader.
+                let refundInGas := max(operatorProvidedRefund, totalRefund)
+                // The operator cannot refund more than the gasLimit for the transaction
+                if gt(refundInGas, getGasLimit(innerTxDataOffset)) {
+                    assertionError("refundInGas > gasLimit")
+                }
+                if iszero(validateUint32(refundInGas)) {
+                    assertionError("refundInGas is not uint32")
+                }
+                let ethToRefund := safeMul(
+                    refundInGas,
+                    gasPrice,
+                    "fdf"
+                )
+                directETHTransfer(ethToRefund, refundRecipient)
+                finalRefund := refundInGas
+
+```
+
+<details>

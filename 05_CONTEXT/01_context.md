@@ -191,3 +191,61 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 6. [Medium] Freezed Chain will never be unfreeze since StateTransitionManager::unfreezeChain is calling freezeDiamond instead of unfreezeDiamond
+
+### FreezeChain and unfreezeChain
+
+- Summary : In the StateTransitionManager.sol contract, both freezeChain and unfreezeChain functions mistakenly call freezeDiamond, effectively freezing the chain regardless of the function called. The comment in unfreezeChain inaccurately describes its action. Furthermore, unfreezeChain fails to properly unfreeze the chain by not invoking unfreezeDiamond, leaving the chain frozen even after calling unfreezeChain.
+
+- Impact & Recommendation: In unfreezeChain, replace freezeDiamond with unfreezeDiamond for the IZkSyncStateTransition instance. Also, correct the comment to accurately describe the function's action.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-zksync#m-01-freezed-chain-will-never-be-unfreeze-since-statetransitionmanagerunfreezechain-is-calling-freezediamond-instead-of-unfreezediamond) & [Report](https://code4rena.com/reports/2024-03-zksync)
+
+<details><summary>POC</summary>
+
+```solidity
+File:  code/contracts/ethereum/contracts/state-transition/StateTransitionManager.sol
+- 164:    /// @dev freezes the specified chain
++ 164:    /// @dev unfreezes the specified chain
+165:    function unfreezeChain(uint256 _chainId) external onlyOwner {
+- 166:        IZkSyncStateTransition(stateTransition[_chainId]).freezeDiamond();
++ 166:        IZkSyncStateTransition(stateTransition[_chainId]).unfreezeDiamond();
+          }
+
+```
+
+</details>
+
+## 7.[Medium] L2SharedBridge l1LegacyBridge is not set
+
+### `l1LegacyBridge` initialization
+
+- Summary: In the `L2SharedBridge` contract, the `l1LegacyBridge` is not set during initialization, leaving it as `address(0)`. This omission means that any messages from the old `L1ERC20Bridge` sent before the upgrade of `L1ERC20Bridge` will fail during the `finalizeDeposit()` validation.
+
+- Impact & Recommendation: Fix this by setting `l1LegacyBridge` during initialization. Although deposits will fail, users can still call `claimFailedDeposit` to recover funds.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-zksync#m-02-l2sharedbridge-l1legacybridge-is-not-set) & [Report](https://code4rena.com/reports/2024-03-zksync)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+        function initialize(
+            address _l1Bridge,
+            address _l1LegecyBridge,
+            bytes32 _l2TokenProxyBytecodeHash,
+            address _aliasedOwner
+        ) external reinitializer(2) {
+    ...
+            if (block.chainid != ERA_CHAIN_ID) {
+                address l2StandardToken = address(new L2StandardERC20{salt: bytes32(0)}());
+                l2TokenBeacon = new UpgradeableBeacon{salt: bytes32(0)}(l2StandardToken);
+                l2TokenBeacon.transferOwnership(_aliasedOwner);
+            } else {
+                require(_l1LegecyBridge != address(0), "bf2");
+    +           l1LegacyBridge = _l1LegecyBridge
+                // l2StandardToken and l2TokenBeacon are already deployed on ERA, and stored in the proxy
+            }
+        }
+
+  ```
+
+  </details>
