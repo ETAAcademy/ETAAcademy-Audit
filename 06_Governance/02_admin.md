@@ -52,3 +52,32 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 2.[Medium] Borrowers can avoid the payment of an interest share fee by setting themselves as a fee_receipient
+
+### fee_receipient
+
+- Summary: Borrowers can avoid the 20% interest share fee by specifying a fee recipient account they control, bypassing the intended fee payment mechanism.
+
+- Impact & Recommendation: Apply restrictions on the fee_receipient by making it a property of the Pool struct, set during the creation of each new trading pool by its operator.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-lavarage#m-02-borrowers-can-avoid-the-payment-of-an-interest-share-fee-by-setting-themselves-as-a-fee_receipient) & [Report](https://code4rena.com/reports/2024-04-lavarage)
+
+  <details><summary>POC</summary>
+
+  ```rust
+      let transfer_instruction3 = system_instruction::transfer(
+    &ctx.accounts.trader.key(),
+    &ctx.accounts.fee_receipient.key(),
+    interest_share,
+    );
+    anchor_lang::solana_program::program::invoke(
+        &transfer_instruction3,
+        &[
+            ctx.accounts.trader.to_account_info(),
+            ctx.accounts.fee_receipient.to_account_info(),
+        ],
+    )?;
+
+  ```
+
+  </details>

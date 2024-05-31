@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 1. Divisor
+# ETAAcademy-Adudit: 1. Gas
 
 <table>
   <tr>

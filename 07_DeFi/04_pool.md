@@ -411,3 +411,15 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
     }
 
 ```
+
+</details>
+
+## 9. [Medium] Lack of freeze authority check for collateral tokens on create trading pool
+
+### Solana freeze authority
+
+- Summary: SPL tokens used as collateral in the protocol can have a freeze authority, making accounts vulnerable to being frozen. The protocol lacks a check for freeze authority on SPL tokens, risking frozen accounts that can lock funds and cause DoS issues for both borrowers and lenders.
+
+- Impact & Recommendation: Ensure that the collateral token does not have an active freeze authority. If the freeze authority is set to None, the freezing feature is permanently disabled.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2024-04-lavarage#m-01-lack-of-freeze-authority-check-for-collateral-tokens-on-create-trading-pool) & [Report](https://code4rena.com/reports/2024-04-lavarage)
