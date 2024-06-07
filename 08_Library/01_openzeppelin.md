@@ -654,3 +654,12 @@ index 6c5a1d7..196e3a0 100644
   ```
 
   </details>
+
+## 11. Signatures from makers can be re-used due to malleability
+
+### ECDSA
+
+- Summary: The contract's use of ecrecover for maker signatures is vulnerable to signature malleability, allowing the same signature to be used twice. This happens because both (v,r,s) and (v,r,-s mod n) are valid signatures, but their hashes differ.
+
+- Impact & Recommendation: To prevent signature reuse due to malleability, use the latest OpenZeppelin ECDSA library, which ensures the s value is in the lower range, or implement a nonce system for maker signatures.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-sofa-pro-league#h-03-signatures-from-makers-can-be-re-used-due-to-malleability) & [Report](https://code4rena.com/reports/2024-05-sofa-pro-league)

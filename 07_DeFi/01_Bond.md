@@ -1572,3 +1572,26 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 12.[Medium] Failure to set settlePrices[] will prevent redemption of product
+
+### Settlement
+
+- Summary : The `settle()` function in both SpotOracle and HlOracle contracts records `settlePrices[]` but fails to set them properly if `settle()` is not executed on the day of settlement. This results in zero settlement prices, making expiring products un-redeemable for SmartTrend vaults and causing incorrect payouts for DNT vaults.
+
+- Impact & Recommendation: Introduce a `latestExpiryUpdated` variable to track the last day settlement prices were updated.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-sofa-pro-league#m-04-failure-to-set-settleprices-will-prevent-redemption-of-product) & [Report](https://code4rena.com/reports/2024-04-lavarage)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+      function settle() public {
+        uint256 expiry = block.timestamp - block.timestamp % 86400 + 28800;
+        require(settlePrices[expiry] == 0, "Oracle: already settled");
+        settlePrices[expiry] = uint256(getLatestPrice());
+        emit Settled(expiry, settlePrices[expiry]);
+    }
+
+  ```
+
+  </details>

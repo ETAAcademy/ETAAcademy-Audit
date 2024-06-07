@@ -725,7 +725,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
                 _start = _start + _cliff; // Apply cliff offset
                 if (block.timestamp < _start) return 0; // Cliff not reached
             }
-  ```
+
 
   -       if (block.timestamp >= _start + _duration) return _totalAmount; // Fully vested
 
@@ -738,4 +738,44 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 11. Incorrect Expiry Used in getHlPrices Function When Burning A Product ID Allow Double Withdrawal Exploit in DNT Vaults
+
+### Expiry calculation
+
+- Summary: The `getHlPrices` function in DNT Vaults can use incorrect expiry times when calculating settlements, leading to potential double withdrawal exploits. If the `burn()` function is called after the product's actual expiry, it may include prices beyond the intended expiry, resulting in incorrect payoffs. Attackers can exploit this by burning tokens at different times to favor either the minter or the maker, enabling them to double withdraw and drain the protocol. This issue affects all DNT Vaults.
+
+- Impact & Recommendation: Ensure the settlement time in DNT Vaults is always equal to or less than the product's real expiry.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-sofa-pro-league#h-02-incorrect-expiry-used-in-gethlprices-function-when-burning-a-product-id-allow-double-withdrawal-exploit-in-dnt-vaults) & [Report](https://code4rena.com/reports/2024-05-sofa-pro-league)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function _burn(uint256 term, uint256 expiry, uint256[2] memory anchorPrices, uint256 isMaker) internal nonReentrant returns (uint256 payoff) {
+        uint256 productId = getProductId(term, expiry, anchorPrices, isMaker);
+        (uint256 latestTerm, bool _isBurnable) = isBurnable(term, expiry, anchorPrices);
+        require(_isBurnable, "Vault: not burnable");
+        // check if settled
+    -        uint256 latestExpiry = (block.timestamp - 28800) / 86400 * 86400 + 28800;
+    +        uint256 current = (block.timestamp - 28800) / 86400 * 86400 + 28800;
+    +        uint256 latestExpiry = current > expiry ? expiry : current
+        require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
+        // more code ...
+    }
+    function _burnBatch(Product[] calldata products) internal nonReentrant returns (uint256 totalPayoff) {
+            //some code ..
+        for (uint256 i = 0; i < products.length; i++) {
+            // check if settled
+    -            uint256 latestExpiry = (block.timestamp - 28800) / 86400 * 86400 + 28800;
+    +            Product memory product = products[i];
+    +            uint256 current = (block.timestamp - 28800) / 86400 * 86400 + 28800;
+    +            uint256 latestExpiry = current > product.expiry ? product.expiry  : current
+    +            require(ORACLE.settlePrices(latestExpiry, 1) > 0, "Vault: not settled");
+    -            Product memory product = products[i];
+            }
+            // more code ....
+        }
+
   ```
+
+  </details>

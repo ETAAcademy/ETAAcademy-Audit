@@ -279,3 +279,37 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
     }
     ```
 </details>
+
+## 6. Ineffective swap deadline for swapRCH()
+
+### Deadline
+
+- Summary: The `swapRCH()` function in the `FeeCollector` contract sets the swap deadline to `block.timestamp + 10 minutes`, making it ineffective because `block.timestamp` is only determined during transaction execution.
+
+- Impact & Recommendation: Pass the swap deadline as a parameter to the `swapRCH()` function for an absolute deadline.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-sofa-pro-league#m-03-ineffective-swap-deadline-for-swaprch) & [Report](https://code4rena.com/reports/2024-05-sofa-pro-league)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+      function swapRCH(
+        address token,
+        uint256 minPrice,
+        address[] calldata path
+    ) external onlyOwner {
+        // last element of path should be rch
+        require(path.length <= 4, "Collector: path too long");
+        require(path[path.length - 1] == rch, "Collector: invalid path");
+        uint256 amountIn = IERC20(token).balanceOf(address(this));
+        IUniswapV2Router(routerV2).swapExactTokensForTokens(
+            amountIn,
+            amountIn * minPrice / 1e18,
+            path,
+            address(this),
+            block.timestamp + 10 minutes
+        );
+    }
+
+  ```
+
+  </details>
