@@ -538,3 +538,11 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 <details>
+
+## 8.[Medium] calculateTVL may run out of gas for modest number of operators and tokens breaking deposits, withdrawals, and trades
+
+### Gas for nested loops
+
+- Summary: The `calculateTVLs` function in the `RestakeManager` suffers from high gas consumption due to its nested loops, which iterate over each operator delegator (OD) and each token. This results in quadratic gas costs, with each internal loop calling expensive functions and allocating memory. For a small number of ODs and tokens, this function already consumes significant gas, and for larger numbers, it can exceed the block gas limit, making the protocol unusable.
+- Impact & Recommendation: Instead of continuously querying each operator delegator (OD) for token balances, a more efficient "push" pattern can be implemented.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-renzo#m-05-calculatetvl-may-run-out-of-gas-for-modest-number-of-operators-and-tokens-breaking-deposits-withdrawals-and-trades) & [Report](https://code4rena.com/reports/2024-04-renzo)

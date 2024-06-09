@@ -139,3 +139,70 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 3.[High] DOS of completeQueuedWithdrawal when ERC20 buffer is filled
+
+### Restricted access
+
+- Summary: The OperatorDelegator::completeQueuedWithdrawal function in the code tries to fill the ERC20 withdrawal buffer but fails because it calls depositQueue::fillERC20withdrawBuffer, which is restricted to be accessed only by the RestakeManager contract. This restriction causes the function call to revert, leading to a Denial of Service (DoS) that prevents the completion of withdrawals and the retrieval of funds from EigenLayer (EL), resulting in a potential loss of funds for the protocol and its users.
+
+- Impact & Recommendation: The simplest solution is to remove the onlyRestakeManager modifier from the depositQueue::fillERC20withdrawBuffer function, allowing anyone to call it.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-renzo#h-07-dos-of-completequeuedwithdrawal-when-erc20-buffer-is-filled) & [Report](https://code4rena.com/reports/2024-04-renzo)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function completeQueuedWithdrawal(
+        IDelegationManager.Withdrawal calldata withdrawal,
+        IERC20[] calldata tokens,
+        uint256 middlewareTimesIndex
+    ) external nonReentrant onlyNativeEthRestakeAdmin {
+        uint256 gasBefore = gasleft();
+        if (tokens.length != withdrawal.strategies.length) revert MismatchedArrayLengths();
+        // Complete the queued withdrawal from EigenLayer with receiveAsToken set to true
+        delegationManager.completeQueuedWithdrawal(withdrawal, tokens, middlewareTimesIndex, true);
+        IWithdrawQueue withdrawQueue = restakeManager.depositQueue().withdrawQueue();
+        for (uint256 i; i < tokens.length; ) {
+            if (address(tokens[i]) == address(0)) revert InvalidZeroInput();
+            // Deduct queued shares for tracking TVL
+            queuedShares[address(tokens[i])] -= withdrawal.shares[i];
+            // Check if the token is not Native ETH
+            if (address(tokens[i]) != IS_NATIVE) {
+                // Check the withdrawal buffer and fill if below buffer target
+                uint256 bufferToFill = withdrawQueue.getBufferDeficit(address(tokens[i]));
+                // Get the balance of this contract
+                uint256 balanceOfToken = tokens[i].balanceOf(address(this));
+                if (bufferToFill > 0) {
+                    bufferToFill = (balanceOfToken <= bufferToFill) ? balanceOfToken : bufferToFill;
+                    // Update the amount to send to the operator Delegator
+                    balanceOfToken -= bufferToFill;
+                    // Safely approve for depositQueue
+                    tokens[i].safeApprove(address(restakeManager.depositQueue()), bufferToFill);
+                    // Fill the Withdraw Buffer via depositQueue
+                    restakeManager.depositQueue().fillERC20withdrawBuffer(
+                        address(tokens[i]),
+                        bufferToFill
+                    );
+                }
+                // Deposit remaining tokens back to EigenLayer
+                if (balanceOfToken > 0) {
+                    _deposit(tokens[i], balanceOfToken);
+                }
+            }
+            unchecked {
+                ++i;
+            }
+        }
+        // Emit the Withdraw Completed event with withdrawalRoot
+        emit WithdrawCompleted(
+            delegationManager.calculateWithdrawalRoot(withdrawal),
+            withdrawal.strategies,
+            withdrawal.shares
+        );
+        // Record the current spent gas
+        _recordGas(gasBefore);
+    }
+
+  ```
+
+  </details>

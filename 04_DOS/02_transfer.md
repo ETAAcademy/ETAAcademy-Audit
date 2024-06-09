@@ -474,3 +474,28 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 6.[Medium] Potential arbitrage opportunity in the xRenzoDeposit L2 contract
+
+### Arbitrage
+
+- Summary: In the xRenzoDeposit L2 contract, the sendPrice function updates the price of ezETH to ETH, which is then received by other contracts on Layer 2 (L2). However, a potential arbitrage opportunity exists where a user can monitor the L1 mempool for the sendPrice function call, observe the new price, and exploit it by minting xezETH on L2 before the price adjustment takes effect.
+
+- Impact & Recommendation: Implementing two fees for L2 deposits may mitigate this issue. Additionally, as ezETH tends to be stable, significant price fluctuations are less common. Continuous monitoring and adjusting the update frequency may be necessary to prevent exploitation.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-renzo#m-10-potential-arbitrage-opportunity-in-the-xrenzodeposit-l2-contract) & [Report](https://code4rena.com/reports/2024-04-renzo)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+      /**
+     * @notice  Exposes the price via getRate()
+     * @dev     This is required for a balancer pool to get the price of ezETH
+     * @return  uint256  .
+     */
+    function getRate() external view override returns (uint256) {
+        return lastPrice;
+    }
+
+  ```
+
+  </details>
