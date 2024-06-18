@@ -249,3 +249,37 @@ File:  code/contracts/ethereum/contracts/state-transition/StateTransitionManager
   ```
 
   </details>
+
+## 8.[Medium] Liquidating positions with bounded Kerosen could be unprofitable for liquidators
+
+### Break liquidation logic
+
+- Summary: Liquidators are not rewarded with `Kerosene` tokens because only assets from the `vaults` mapping are moved to liquidators during liquidation, leaving `Kerosene` tokens in the liquidated Note. This results in liquidators receiving less than expected, potentially incurring losses.
+
+- Impact & Recommendation: To fix this, the `vaultsKerosene` mapping should also be included as a source of assets in the `liquidate` function. The proposed change adds code to transfer assets from `vaultsKerosene` to the liquidator, ensuring they receive the full expected collateral.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-dyad#m-04-liquidating-positions-with-bounded-kerosen-could-be-unprofitable-for-liquidators) & [Report](https://code4rena.com/reports/2024-04-dyad)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function liquidate(uint id, uint to) external isValidDNft(id) isValidDNft(to) {
+      uint cr = collatRatio(id);
+      if (cr >= MIN_COLLATERIZATION_RATIO) revert CrTooHigh();
+      dyad.burn(id, msg.sender, dyad.mintedDyad(address(this), id));
+
+      uint cappedCr = cr < 1e18 ? 1e18 : cr;
+      uint liquidationEquityShare = (cappedCr - 1e18).mulWadDown(LIQUIDATION_REWARD);
+      uint liquidationAssetShare = (liquidationEquityShare + 1e18).divWadDown(cappedCr);
+
+      uint numberOfVaults = vaults[id].length();
+      for (uint i = 0; i < numberOfVaults; i++) {
+          Vault vault = Vault(vaults[id].at(i));
+          uint collateral = vault.id2asset(id).mulWadUp(liquidationAssetShare);
+          vault.move(id, to, collateral);
+      }
+      emit Liquidate(id, msg.sender, to);
+  }
+
+  ```
+
+  </details>

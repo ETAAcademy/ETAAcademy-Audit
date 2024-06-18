@@ -1672,3 +1672,101 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 14.[High] Kerosene collateral is not being moved on liquidation, exposing liquidators to loss
+
+### Collateral of liquidation
+
+- Summary: Liquidators are not rewarded with `Kerosene` tokens because only assets from the `vaults` mapping are moved to liquidators during liquidation, leaving `Kerosene` tokens in the liquidated Note. This results in liquidators receiving less than expected, potentially incurring losses.
+
+- Impact & Recommendation: To fix this, the `vaultsKerosene` mapping should also be included as a source of assets in the `liquidate` function. The proposed change adds code to transfer assets from `vaultsKerosene` to the liquidator, ensuring they receive the full expected collateral.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-dyad#h-09-kerosene-collateral-is-not-being-moved-on-liquidation-exposing-liquidators-to-loss) & [Report](https://code4rena.com/reports/2024-04-dyad)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    contract VaultManagerTest is VaultManagerTestHelper {
+        Kerosine keroseneV2;
+        Licenser vaultLicenserV2;
+        VaultManagerV2 vaultManagerV2;
+        Vault ethVaultV2;
+        VaultWstEth wstEthV2;
+        KerosineManager kerosineManagerV2;
+        UnboundedKerosineVault unboundedKerosineVaultV2;
+        BoundedKerosineVault boundedKerosineVaultV2;
+        KerosineDenominator kerosineDenominatorV2;
+        OracleMock wethOracleV2;
+        address bob = makeAddr("bob");
+        address alice = makeAddr("alice");
+        ERC20 wrappedETH = ERC20(MAINNET_WETH);
+        ERC20 wrappedSTETH = ERC20(MAINNET_WSTETH);
+        DNft dNFT = DNft(MAINNET_DNFT);
+        function setUpV2() public {
+            (Contracts memory contracts, OracleMock newWethOracle) = new DeployV2().runTestDeploy();
+            keroseneV2 = contracts.kerosene;
+            vaultLicenserV2 = contracts.vaultLicenser;
+            vaultManagerV2 = contracts.vaultManager;
+            ethVaultV2 = contracts.ethVault;
+            wstEthV2 = contracts.wstEth;
+            kerosineManagerV2 = contracts.kerosineManager;
+            unboundedKerosineVaultV2 = contracts.unboundedKerosineVault;
+            boundedKerosineVaultV2 = contracts.boundedKerosineVault;
+            kerosineDenominatorV2 = contracts.kerosineDenominator;
+            wethOracleV2 = newWethOracle;
+            vm.startPrank(MAINNET_OWNER);
+            Licenser(MAINNET_VAULT_MANAGER_LICENSER).add(address(vaultManagerV2));
+            boundedKerosineVaultV2.setUnboundedKerosineVault(unboundedKerosineVaultV2);
+            vm.stopPrank();
+        }
+        function test_NonKeroseneNotMovedOnLiquidate() public {
+            setUpV2();
+            deal(MAINNET_WETH, bob, 100e18);
+            deal(MAINNET_WSTETH, alice, 100e18);
+            deal(MAINNET_WETH, address(ethVaultV2), 10_000e18);
+            vm.prank(MAINNET_OWNER);
+            keroseneV2.transfer(bob, 100e18);
+            uint256 bobNFT = dNFT.mintNft{value: 1 ether}(bob);
+            uint256 aliceNFT = dNFT.mintNft{value: 1 ether}(alice);
+            // Bob adds Weth vault and Bounded Kerosene vault to his NFT
+            // Bob deposits 1 Weth and 1 Kerosene
+            // Bob mints 2,100 Dyad
+            vm.startPrank(bob);
+            wrappedETH.approve(address(vaultManagerV2), type(uint256).max);
+            keroseneV2.approve(address(vaultManagerV2), type(uint256).max);
+            vaultManagerV2.addKerosene(bobNFT, address(boundedKerosineVaultV2));
+            vaultManagerV2.add(bobNFT, address(ethVaultV2));
+            vaultManagerV2.deposit(bobNFT, address(boundedKerosineVaultV2), 1e18);
+            vaultManagerV2.deposit(bobNFT, address(ethVaultV2), 1e18);
+            vaultManagerV2.mintDyad(bobNFT, 2_100e18, bob);
+            vm.stopPrank();
+            // Alice adds WstEth vault and Weth vault to her NFT
+            // Alice deposits 1.3 WstEth
+            // Alice mints 3,000 Dyad
+            vm.startPrank(alice);
+            wrappedSTETH.approve(address(vaultManagerV2), type(uint256).max);
+            vaultManagerV2.addKerosene(aliceNFT, address(boundedKerosineVaultV2));
+            vaultManagerV2.add(aliceNFT, address(wstEthV2));
+            vaultManagerV2.add(aliceNFT, address(ethVaultV2));
+            vaultManagerV2.deposit(aliceNFT, address(wstEthV2), 1.3e18);
+            vaultManagerV2.mintDyad(aliceNFT, 3_000e18, alice);
+            vm.stopPrank();
+            // Bob not liquidatable
+            assertGt(vaultManagerV2.collatRatio(bobNFT), vaultManagerV2.MIN_COLLATERIZATION_RATIO());
+            // Weth price drops down
+            wethOracleV2.setPrice(wethOracleV2.price() / 2);
+            // Bob liquidatable
+            assertLt(vaultManagerV2.collatRatio(bobNFT), vaultManagerV2.MIN_COLLATERIZATION_RATIO());
+            // Bob's position collateral ratio is less than 100% => All collateral should be moved
+            assertLt(vaultManagerV2.collatRatio(bobNFT), 1e18);
+            // Alice liquidates Bob's position
+            vm.prank(alice);
+            vaultManagerV2.liquidate(bobNFT, aliceNFT);
+            // Bob loses all non-Kerosene collateral, but keeps Kerosene collateral
+            assertEq(vaultManagerV2.getNonKeroseneValue(bobNFT), 0);
+            assertGt(vaultManagerV2.getKeroseneValue(bobNFT), 0);
+        }
+    }
+
+  ```
+
+  </details>
