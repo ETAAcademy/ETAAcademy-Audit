@@ -779,3 +779,22 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 12.[Medium] Initial mint amount of TRNDO is wrong
+
+### `100_000_000` instead of `10e8`
+
+- Summary: The constructor of the `TornadoBlastBotToken` contract incorrectly mints 1 billion TRNDO tokens to the owner instead of the intended 100 million. The code uses `10e8`, which represents one billion, rather than the correct amount for 100 million.
+
+- Impact & Recommendation: Consider using `100_000_000` instead of `10e8`, which is much more readeable.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-tornadoblast-proleague#m-02-initial-mint-amount-of-trndo-is-wrong) & [Report](https://code4rena.com/reports/2024-06-tornadoblast-proleague)
+
+<details><summary>POC</summary>
+
+```solidity
+- _mint(msg.sender, 10e8 * 10 ** decimals()); // 100 million
++ _mint(msg.sender, 100_000_000 * 10 ** decimals()); // 100 million
+
+```
+
+</details>
