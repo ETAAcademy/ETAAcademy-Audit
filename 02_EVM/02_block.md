@@ -280,7 +280,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
     ```
 </details>
 
-## 6. Ineffective swap deadline for swapRCH()
+## 6. [Medium] Ineffective swap deadline for swapRCH()
 
 ### Deadline
 
@@ -307,6 +307,79 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
             path,
             address(this),
             block.timestamp + 10 minutes
+        );
+    }
+
+  ```
+
+  </details>
+
+## 7. [Medium] Inconsistent sequencer unexpected delay in DelayBuffer may harm users calling forceInclusion()
+
+### DelayBuffer of sequencer outage
+
+- Summary: When the sequencer is down, users can call `SequencerInbox::forceInclusion()` to add messages, but the delay buffer reduction is inconsistent. If multiple messages are included at once, the buffer may not decrease, causing longer wait times. However, if messages are included sequentially, the buffer decreases correctly. The provided proof of concept demonstrates this issue.
+
+- Impact & Recommendation: To avoid double counting in the delay buffer when the sequencer is offline, track total unexpected delay separately. Calculate it as block.number minus the maximum of the previous sequenced block number and the oldest delayed message not yet included.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-sofa-pro-league#m-03-ineffective-swap-deadline-for-swaprch) & [Report](https://code4rena.com/reports/2024-05-sofa-pro-league)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function test_POC_InconsistentBuffer_Decrease() public {
+        bool fix = false;
+        maxTimeVariation.delayBlocks = 2000;
+        BufferConfig memory configBufferable = BufferConfig({
+            threshold: 600, //60 * 60 * 2 / 12
+            max: 14400, //24 * 60 * 60 / 12 * 2
+            replenishRateInBasis: 714
+        });
+        (SequencerInbox seqInbox, Bridge bridge) = deployRollup(false, true, configBufferable);
+        address delayedInboxSender = address(140);
+        uint8 delayedInboxKind = 3;
+        bytes32 messageDataHash = RAND.Bytes32();
+        for (uint i = 0; i < 7; i++) {
+            vm.startPrank(dummyInbox);
+            bridge.enqueueDelayedMessage(delayedInboxKind, delayedInboxSender, messageDataHash);
+            vm.roll(block.number + 1100);
+            bridge.enqueueDelayedMessage(delayedInboxKind, delayedInboxSender, messageDataHash);
+            vm.stopPrank();
+            vm.roll(block.number + 2001);
+            uint256 delayedMessagesRead = bridge.delayedMessageCount();
+            if (fix) {
+                seqInbox.forceInclusion(
+                        delayedMessagesRead - 1,
+                        delayedInboxKind,
+                        [uint64(block.number - 3101), uint64(block.timestamp)],
+                        0,
+                        delayedInboxSender,
+                        messageDataHash
+                );
+            }
+            seqInbox.forceInclusion(
+                    delayedMessagesRead,
+                    delayedInboxKind,
+                    [uint64(block.number - 2001), uint64(block.timestamp)],
+                    0,
+                    delayedInboxSender,
+                    messageDataHash
+            );
+        }
+        (uint256 bufferBlocks, ,,,,) = seqInbox.buffer();
+        assertEq(bufferBlocks, fix ? 600 : 7320);
+        vm.startPrank(dummyInbox);
+        bridge.enqueueDelayedMessage(delayedInboxKind, delayedInboxSender, messageDataHash);
+        vm.stopPrank();
+        vm.roll(block.number + 601);
+        uint256 delayedMessagesRead = bridge.delayedMessageCount();
+        if (!fix) vm.expectRevert(ForceIncludeBlockTooSoon.selector);
+        seqInbox.forceInclusion(
+                delayedMessagesRead,
+                delayedInboxKind,
+                [uint64(block.number - 601), uint64(block.timestamp)],
+                0,
+                delayedInboxSender,
+                messageDataHash
         );
     }
 

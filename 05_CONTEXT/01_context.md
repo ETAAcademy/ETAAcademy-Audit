@@ -283,3 +283,38 @@ File:  code/contracts/ethereum/contracts/state-transition/StateTransitionManager
   ```
 
   </details>
+
+## 9.[High] Edge from dishonest challenge edge tree can inherit timer from honest tree allowing confirmation of incorrect assertion
+
+### Inadequate checks
+
+- The vulnerability in `checkClaimIdLink` allows an edge to inherit timers from its rival's children due to inadequate checks. This flaw can be exploited to inflate an edge's timer, enabling near-instant confirmation of any level 0 edge by repeatedly using a proved proof node and its ancestors or rivals. This occurs because only the originId and mutualId match is checked, allowing edges to inherit timers they shouldn't.
+
+- Impact & Recommendation: Allow child edges to inherit the claimId of their parent and ensure the claiming edge's claimId matches the edgeId of the inheriting edge.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-arbitrum-foundation#m-01-inconsistent-sequencer-unexpected-delay-in-delaybuffer-may-harm-users-calling-forceinclusion) & [Report](https://code4rena.com/reports/2024-05-arbitrum-foundation)
+
+<details><summary>POC</summary>
+
+```solidity
+    function checkClaimIdLink(EdgeStore storage store, bytes32 edgeId, bytes32 claimingEdgeId, uint8 numBigStepLevel)
+        private
+        view
+    {
+        // the origin id of an edge should be the mutual id of the edge in the level below
+        if (store.edges[edgeId].mutualId() != store.edges[claimingEdgeId].originId) {
+            revert OriginIdMutualIdMismatch(store.edges[edgeId].mutualId(), store.edges[claimingEdgeId].originId);
+        }
+        // the claiming edge must be exactly one level below
+        if (nextEdgeLevel(store.edges[edgeId].level, numBigStepLevel) != store.edges[claimingEdgeId].level) {
+            revert EdgeLevelInvalid(
+                edgeId,
+                claimingEdgeId,
+                nextEdgeLevel(store.edges[edgeId].level, numBigStepLevel),
+                store.edges[claimingEdgeId].level
+            );
+        }
+    }
+
+```
+
+</details>
