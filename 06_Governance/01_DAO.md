@@ -450,3 +450,50 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 6.[Medium] Missing disapproval check in LockManager.sol::approveUSDPrice allows simultaneous approval and disapproval of a price proposal
+
+### Disapproval check
+
+- Summary: Due to a missing disapproval check, a price feed can both disapprove and then approve a newly proposed price, which contradicts the intended functionality of voting either for approval or disapproval.
+
+- Impact & Recommendation: To mitigate this, add a check to ensure a price feed has not already disapproved a proposal before allowing approval, and revert with a custom error if this condition is met.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-munchables#m-01-missing-disapproval-check-in-lockmanagersolapproveusdprice-allows-simultaneous-approval-and-disapproval-of-a-price-proposal) & [Report](https://code4rena.com/reports/2024-05-munchables)
+
+<details><summary>POC</summary>
+
+```solidity
+    function approveUSDPrice(
+        uint256 _price
+    )
+        external
+        onlyOneOfRoles(
+            [
+                Role.PriceFeed_1,
+                Role.PriceFeed_2,
+                Role.PriceFeed_3,
+                Role.PriceFeed_4,
+                Role.PriceFeed_5
+            ]
+        )
+    {
+        if (usdUpdateProposal.proposer == address(0)) revert NoProposalError();
+        if (usdUpdateProposal.proposer == msg.sender)
+            revert ProposerCannotApproveError();
+        if (usdUpdateProposal.approvals[msg.sender] == _usdProposalId)
+            revert ProposalAlreadyApprovedError();
++       if (usdUpdateProposal.disapprovals[msg.sender] == _usdProposalId)
++           revert ProposalAlreadyDisapprovedError();
+        if (usdUpdateProposal.proposedPrice != _price)
+            revert ProposalPriceNotMatchedError();
+        usdUpdateProposal.approvals[msg.sender] = _usdProposalId;
+        usdUpdateProposal.approvalsCount++;
+        if (usdUpdateProposal.approvalsCount >= APPROVE_THRESHOLD) {
+            _execUSDPriceUpdate();
+        }
+        emit ApprovedUSDPrice(msg.sender);
+    }
+
+```
+
+<details>

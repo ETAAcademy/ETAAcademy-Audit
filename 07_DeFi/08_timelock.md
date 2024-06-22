@@ -176,3 +176,208 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 4.[High] Malicious User can call lockOnBehalf repeatedly extend a users unlockTime, removing their ability to withdraw previously locked tokens
+
+### Extend unlockTime
+
+- Summary: The lockOnBehalf function allows a user to repeatedly lock tokens on behalf of another user, extending the recipient's unlock time indefinitely without minimum deposit required. This can prevent the original user from withdrawing their tokens and block them from reducing their lock duration.
+
+- Impact & Recommendation: Ensure tokens locked via lockOnBehalf do not alter the recipient's lock duration, while preventing abuse such as during lockdrop NFT minting periods; or making it a two-step process where the recipient must accept or deny the lock before any changes are made to their current token lock state.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-munchables#h-01-malicious-user-can-call-lockonbehalf-repeatedly-extend-a-users-unlocktime-removing-their-ability-to-withdraw-previously-locked-tokens) & [Report](https://code4rena.com/reports/2024-05-munchables)
+
+<details><summary>POC</summary>
+
+```solidity
+    address alice = makeAddr("alice");
+    address bob = makeAddr("bob");
+    function test_lockOnBehalfExtendsRecipientsUnlockTime() public {
+        // Alice locks 10 ether in the protocol
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        amp.register(MunchablesCommonLib.Realm.Everfrost, address(0));
+        lm.lock{value: 10 ether}(address(0), 10 ether);
+        vm.stopPrank();
+        ILockManager.LockedTokenWithMetadata[] memory locked = lm.getLocked(address(alice));
+        uint256 firstUnlockTime = locked[0].lockedToken.unlockTime;
+        console.log("Unlock Time Start:", firstUnlockTime);
+        // Some time passes
+        vm.warp(block.timestamp + 5 hours);
+        // Bob makes a zero deposit "on behalf" of alice
+        vm.startPrank(bob);
+        lm.lockOnBehalf(address(0), 0, alice);
+        ILockManager.LockedTokenWithMetadata[] memory lockedNow = lm.getLocked(address(alice));
+        uint256 endUnlockTime = lockedNow[0].lockedToken.unlockTime;
+        // Confirm Alice's unlock time has been pushed back by bobs deposit
+        console.log("Unlock Time End  :", endUnlockTime);
+        assert(endUnlockTime > firstUnlockTime);
+    }
+
+    function test_lockOnBehalfGriefSetLockDuration() public {
+        // Alice plans to call LockManager::setLockDuration to lower her min lock time to 1 hour
+        vm.startPrank(alice);
+        amp.register(MunchablesCommonLib.Realm.Everfrost, address(0));
+        vm.stopPrank();
+        // However Bob makes a 1 wei dontation lockOnBehalf beforehand
+        vm.startPrank(bob);
+        vm.deal(bob, 1);
+        lm.lockOnBehalf{value: 1}(address(0), 1, alice);
+        vm.stopPrank();
+        // Now Alice's setter fails because her new duration is shorter than the `lockdrop.minDuration` set during bob's lockOnBehalf
+        vm.startPrank(alice);
+        vm.expectRevert();
+        lm.setLockDuration(1 hours);
+    }
+
+```
+
+</details>
+
+## 5.[Medium] When LockManager.lockOnBehalf is called from MigrationManager, the user’s reminder will be set to 0, resulting in fewer received MunchableNFTs
+
+### Reset remainder to 0
+
+- Summary: The `LockManager.lockOnBehalf` function, used for migrating MunchableNFTs, calls `LockManager.lock` to handle the locking process. However, when called from MigrationManager, this function improperly resets the remainder to 0, causing users to receive fewer MunchableNFTs.
+
+- Impact & Recommendation: When `LockManager._lock` is called from MigrationManager, ensure it does not reset the remainder variable. Instead, carry over the remainder to correctly allocate MunchableNFTs based on the total locked amount.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-munchables#m-02-when-lockmanagerlockonbehalf-is-called-from-migrationmanager-the-users-reminder-will-be-set-to-0-resulting-in-fewer-received-munchablenfts) & [Report](https://code4rena.com/reports/2024-05-munchables)
+
+<details><summary>POC</summary>
+
+```solidity
+function _migrateNFTs(
+    address _user,
+    address _tokenLocked,
+    uint256[] memory tokenIds
+) internal {
+    // ...
+    uint256 quantity = (totalLockAmount * discountFactor) / 10e12;
+    if (_tokenLocked == address(0)) {
+        _lockManager.lockOnBehalf{value: quantity}(
+            _tokenLocked,
+            quantity,
+            _user
+        );
+    } else if (_tokenLocked == address(WETH)) {
+        WETH.approve(address(_lockManager), quantity);
+        _lockManager.lockOnBehalf(_tokenLocked, quantity, _user);
+    } else if (_tokenLocked == address(USDB)) {
+        USDB.approve(address(_lockManager), quantity);
+        _lockManager.lockOnBehalf(_tokenLocked, quantity, _user);
+    }
+    emit MigrationSucceeded(_user, migratedTokenIds, newTokenIds);
+}
+
+function _lock(
+    address _tokenContract,
+    uint256 _quantity,
+    address _tokenOwner,
+    address _lockRecipient
+) private {
+    // ...
+
+    // add remainder from any previous lock
+    uint256 quantity = _quantity + lockedToken.remainder;
+@>  uint256 remainder;
+    uint256 numberNFTs;
+    uint32 _lockDuration = playerSettings[_lockRecipient].lockDuration;
+    if (_lockDuration == 0) {
+        _lockDuration = lockdrop.minLockDuration;
+    }
+    if (
+        lockdrop.start <= uint32(block.timestamp) &&
+        lockdrop.end >= uint32(block.timestamp)
+    ) {
+        if (
+            _lockDuration < lockdrop.minLockDuration ||
+            _lockDuration >
+            uint32(configStorage.getUint(StorageKey.MaxLockDuration))
+        ) revert InvalidLockDurationError();
+@>      if (msg.sender != address(migrationManager)) {
+            // calculate number of nfts
+@>          remainder = quantity % configuredToken.nftCost;
+            numberNFTs = (quantity - remainder) / configuredToken.nftCost;
+            if (numberNFTs > type(uint16).max) revert TooManyNFTsError();
+            // Tell nftOverlord that the player has new unopened Munchables
+            nftOverlord.addReveal(_lockRecipient, uint16(numberNFTs));
+        }
+    }
+
+    // ...
+@>  lockedToken.remainder = remainder;
+    lockedToken.quantity += _quantity;
+    lockedToken.lastLockTime = uint32(block.timestamp);
+    lockedToken.unlockTime = uint32(block.timestamp) + uint32(_lockDuration);
+    // ...
+}
+
+```
+
+</details>
+
+## 6.[Medium] Players can gain more NFTs benefiting from that past remainder in subsequent locks
+
+### Update remainder
+
+- Summary: The `LockManager.lockOnBehalf` function, used for migrating MunchableNFTs, calls `LockManager.lock` to handle the locking process. However, when called from MigrationManager, this function improperly resets the remainder to 0, causing users to receive fewer MunchableNFTs.
+
+- Impact & Recommendation: When `LockManager._lock` is called from MigrationManager, ensure it does not reset the remainder variable. Instead, carry over the remainder to correctly allocate MunchableNFTs based on the total locked amount.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-munchables#m-03-players-can-gain-more-nfts-benefiting-from-that-past-remainder-in-subsequent-locks) & [Report](https://code4rena.com/reports/2024-05-munchables)
+
+<details><summary>POC</summary>
+
+```solidity
+    uint256 quantity = _quantity + lockedToken.remainder;
+    uint256 remainder;
+    uint256 numberNFTs;
+    uint32 _lockDuration = playerSettings[_lockRecipient].lockDuration;
+    // SNIPPED
+    if (
+        lockdrop.start <= uint32(block.timestamp) &&
+        lockdrop.end >= uint32(block.timestamp)
+    ) {
+        if (
+            _lockDuration < lockdrop.minLockDuration ||
+            _lockDuration >
+            uint32(configStorage.getUint(StorageKey.MaxLockDuration))
+        ) revert InvalidLockDurationError();
+        if (msg.sender != address(migrationManager)) {
+            // calculate number of nfts
+-->         remainder = quantity % configuredToken.nftCost;
+            numberNFTs = (quantity - remainder) / configuredToken.nftCost;
+            if (numberNFTs > type(uint16).max) revert TooManyNFTsError();
+            // Tell nftOverlord that the player has new unopened Munchables
+            nftOverlord.addReveal(_lockRecipient, uint16(numberNFTs));
+        }
+    }
+  // SNIPPED
+->  lockedToken.remainder = remainder;
+    lockedToken.quantity += _quantity;
+
+    function unlock(
+        address _tokenContract,
+        uint256 _quantity
+    ) external notPaused nonReentrant {
+        LockedToken storage lockedToken = lockedTokens[msg.sender][
+            _tokenContract
+        ];
+        if (lockedToken.quantity < _quantity)
+            revert InsufficientLockAmountError();
+        if (lockedToken.unlockTime > uint32(block.timestamp))
+            revert TokenStillLockedError();
+        // force harvest to make sure that they get the schnibbles that they are entitled to
+        accountManager.forceHarvest(msg.sender);
+        lockedToken.quantity -= _quantity;
+        // send token
+        if (_tokenContract == address(0)) {
+            payable(msg.sender).transfer(_quantity);
+        } else {
+            IERC20 token = IERC20(_tokenContract);
+            token.transfer(msg.sender, _quantity);
+        }
+        emit Unlocked(msg.sender, _tokenContract, _quantity);
+    }
+
+```
+
+</details>
