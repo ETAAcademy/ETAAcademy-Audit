@@ -497,3 +497,22 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 <details>
+
+## 7.[High] A successfully disputed redemption proposal has still increased the redemption fee base rate; exploit to depeg dUSD
+
+### Rate doesn't decrease when redemptions disputed
+
+- Summary: The issue causing dUSD to depeg can be exploited due to a flaw in the redemption fee mechanism, where the base rate increases with proposed redemptions but doesn't decrease when disputed. Attackers can manipulate this by using different accounts to propose and dispute redemptions, maintaining high fees and disincentivizing necessary redemptions to restore the peg. This exploit can lead to persistent depegging, enabling market manipulation where attackers buy cheap dUSD and later redeem it for profit.
+
+- Impact & Recommendation: To mitigate this, the base rate should not be affected by disputed proposals, the fee structure should be re-evaluated, and sufficiently large redemption proposals should be required to prevent manipulation.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-dittoeth#h-01-a-successfully-disputed-redemption-proposal-has-still-increased-the-redemption-fee-base-rate-exploit-to-depeg-dusd) & [Report](https://code4rena.com/reports/2024-03-dittoeth)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    uint88 redemptionFee = calculateRedemptionFee(asset, p.totalColRedeemed, p.totalAmountProposed);
+
+```
+
+</details>
