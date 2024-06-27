@@ -609,3 +609,42 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 8.[Medium] Rounding-down of flashFee can result in calls to flash loan to revert
+
+### Rounding-up of flashFee
+
+- Summary: The `BalancerFlashLender::receiveFlashLoan` function fails to validate the `originalCallData`, allowing an attacker to execute arbitrary Strategy instructions. This vulnerability enables an attacker to initiate a flash loan from another contract and execute any function such as `_supplyBorrow`, `_repayAndWithdraw`, or `_payDebt` within StrategyLeverage.
+
+- Impact & Recommendation: To mitigate this, the `BalancerFlashLender::flashLoan` function should record the parameters called via a hash and verify this hash in the `receiveFlashLoan` function.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-bakerfi#m-08-balancerflashlenderreceiveflashloan-does-not-validate-the-originalcalldata) & [Report](https://code4rena.com/reports/2024-05-bakerfi)
+
+<details><summary>POC</summary>
+
+```solidity
+   function receiveFlashLoan(address[] memory tokens,
+        uint256[] memory amounts, uint256[] memory feeAmounts, bytes memory userData
+    ) external {
+ @>     if (msg.sender != address(_balancerVault)) revert InvalidFlashLoadLender();
+        if (tokens.length != 1) revert InvalidTokenList();
+        if (amounts.length != 1) revert InvalidAmountList();
+        if (feeAmounts.length != 1) revert InvalidFeesAmount();
+        //@audit originalCallData is not verified
+        (address borrower, bytes memory originalCallData) = abi.decode(userData, (address, bytes));
+        address asset = tokens[0];
+        uint256 amount = amounts[0];
+        uint256 fee = feeAmounts[0];
+        // Transfer the loan received to borrower
+        IERC20(asset).safeTransfer(borrower, amount);
+@>      if (IERC3156FlashBorrowerUpgradeable(borrower).onFlashLoan(borrower,
+                tokens[0], amounts[0], feeAmounts[0], originalCallData
+            ) != CALLBACK_SUCCESS
+        ) {
+            revert BorrowerCallbackFailed();
+        }
+        ....
+    }
+
+```
+
+</details>

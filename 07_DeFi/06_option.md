@@ -192,7 +192,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 3.[High] Closing a SR during a wrong redemption proposal leads to loss of funds
 
-### Collateral added closed SR by disputed Redemption
+### Collateral added to closed SR by disputed Redemption
 
 - Summary: A vulnerability in the DittoETH protocol can lead to a loss of funds when closing a Short Record (SR) during a wrong redemption proposal. When a user creates a redemption proposal with the proposeRedemption function, they must provide a list of SRs with the lowest collateral ratios (CR) in ascending order. If the list is incorrect, anyone can dispute it using the disputeRedemption function. However, if an SR is closed (due to liquidation, exiting, or transfer) between proposing and disputing, its collateral is added to the closed SR and cannot be recovered.
 

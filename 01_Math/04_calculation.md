@@ -798,3 +798,60 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 13.[Medium] Rounding-down of flashFee can result in calls to flash loan to revert
+
+### Rounding-up of flashFee
+
+- Summary: The `BalancerFlashLender::flashFee()` function's rounding-down approach can cause flash loan calls to revert due to insufficient approval amounts. The protocol's flash loan provider expects a rounded-up fee, leading to approval discrepancies.
+
+- Impact & Recommendation: To fix this, the fee calculation should round up using a method like `mulDivUp`, ensuring the protocol provides adequate approval amounts.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-bakerfi#m-07-rounding-down-of-flashfee-can-result-in-calls-to-flash-loan-to-revert) & [Report](https://code4rena.com/reports/2024-05-bakerfi)
+
+<details><summary>POC</summary>
+
+```solidity
+File: contracts/core/flashloan/BalancerFlashLender.sol
+    function flashFee(address, uint256 amount) external view override returns (uint256) {
+        uint256 perc = _balancerVault.getProtocolFeesCollector().getFlashLoanFeePercentage();
+        if (perc == 0 || amount == 0) {
+            return 0;
+        }
+@--->   return (amount * perc) / _BALANCER_MAX_FEE_PERCENTAGE;
+    }
+
+File: contracts/core/strategies/StrategyLeverage.sol
+    function deploy() external payable onlyOwner nonReentrant returns (uint256 deployedAmount) {
+        if (msg.value == 0) revert InvalidDeployAmount();
+        // 1. Wrap Ethereum
+        address(wETHA()).functionCallWithValue(abi.encodeWithSignature("deposit()"), msg.value);
+        // 2. Initiate a WETH Flash Loan
+        uint256 leverage = calculateLeverageRatio(
+            msg.value,
+            getLoanToValue(),
+            getNrLoops()
+        );
+        uint256 loanAmount = leverage - msg.value;
+@--->   uint256 fee = flashLender().flashFee(wETHA(), loanAmount);
+        //§uint256 allowance = wETH().allowance(address(this), flashLenderA());
+@--->   if(!wETH().approve(flashLenderA(), loanAmount + fee)) revert FailedToApproveAllowance();
+        if (
+            !flashLender().flashLoan(
+                IERC3156FlashBorrowerUpgradeable(this),
+                wETHA(),
+                loanAmount,
+                abi.encode(msg.value, msg.sender, FlashLoanAction.SUPPLY_BOORROW)
+            )
+        ) {
+            revert FailedToRunFlashLoan();
+        }
+        deployedAmount = _pendingAmount;
+        _deployedAmount = _deployedAmount + deployedAmount;
+        emit StrategyAmountUpdate(_deployedAmount);
+        // Pending amount is not cleared to save gas
+        // _pendingAmount = 0;
+    }
+
+```
+
+</details>

@@ -1852,3 +1852,92 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 16.[High] When harvesting a strategy and adjusting the debt, all the leftover collateral that is not used to swap the withdrawn collateral from Aave for WETH to repay the flashloan will be locked and lost in the Strategy contract
+
+### Hardcode fee and self transfer collateral
+
+- Summary: During the strategy harvesting and debt adjustment process, leftover collateral can get locked and lost in the Strategy contract. This occurs due to issues in computing the collateral needed for flashloan repayment and performing swaps.
+
+- Impact & Recommendation: Use the configured pool fee (swapFeeTier) instead of hardcoding the value when calling UniQuoter. Resupply leftover collateral to Aave instead of self-transferring it.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-bakerfi#h-03-when-harvesting-a-strategy-and-adjusting-the-debt-all-the-leftover-collateral-that-is-not-used-to-swap-the-withdrawn-collateral-from-aave-for-weth-to-repay-the-flashloan-will-be-locked-and-lost-in-the-strategy-contract) & [Report](https://code4rena.com/reports/2024-05-bakerfi)
+
+<details><summary>POC</summary>
+
+```solidity
+    function _swap(
+        ISwapHandler.SwapParams memory params
+    ) internal override returns (uint256 amountOut) {
+        ...
+        // Exact Input
+        if (params.mode == ISwapHandler.SwapType.EXACT_INPUT) {
+            ...
+            // Exact Output
+        } else if (params.mode == ISwapHandler.SwapType.EXACT_OUTPUT) {
+          //@audit-info => Does an EXACT_OUTPUT swap
+          //@audit-info => `amountIn` represents the exact amount of collateral that was required to swap the requested amount of WETH to repay the flashloan!
+            uint256 amountIn = _uniRouter.exactOutputSingle(
+                IV3SwapRouter.ExactOutputSingleParams({
+                    tokenIn: params.underlyingIn,
+                    tokenOut: params.underlyingOut,
+                    fee: fee,
+                    recipient: address(this),
+                    amountOut: params.amountOut,
+                    amountInMaximum: params.amountIn,
+                    sqrtPriceLimitX96: 0
+                })
+            );
+
+          //@audit-issue => Self transfering the leftover collateral after the swap. This leftover collateral will be left in the Strategy's balance, causing it to be unnusable.
+            if (amountIn < params.amountIn) {
+                IERC20(params.underlyingIn).safeTransfer(address(this), params.amountIn - amountIn);
+            }
+
+            ...
+        }
+    }
+
+```
+
+</details>
+
+## 16.[Medium] All supplied WETH to Aave as a deposit by a Strategy will be irrecoverable
+
+### Cannot withdraw WETH
+
+- Summary: All WETH deposited by the Strategy into Aave will be lost, as the Strategy cannot withdraw WETH from Aave. Any leftover WETH deposited back into Aave by the Strategy will be irrecoverable.
+
+- Impact & Recommendation: Instead of supplying leftover WETH to Aave, use it to repay more WETH debt on Aave. This prevents WETH from being lost and improves the loan-to-value ratio.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-bakerfi#m-01-all-supplied-weth-to-aave-as-a-deposit-by-a-strategy-will-be-irrecoverable) & [Report](https://code4rena.com/reports/2024-05-bakerfi)
+
+<details><summary>POC</summary>
+
+```solidity
+    function _payDebt(uint256 debtAmount, uint256 fee) internal {
+      ...
+      //@audit-info => output represents the received amount of WETH for the swap
+      uint256 output = _swap(
+          ISwapHandler.SwapParams(
+              ierc20A(),
+              wETHA(),
+              ISwapHandler.SwapType.EXACT_OUTPUT,
+              amountIn,
+              debtAmount + fee,
+              _swapFeeTier,
+              bytes("")
+          )
+      );
+      //@audit-info => Checks if there are any WETH leftovers
+      // When there are leftovers from the swap, deposit then back
+      uint256 wethLefts = output > (debtAmount + fee) ? output - (debtAmount + fee) : 0;
+      //@audit-issue => If any leftover WETH, it deposits them onto Aave!
+      //@audit-issue => Once the WETH is deposited in Aave, the Strategy won't be able to pull it out.
+      if (wethLefts > 0) {
+          _supply(wETHA(), wethLefts);
+      }
+      emit StrategyUndeploy(msg.sender, debtAmount);
+    }
+
+```
+
+</details>
