@@ -1901,7 +1901,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 </details>
 
-## 16.[Medium] All supplied WETH to Aave as a deposit by a Strategy will be irrecoverable
+## 17.[Medium] All supplied WETH to Aave as a deposit by a Strategy will be irrecoverable
 
 ### Cannot withdraw WETH
 

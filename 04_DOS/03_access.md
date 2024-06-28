@@ -610,9 +610,9 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 </details>
 
-## 8.[Medium] Rounding-down of flashFee can result in calls to flash loan to revert
+## 8.[Medium] BalancerFlashLender#receiveFlashLoan does not validate the originalCallData
 
-### Rounding-up of flashFee
+### validate originalCallData
 
 - Summary: The `BalancerFlashLender::receiveFlashLoan` function fails to validate the `originalCallData`, allowing an attacker to execute arbitrary Strategy instructions. This vulnerability enables an attacker to initiate a flash loan from another contract and execute any function such as `_supplyBorrow`, `_repayAndWithdraw`, or `_payDebt` within StrategyLeverage.
 

