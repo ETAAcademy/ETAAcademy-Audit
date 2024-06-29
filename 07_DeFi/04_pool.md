@@ -604,3 +604,41 @@ contract CollectFee is Test {
 ```
 
 </details>
+
+## 11.[Medium] Panoptic pool can be non-profitable by specific Uniswap governance
+
+### Swap commission
+
+- Summary: The Panoptic pool can become non-profitable due to specific Uniswap governance changes affecting the swap commission calculation. If Uniswap introduces a fee below 0.01%, the Panoptic protocol's swap commission calculation may result in zero, leading to potential loss of profitability for the Panoptic pool.
+
+- Impact & Recommendation: Use Uniswap’s DECIMALS (1e6) instead of 10_000 to ensure the swap commission is accurately calculated even with very low fee percentages.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-panoptic#m-05-panoptic-pool-can-be-non-profitable-by-specific-uniswap-governance) & [Report](https://code4rena.com/reports/2024-04-panoptic)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function startToken(
+        bool underlyingIsToken0,
+        address token0,
+        address token1,
+        uint24 fee,
+        PanopticPool panopticPool
+    ) external {
+
+        __SNIP__
+        // cache the pool fee in basis points
+        uint24 _poolFee;
+        unchecked {
+            _poolFee = fee / 100; // @audit below fee 0.01%, then _poolFee = 0
+        }
+        s_poolFee = _poolFee;
+        ...
+        __SNIP__
+        // Additional risk premium charged on intrinsic value of ITM positions
+        unchecked {
+            s_ITMSpreadFee = uint128((ITM_SPREAD_MULTIPLIER * _poolFee) / DECIMALS);
+        }
+    }
+
+```

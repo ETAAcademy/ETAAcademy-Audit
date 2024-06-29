@@ -394,3 +394,217 @@ index 5f09101..e9eef27 100644
 +
 
 ```
+
+</details>
+
+## 5.[High] SettleLongPremium is incorrectly implemented: premium should be deducted instead of added
+
+### premium deducted
+
+- Summary: The `settleLongPremium` function, which is intended to settle premiums for long option holders, incorrectly adds the premium to the option owner’s account instead of deducting it. This misimplementation leads to the user receiving premium payments when they should be paying them.
+
+- Impact & recommendation: Modify the `realizedPremia` calculation to be negative before calling `s_collateralToken.exercise()`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-panoptic#h-01-settlelongpremium-is-incorrectly-implemented-premium-should-be-deducted-instead-of-added) & [Report](https://code4rena.com/reports/2024-04-panoptic)
+
+<details><summary>POC</summary>
+
+```solidity
+
+        assetsBefore0 = ct0.convertToAssets(ct0.balanceOf(Buyers[0]));
+        assetsBefore1 = ct1.convertToAssets(ct1.balanceOf(Buyers[0]));
+        // collect buyer 1's three relevant chunks
+        for (uint256 i = 0; i < 3; ++i) {
+            pp.settleLongPremium(collateralIdLists[i], Buyers[0], 0);
+        }
+        assertEq(
+            ct0.convertToAssets(ct0.balanceOf(Buyers[0])) - assetsBefore0,
+            33_342,
+            "Incorrect Buyer 1 1st Collect 0"
+        );
+
+```
+
+</details>
+
+## 6.[High] Incorrect validation during checking liquidity spread
+
+### Not paying premium
+
+- Summary: Incorrect validation during the liquidity spread check in the Panoptic protocol allows option buyers to avoid paying the premium.
+
+- Impact & Recommendation: Correct the validation in the liquidity spread check to revert when `NetLiquidity` is zero and `TotalLiquidity` is positive.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-panoptic#m-04-incorrect-validation-during-checking-liquidity-spread) & [Report](https://code4rena.com/reports/2024-04-panoptic)
+
+<details><summary>POC</summary>
+
+```solidity
+
++   if(netLiquidity == 0 && totalLiquidity > 0) revert;
+    if(netLiquidity == 0) return;
+
+```
+
+</details>
+
+## 7.[Medium] `_updateSettlementPostBurn()` may not correctly reduce s_grossPremiumLast[chunkKey]
+
+### Update premium
+
+- Summary: The function \_updateSettlementPostBurn() does not correctly update s_grossPremiumLast[chunkKey] when legPremia == 0, leading to incorrect accounting of the premium values.
+
+- Impact & Recommendation: Regardless of the value of legPremia, it should recalculate s_grossPremiumLast[chunkKey] when long == 0.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-panoptic#m-06-_updatesettlementpostburn-may-not-correctly-reduce-s_grosspremiumlastchunkkey) & [Report](https://code4rena.com/reports/2024-04-panoptic)
+
+<details><summary>POC</summary>
+
+```solidity
+    function _updateSettlementPostBurn(
+        address owner,
+        TokenId tokenId,
+        LeftRightUnsigned[4] memory collectedByLeg,
+        uint128 positionSize,
+        bool commitLongSettled
+    ) internal returns (LeftRightSigned realizedPremia, LeftRightSigned[4] memory premiaByLeg) {
+...
+        for (uint256 leg = 0; leg < numLegs; ) {
+            LeftRightSigned legPremia = premiaByLeg[leg];
+            bytes32 chunkKey = keccak256(
+                abi.encodePacked(tokenId.strike(leg), tokenId.width(leg), tokenId.tokenType(leg))
+            );
+            // collected from Uniswap
+            LeftRightUnsigned settledTokens = s_settledTokens[chunkKey].add(collectedByLeg[leg]);
+            if (LeftRightSigned.unwrap(legPremia) != 0) {
+                // (will be) paid by long legs
+                if (tokenId.isLong(leg) == 1) {
+...
+                } else {
+....
+                    // subtract settled tokens sent to seller
+                    settledTokens = settledTokens.sub(availablePremium);
+                    // add available premium to amount that should be settled
+                    realizedPremia = realizedPremia.add(
+                        LeftRightSigned.wrap(int256(LeftRightUnsigned.unwrap(availablePremium)))
+                    );
+-                   unchecked {
+-                       uint256[2][4] memory _premiumAccumulatorsByLeg = premiumAccumulatorsByLeg;-
+-                        uint256 _leg = leg;
+-
+-                        // if there's still liquidity, compute the new grossPremiumLast
+-                        // otherwise, we just reset grossPremiumLast to the current grossPremium
+-                        s_grossPremiumLast[chunkKey] = totalLiquidity != 0
+-                            ? LeftRightUnsigned
+-                                .wrap(0)
+-                                .toRightSlot(
+-                                    uint128(
+-                                        uint256(
+-                                            Math.max(
+-                                                (int256(
+-                                                    grossPremiumLast.rightSlot() *
+-                                                        totalLiquidityBefore
+-                                                ) -
+-                                                    int256(
+-                                                        _premiumAccumulatorsByLeg[_leg][0] *
+-                                                            positionLiquidity
+-                                                    )) + int256(legPremia.rightSlot() * 2 ** 64),
+-                                                0
+-                                            )
+-                                        ) / totalLiquidity
+-                                    )
+-                                )
+-                                .toLeftSlot(
+-                                    uint128(
+-                                        uint256(
+-                                            Math.max(
+-                                                (int256(
+-                                                    grossPremiumLast.leftSlot() *
+-                                                        totalLiquidityBefore
+-                                                ) -
+-                                                    int256(
+-                                                        _premiumAccumulatorsByLeg[_leg][1] *
+-                                                            positionLiquidity
+-                                                    )) + int256(legPremia.leftSlot()) * 2 ** 64,
+-                                                0
+-                                            )
+-                                        ) / totalLiquidity
+-                                    )
+-                                )
+-                            : LeftRightUnsigned
+-                                .wrap(0)
+-                                .toRightSlot(uint128(premiumAccumulatorsByLeg[_leg][0]))
+-                                .toLeftSlot(uint128(premiumAccumulatorsByLeg[_leg][1]));
+-                       }
+                   }
+               }
++             if (tokenId.isLong(leg) == 0){
++                   uint256 positionLiquidity = PanopticMath
++                   .getLiquidityChunk(tokenId, leg, positionSize)
++                    .liquidity();
++
++                    // new totalLiquidity (total sold) = removedLiquidity + netLiquidity (T - R)
++                    uint256 totalLiquidity = _getTotalLiquidity(tokenId, leg);
++                    // T (totalLiquidity is (T - R) after burning)
++                   uint256 totalLiquidityBefore = totalLiquidity + positionLiquidity;
++
++                    LeftRightUnsigned grossPremiumLast = s_grossPremiumLast[chunkKey];
++                    unchecked {
++                        uint256[2][4] memory _premiumAccumulatorsByLeg = premiumAccumulatorsByLeg;
++                        uint256 _leg = leg;
++
++                        // if there's still liquidity, compute the new grossPremiumLast
++                        // otherwise, we just reset grossPremiumLast to the current grossPremium
++                        s_grossPremiumLast[chunkKey] = totalLiquidity != 0
++                            ? LeftRightUnsigned
++                                .wrap(0)
++                                .toRightSlot(
++                                    uint128(
++                                        uint256(
++                                            Math.max(
++                                                (int256(
++                                                    grossPremiumLast.rightSlot() *
++                                                        totalLiquidityBefore
++                                                ) -
++                                                    int256(
++                                                        _premiumAccumulatorsByLeg[_leg][0] *
++                                                            positionLiquidity
++                                                    )) + int256(legPremia.rightSlot() * 2 ** 64),
++                                                0
++                                            )
++                                        ) / totalLiquidity
++                                    )
++                                )
++                                .toLeftSlot(
++                                    uint128(
++                                       uint256(
++                                            Math.max(
++                                                (int256(
++                                                    grossPremiumLast.leftSlot() *
++                                                        totalLiquidityBefore
++                                                ) -
++                                                    int256(
++                                                        _premiumAccumulatorsByLeg[_leg][1] *
++                                                            positionLiquidity
++                                                    )) + int256(legPremia.leftSlot()) * 2 ** 64,
++                                                0
++                                            )
++                                        ) / totalLiquidity
++                                    )
++                                )
++                            : LeftRightUnsigned
++                                .wrap(0)
++                                .toRightSlot(uint128(premiumAccumulatorsByLeg[_leg][0]))
++                                .toLeftSlot(uint128(premiumAccumulatorsByLeg[_leg][1]));
++                    }
++                }
+            }
+            // update settled tokens in storage with all local deltas
+            s_settledTokens[chunkKey] = settledTokens;
+            unchecked {
+                ++leg;
+            }
+        }
+    }
+}
+
+```
+
+</details>
