@@ -835,3 +835,21 @@ index 6c5a1d7..196e3a0 100644
   ```
 
   </details>
+
+## 14.[High] Vulnerable ECDSA library
+
+### ECDSA library
+
+- Summary: A high-severity vulnerability in the ECDSA library from OpenZeppelin was found in the SignManager.sol contract, affecting versions 4.1.0 to 4.7.2. recover and tryRecover functions being vulnerable to signature malleability due to accepting both standard and compact EIP-2098 signatures. This could allow signature reuse or bypass protection mechanisms.
+
+- Impact & Recommendation: This could allow signature reuse or bypass protection mechanisms. The issue is resolved by updating @openzeppelin/contracts to version 4.7.3 or higher.
+  <br> 🐬: [Source](https://audit.salusec.io/api/v1/salus/contract/certificate/full/Ink-Finance_incremental_audit_report_2024-05-28.pdf) & [Report](https://audit.salusec.io/api/v1/salus/contract/certificate/full/Ink-Finance_incremental_audit_report_2024-05-28.pdf)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+  "@openzeppelin/contracts": "^4.4.2",
+
+  ```
+
+  </details>

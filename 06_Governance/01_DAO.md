@@ -516,3 +516,127 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 8.[High] Vote tally incorrect when there is no governance token
+
+### Vote token and tally
+
+- Summary: In BaseCommittee.sol the vote tally could be incorrect if no governance token exists. The `_getVoteRequirement` function determines the vote token type, and `_calculatePledgeValue` relies on this type to calculate the pledge value. If a proposal requires a governance token (voteTokenType == 2) and the DAO lacks one, the tally defaults to using a badge's pledge value, causing discrepancies.
+
+- Impact & Recommendation: The recommendation was to base pledge value calculations solely on voteTokenType.
+  <br> 🐬: [Source](https://audit.salusec.io/api/v1/salus/contract/certificate/full/Ink-Finance_incremental_audit_report_2024-05-09.pdf) & [Report](https://audit.salusec.io/api/v1/salus/contract/certificate/full/Ink-Finance_incremental_audit_report_2024-05-09.pdf)
+
+<details><summary>POC</summary>
+
+```solidity
+  function _getVoteRequirement(VoteIdentity memory identity) internal view
+      returns (
+          uint256 voteTokenType,
+          uint256 baseReqTokenType,
+          uint256 baseReqTokenAmt
+      )
+  {
+      bytes32 typeID;
+      bytes memory intData;
+      (typeID, intData) = IProposalHandler(getParentDAO())
+      .getProposalMetadata(identity.proposalID, VOTE_TOKEN_TYPE);
+      if (intData.length > 0) {
+          voteTokenType = abi.decode(intData, (uint256));
+      }
+      ...
+      (address govToken, address badgeAddress) = IDAO(getParentDAO())
+      .getDAOTokenInfo();
+      if (voteTokenType == 0) {
+          if (govToken != address(0)) {
+              // use economy token's pledge value
+              voteTokenType = 2;
+          } else {
+              // use badge's pledge value
+              voteTokenType = 1;
+          }
+      }
+      if (voteTokenType == 1) {
+          baseReqTokenType = 2;
+      } else {
+          baseReqTokenType = 1;
+      }
+  }
+
+    function _calculatePledgeValue(
+        VoteIdentity memory identity,
+        address user,
+        uint256 votes
+    )
+        internal
+        view
+        returns (bool requirePledgeEngine, uint256 requirePledgeValue)
+    {
+        (
+            uint256 voteTokenType,
+            uint256 baseReqTokenType,
+            uint256 baseReqTokenAmt
+        ) = _getVoteRequirement(identity);
+        (address govToken, address badgeAddress) = IDAO(getParentDAO())
+        .getDAOTokenInfo();
+        if (govToken == address(0) || voteTokenType == 1) {
+            // no govenance token, P(ledge)=1，B=badge in the wallets
+            requirePledgeValue = IERC20(badgeAddress).balanceOf(user);
+            requirePledgeEngine = false;
+        } else {
+            // there governance tokens, B(adge)=1，badge > 0
+            requirePledgeValue = votes;
+            requirePledgeEngine = true
+
+
+```
+
+</details>
+
+## 9.[High] InkBadge token being transferable can lead to a repeat voting attack
+
+### Maximum votes
+
+- Summary: When no governance token is set, the balance of InkBadge tokens determines the maximum votes a user can cast. An attacker can exploit this by voting, transferring the InkBadge to another account, and voting again, thus manipulating the vote outcome.
+
+- Impact & Recommendation: The recommendation is to disable transfers for the InkBadge token.
+  <br> 🐬: [Source](https://audit.salusec.io/api/v1/salus/contract/certificate/full/Ink-Finance_incremental_audit_report_2023-12-25.pdf) & [Report](https://audit.salusec.io/api/v1/salus/contract/certificate/full/Ink-Finance_incremental_audit_report_2023-12-25.pdf)
+
+<details><summary>POC</summary>
+
+```solidity
+function _vote(
+    VoteIdentity memory identity,
+    bool agree,
+    uint256 count,
+    bool requestPledge,
+    string memory feedback,
+    bytes memory data
+) internal {
+    // pledge
+    (
+        bool requirePledgeEngine,
+        uint256 requirePledgeValue
+    ) = _calculatePledgeValue(_msgSender(), count);
+    if (requestPledge) {
+        if (requirePledgeEngine) {
+            // address stakingEngine = IDAO(getParentDAO()).getStakingEngine();
+            IDAO(getParentDAO()).pledge(
+                _msgSender(),
+                identity.proposalID,
+                requirePledgeValue
+            );
+        } else {
+            (, address badgeAddress) = IDAO(getParentDAO())
+                .getDAOTokenInfo();
+            uint256 decimal = IERC20Metadata(badgeAddress).decimals();
+            // require badge
+            // require(
+            // count * 10**decimal <= requirePledgeValue,
+            // "badge is not enough"
+            // );
+            if (count * 10**decimal > requirePledgeValue) {
+                revert INK_ERROR(1017);
+
+```
+
+</details>

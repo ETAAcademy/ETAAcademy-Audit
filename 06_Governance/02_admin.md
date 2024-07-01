@@ -81,3 +81,37 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 3.[High] Malicious contracts could become agents
+
+### Agents set when proposed
+
+- Summary: Once the proposal is processed, the malicious contract becomes an agent and can exploit critical functions protected by the `onlyAgent` modifier in the `masterDAO` contract, such as `updateContract`, `addDuty`, and `removeDuty`.
+
+- Impact & Recommendation: To mitigate this issue, agents should only be set after a proposal has been resolved, not when it is proposed.
+  <br> 🐬: [Source](https://audit.salusec.io/api/v1/salus/contract/certificate/full/Ink-Finance_audit_report_2023-08-15.pdf) & [Report](https://audit.salusec.io/api/v1/salus/contract/certificate/full/Ink-Finance_audit_report_2023-08-15.pdf)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function batchSetKV(
+    address domain,
+    ConfigHelper.KVInfo[] memory keyValueInfos
+    ) external override {
+        for (uint256 i = 0; i < keyValueInfos.length; i++) {
+            if (
+                hasRightToSet(
+                    domain,
+                    keyValueInfos[i].keyPrefix,
+                    keyValueInfos[i].keyName
+                )
+            ) {
+                _domainKeyValues.addKeyValue(domain, keyValueInfos[i]);
+            }
+            ...
+        }
+    }
+
+  ```
+
+  </details>
