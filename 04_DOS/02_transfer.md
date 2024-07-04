@@ -499,3 +499,43 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 7.[Medium] Malicious Actor Can Steal Deposits of Tokens With Sender Hooks or Cause Lock Of Funds
+
+### Reentrancy hooks
+
+- Summary: The depositERC20 function is vulnerable to reentrancy attacks with tokens that implement sender hooks. An attacker can exploit this by reentering the function during token transfer, depositing tokens multiple times without triggering the reentrancy check. This results in an inflated deposited balance. Consequently, the attacker could withdraw more tokens than deposited, or the contract might lock funds if it lacks sufficient tokens to cover the inflated balance.
+
+- Impact & Recommendation: To prevent this, it is recommended to add reentrancy guards to both the depositERC20 and depositETH functions.
+  <br> 🐬: [Source](https://blog.openzeppelin.com/scroll-batch-token-bridge-audit#malicious-actor-can-steal-deposits-of-tokens-with-sender-hooks-or-cause-lock-of-funds) & [Report](https://blog.openzeppelin.com/scroll-batch-token-bridge-audit)
+
+<details><summary>POC</summary>
+
+```solidity
+    }
+
+    /// @notice Deposit ETH.
+    function depositETH() external payable nonReentrant {
+        // no safe cast check here, since no one has so much ETH yet.
+        _deposit(address(0), _msgSender(), uint96(msg.value));
+    }
+	@@ -218,7 +218,7 @@ contract L1BatchBridgeGateway is AccessControlEnumerableUpgradeable, ReentrancyG
+    ///
+    /// @param token The address of token.
+    /// @param amount The amount of token to deposit. We use type `uint96`, since it is enough for most of the major tokens.
+    function depositERC20(address token, uint96 amount) external nonReentrant {
+        if (token == address(0)) revert ErrorIncorrectMethodForETHDeposit();
+
+        // common practice to handle fee on transfer token.
+	@@ -345,7 +345,7 @@ contract L1BatchBridgeGateway is AccessControlEnumerableUpgradeable, ReentrancyG
+        address token,
+        address sender,
+        uint96 amount
+    ) internal {
+        BatchConfig memory cachedBatchConfig = configs[token];
+        TokenState memory cachedTokenState = tokens[token];
+        _tryFinalizeCurrentBatch(token, cachedBatchConfig, cachedTokenState);
+
+```
+
+</details>

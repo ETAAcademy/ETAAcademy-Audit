@@ -546,3 +546,33 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: The `calculateTVLs` function in the `RestakeManager` suffers from high gas consumption due to its nested loops, which iterate over each operator delegator (OD) and each token. This results in quadratic gas costs, with each internal loop calling expensive functions and allocating memory. For a small number of ODs and tokens, this function already consumes significant gas, and for larger numbers, it can exceed the block gas limit, making the protocol unusable.
 - Impact & Recommendation: Instead of continuously querying each operator delegator (OD) for token balances, a more efficient "push" pattern can be implemented.
   <br> 🐬: [Source](https://code4rena.com/reports/2024-04-renzo#m-05-calculatetvl-may-run-out-of-gas-for-modest-number-of-operators-and-tokens-breaking-deposits-withdrawals-and-trades) & [Report](https://code4rena.com/reports/2024-04-renzo)
+
+## 9.[Medium] Cross Domain Messengers Can Fail in Relaying a Message
+
+### Insufficient gas
+
+- Summary: The `L1CrossDomainMessenger` contract's `relayMessage` function can fail due to inadequate gas estimates for additional instructions like ERC-20 token approvals. The original gas check function, `hasMinGas`, adds 40,000 units of gas to account for worst-case scenarios, but this buffer is insufficient when extra operations are introduced. These additional instructions, such as token approvals, can consume much more gas, leading to potential message relay failures and opening the door for DoS attacks.
+
+- Impact & Recommendation: It is recommended to revisit the `RELAY_GAS_CHECK_BUFFER` and `RELAY_RESERVED_GAS` values and assess the necessity of repeated approvals to ensure sufficient gas overhead.
+  <br> 🐬: [Source](https://blog.openzeppelin.com/mantle-v2-solidity-contracts-audit#cross-domain-messengers-can-fail-in-relaying-a-message) & [Report](https://blog.openzeppelin.com/mantle-v2-solidity-contracts-audit)
+
+<details><summary>POC</summary>
+
+```solidity
+    /**
+     * @notice Gas reserved for finalizing the execution of `relayMessage` after the safe call.
+     */
+    uint64 public constant RELAY_RESERVED_GAS = 90_000;
+
+    /**
+     * @notice Gas reserved for the execution between the `hasMinGas` check and the external
+     *         call in `relayMessage`.
+     */
+    uint64 public constant RELAY_GAS_CHECK_BUFFER = 55_000;
+
+    /**
+     * @notice BASE gas reserved for Hashing.hashCrossDomainMessage
+
+```
+
+</details>

@@ -115,3 +115,32 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 4.[Medium] Ambiguous PubdataPricingMode Configuration
+
+### PubdataPricingMode between Rollup and Validium
+
+- Summary: The setValidiumMode function in the Admin facet allows toggling PubdataPricingMode between Rollup and Validium freely, contrary to its name. The comment that Validium mode can only be set before the first batch is committed is incorrect because batches can be reverted, and the mode can be changed via changeFeeParams anytime.
+
+- Impact & Recommendation: This inconsistency can lead to unpredictable L1 PubData charges and potential data leaks when switching from Validium to Rollup for privacy reasons. Ensure PubdataPricingMode can only change before the first batch is processed.
+  <br> 🐬: [Source](https://blog.openzeppelin.com/zksync-state-transition-diff-audit#ambiguous-pubdatapricingmode-configuration) & [Report](https://blog.openzeppelin.com/zksync-state-transition-diff-audit)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+    /// @notice Change the token multiplier for L1->L2 transactions
+    function setTokenMultiplier(uint128 _nominator, uint128 _denominator) external;
+
+    /// @notice Change the pubdata pricing mode before the first batch is processed
+    /// @param _validiumMode The new pubdata pricing mode
+    function setPubdataPricingMode(PubdataPricingMode _pricingMode) external;
+
+    /// @notice Perform the upgrade from the current protocol version with the corresponding upgrade data
+    /// @param _protocolVersion The current protocol version from which upgrade is executed
+    /// @param _cutData The diamond cut parameters that is executed in the upgrade
+    function upgradeChainFromVersion(uint256 _protocolVersion, Diamond.DiamondCutData calldata _cutData) external;
+
+  ```
+
+  </details>

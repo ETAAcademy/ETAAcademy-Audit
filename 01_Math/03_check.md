@@ -1396,3 +1396,94 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 23. [High] Attacker Can Get Infinite BVM_ETH Tokens to Drain the Protocol
+
+### Balance and overflow checks.
+
+- Summary: The depositTransaction function in the OptimismPortal contract allows users to specify MNT and ETH values for deposits from L1 to L2. However, there's a critical flaw where the ETH transaction value isn't properly checked for user balance, allowing an attacker to exploit this by creating negative ETH balances. This results in incorrect positive balances due to the way the state is written, enabling attackers to mint infinite ETH tokens and withdraw them to L1, effectively draining the protocol.
+
+- Impact & Recommendation: The issue was resolved by implementing stronger balance and overflow checks.
+  <br> 🐬: [Source](https://blog.openzeppelin.com/mantle-op-geth-audit#attacker-can-get-infinite-bvm_eth-tokens-to-drain-the-protocol) & [Report](https://blog.openzeppelin.com/mantle-op-geth-audit)
+
+<details><summary>POC</summary>
+
+```solidity
+
+
+	// ErrSystemTxNotSupported is returned for any deposit tx with IsSystemTx=true after the Regolith fork
+	ErrSystemTxNotSupported = errors.New("system tx not supported")
+
+	// ErrEthTxValueTooLarge is returned when EthTxValue is larger than the BVM balance of msg.from
+	ErrEthTxValueTooLarge = errors.New("eth tx value is too large")
+)
+
+	}
+	snap := st.state.Snapshot()
+	// Will be reverted if failed
+
+	result, err := st.innerTransitionDb()
+	// Failed deposits must still be included. Unless we cannot produce the block at all due to the gas limit.
+
+    }
+
+func (st *StateTransition) innerTransitionDb() (*ExecutionResult, error) {
+	rules := st.evm.ChainConfig().Rules(st.evm.Context.BlockNumber, st.evm.Context.Random != nil, st.evm.Context.Time)
+	if ethTxValue := st.msg.ETHTxValue; ethTxValue != nil && ethTxValue.Cmp(big.NewInt(0)) != 0 {
+		err := st.transferBVMETH(ethTxValue, rules)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// First check this message satisfies all consensus rules before
+	// applying the message. The rules include these clauses
+	//
+
+    	var (
+		msg              = st.msg
+		sender           = vm.AccountRef(msg.From)
+		contractCreation = msg.To == nil
+	)
+
+    	st.state.SetState(BVM_ETH_ADDR, key, common.BigToHash(bal))
+}
+
+func (st *StateTransition) transferBVMETH(ethValue *big.Int, rules params.Rules) error {
+	if !rules.IsMantleBVMETHMintUpgrade {
+		return nil
+	}
+	var ethRecipient common.Address
+	if st.msg.To != nil {
+	@@ -724,7 +728,7 @@ func (st *StateTransition) transferBVMETH(ethValue *big.Int, rules params.Rules)
+		ethRecipient = crypto.CreateAddress(st.msg.From, st.evm.StateDB.GetNonce(st.msg.From))
+	}
+	if ethRecipient == st.msg.From {
+		return nil
+	}
+
+	fromKey := getBVMETHBalanceKey(st.msg.From)
+
+    	fromBalance := fromBalanceValue.Big()
+	toBalance := toBalanceValue.Big()
+
+	if fromBalance.Cmp(ethValue) < 0 {
+		return ErrEthTxValueTooLarge
+	}
+
+	fromBalance = new(big.Int).Sub(fromBalance, ethValue)
+	toBalance = new(big.Int).Add(toBalance, ethValue)
+
+	st.state.SetState(BVM_ETH_ADDR, fromKey, common.BigToHash(fromBalance))
+	st.state.SetState(BVM_ETH_ADDR, toKey, common.BigToHash(toBalance))
+
+	st.generateBVMETHTransferEvent(st.msg.From, ethRecipient, ethValue)
+	return nil
+}
+
+func getBVMETHBalanceKey(addr common.Address) common.Hash {
+
+
+```
+
+</details>
