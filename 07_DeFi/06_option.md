@@ -153,7 +153,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 2.[High] Put settlement can be anticipated and lead to user losses and bonding DoS
 
-### Set minimum  timeToExpiry
+### Set minimum timeToExpiry
 
 - Summary: The problem occurs in the PerpetualAtlanticVault contract when attempting to purchase options. If the time difference between the next funding payment and the current block time is less than 864 seconds, it causes the option pricing to use a time to expiry of 0, resulting in a revert. This leads to unexpected reverts approximately every 14 minutes during each funding epoch.
 

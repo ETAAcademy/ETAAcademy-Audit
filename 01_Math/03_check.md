@@ -1399,7 +1399,7 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 23. [High] Attacker Can Get Infinite BVM_ETH Tokens to Drain the Protocol
 
-### Balance and overflow checks.
+### Balance and overflow checks
 
 - Summary: The depositTransaction function in the OptimismPortal contract allows users to specify MNT and ETH values for deposits from L1 to L2. However, there's a critical flaw where the ETH transaction value isn't properly checked for user balance, allowing an attacker to exploit this by creating negative ETH balances. This results in incorrect positive balances due to the way the state is written, enabling attackers to mint infinite ETH tokens and withdraw them to L1, effectively draining the protocol.
 
