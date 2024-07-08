@@ -12,7 +12,7 @@
         <tr>
           <th>audit</th>
           <th>basic</th>
-          <th>library</th>
+          <th>article</th>
           <td>DEXs_Swap_Vulnerabilities</td>
         </tr>
       </table>
