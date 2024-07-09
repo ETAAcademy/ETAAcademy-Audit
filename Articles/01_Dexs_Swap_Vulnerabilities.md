@@ -39,6 +39,8 @@ DEXs swap attacks primarily revolve around exploiting vulnerabilities in decentr
 **BakerFi:** The protocol's `_swap()` method lacks slippage protection by not setting the `amountOutMinimum` parameter, posing risks of front-running and price manipulation. This issue affects several functions, including `_convertFromWETH()` and `_convertToWETH()`, leading to potential vulnerabilities in multiple swap operations. The recommended fix involves setting `amountOutMinimum` to `params.amountOut` to enforce slippage protection. This issue was confirmed and addressed in a subsequent update, as detailed in [GitHub Pull Request #41](https://github.com/baker-fi/bakerfi-contracts/pull/41).
 
 ```solidity
+    // amountOutMinium = 0
+
     function _swap(
         ISwapHandler.SwapParams memory params
     ) internal override returns (uint256 amountOut) {
@@ -89,6 +91,8 @@ DEXs swap attacks primarily revolve around exploiting vulnerabilities in decentr
 **Lybra Finance:** The function rigidRedemption() in the LybraFinance smart contract is vulnerable to issues caused by volatile prices. When users try to redeem their PeUSD (stable coin) for WstETH/stETH (variable price), they may suffer slippage losses if the transaction is delayed and executed at an unfavorable price. Introduce slippage protection by requiring a minimum amount received parameter in the rigidRedemption() function. This change ensures users can specify the minimum acceptable amount of WstETH/stETH to receive, preventing significant losses due to price volatility.
 
 ```solidity
+    // minAmount Received
+
     function rigidRedemption(address provider, uint256 eusdAmount,uint256 minAmountReceived) external virtual {
         depositedAsset[provider] -= collateralAmount;
         totalDepositedAsset -= collateralAmount;
@@ -101,6 +105,8 @@ DEXs swap attacks primarily revolve around exploiting vulnerabilities in decentr
 **Dopex:** In the \_curveSwap function, there is an issue with the order of calling getDpxEthPrice() and getEthPrice(). This mistake results in incorrect slippage calculations when performing swaps between ETH and DPXETH. Specifically, when \_ethToDpxEth is true, indicating a swap from ETH to DPXETH, getDpxEthPrice() is erroneously used, which actually returns the price of DPXETH in terms of ETH (DPXETH/ETH). Conversely, when swapping from DPXETH to ETH, getEthPrice() is incorrectly employed, as it provides the price of ETH in terms of DPXETH (ETH/DPXETH).
 
 ```solidity
+    // wrong amount and price
+
     uint256 minOut = _ethToDpxEth
       ? (((_amount * getEthPrice()) / 1e8) -
         (((_amount * getEthPrice) * slippageTolerance) / 1e16))
@@ -111,6 +117,8 @@ DEXs swap attacks primarily revolve around exploiting vulnerabilities in decentr
 **Dopex:** The reLP() function in the contract has an incorrect formula for calculating mintokenAAmount, which affects slippage protection during liquidity provision. The formula for calculating mintokenAAmount in the above code is `((amountB / 2) * tokenAInfo.tokenAPrice) / 1e8`. `amountB` is the amount of tokenB, but tokenAInfo.tokenAPrice is the price of tokenA, which shouldn’t be multiplied together.
 
 ```solidity
+    // wrong amount and price
+
   function reLP(uint256 _amount) external onlyRole(RDPXV2CORE_ROLE) {
 ...
 -    mintokenAAmount =
@@ -158,6 +166,8 @@ DEXs swap attacks primarily revolve around exploiting vulnerabilities in decentr
 **Asymmetry:** Lack of a deadline parameter in the `ISwapRouter.exactInputSingle` function can lead to front-running vulnerabilities, where a validator might delay a transaction to exploit market conditions, causing significant slippage. The problem arises when users stake and Uniswap is used to convert ETH to WETH without a set deadline, making the transaction susceptible to manipulation. The recommended mitigation is to include a user-input deadline parameter in the `Reth.deposit()` function and pass it to the swap functions to prevent such exploits and to ensure that the transaction can be executed in a short period of time. And, introduce a deadline parameter to the functions withdraw() for WstEth.sol and SfrxEth.sol and deposit() for Reth.sol.
 
 ```solidity
+    // deadline
+
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
                 tokenIn: _tokenIn,
@@ -186,7 +196,38 @@ modifier ensure(uint deadline) {
 
 **Example:** KyberSwap
 
-**KyberSwap:** The attack on KyberSwap, where the attacker stole funds mostly in Ether, wrapped ether (wETH), and USDC from multiple cross-chain deployments of KyberSwap. This suggests that the theft targeted the liquidity provider pools themselves, indicating a directed attack against the core infrastructure of the DEX.
+**KyberSwap:** The attack on KyberSwap, where the attacker stole funds mostly in Ether, wrapped ether (wETH), and USDC from multiple cross-chain deployments of KyberSwap. This suggests that the theft targeted the liquidity provider pools themselves, indicating a directed attack against the core infrastructure of the DEX. Due to the Reinvestment Curve feature of KyberSwap Elastic pool, when both base liquidity and reinvestment liquidity are considered as actual liquidity, it calculates the amount of tokens needed for exchange at the scale boundary using the calcReachAmount function. This calculation resulted in a higher than expected amount, causing the next price sqrtP to exceed the boundary scale’s sqrtP. The pool, using an inequality to check sqrtP, led to the protocol not updating liquidity and crossing the tick as expected through \_updateLiquidityAndCrossTick.
+
+```solidity
+    // swapData.reinvestL,
+    // if swapData.sqrtP != swapData.nexSqrtP
+
+    (usedAmount, returnedAmount, deltaL, swapData.sqrtP) = SwapMath.computeSwapStep(
+        swapData.baseL + swapData.reinvestL,
+        swapData.sqrtP,
+        targetSqrtP,
+        swapFeeUnits,
+        swapData.specifiedAmount,
+        swapData.isExactInput,
+        swapData.isToken0
+    );
+
+    swapData.specifiedAmount -= usedAmount;
+    swapData.returnedAmount += returnedAmount;
+    swapData.reinvestL += deltaL.toUint128();
+}
+
+// if price has not reached the next sqrt price
+if swapData.sqrtP != swapData.nextSqrtP {
+    if (swapData.sqrtP != swapData.startSqrtP) {
+        //update the current tick data in case the sqrtP has changed
+        swapData.currentTick = TickMath.getTickAtSqrtRatio(swapData.sqrtP);
+    }
+    break;
+}
+swapData.currentTick = willUpTick ? tempNextTick : tempNextTick - 1;
+
+```
 
 ```solidity
 function computeSwapStep(
@@ -268,6 +309,18 @@ function computeSwapStep(
 
 **Impact:** While DEXs offer advantages in terms of bypassing compliance controls and lacking a central administrator, they also present challenges for money laundering. All DEX crypto-to-crypto swaps are recorded in smart contracts on the blockchain, allowing for visibility into these transactions and the potential tracing of illicit funds.
 
+**Example:** Tornado cash, Blender.io
+
+**Tornado cash:** By sending illicit funds to Tornado Cash, criminals can obfuscate the funds trail – making it more difficult to decipher their activity. In the recent Ronin Bridge hack attributed to North Korea’s Lazarus Group, the hackers made extensive use of Tornado Cash to launder some of the stolen cryptoassets from the heist, which at the time of the theft totalled $540 million.
+
+A money laundering typology involving DEXs works as follows:
+1)a criminal obtains Ether or Ethereum-based tokens, for example by hacking a DeFi lending platform;
+2)the criminal sends the stolen funds to a Tornado Cash address;
+3)the criminal receives new “clean” tokens from Tornado cash; and
+4)the new tokens are deposited at a centralized exchange platform, and cashed out for fiat.
+
+**Blender.io:** As an aside, Bitcoin mixer Blender.io recently became the first virtual asset mixer to be targeted by sanctions from the US Office of Foreign Assets Control (OFAC). However, it is a mixer that handles Bitcoin exclusively.
+
 ### Attack #5. Price Arbitrage
 
 **Definition:** In the context of a decentralized exchange (DEX) swap, the price refers to the exchange rate between two different cryptocurrencies or tokens. This rate determines how much of one token you will receive in exchange for a certain amount of another token. Arbitrage in the context of DEX swaps involves exploiting price discrepancies of the same asset across different markets or liquidity pools to generate a profit.
@@ -279,6 +332,8 @@ function computeSwapStep(
 **Asymmetry:** The poolPrice function in the Reth derivative contract risks overflow when calculating the spot price of the derivative asset using a Uniswap V3 pool. This can cause inaccurate price calculations and potential loss of funds or erroneous contract behavior. Example code line that may overflow: sqrtPriceX96 _ (uint(sqrtPriceX96)) _ (1e18). Replace the current calculation with a safer implementation using the OracleLibrary.getQuoteAtTick function from the Uniswap V3 periphery, which includes overflow checks and handles different numerical issues. Asymmetry confirmed using Chainlink to obtain prices instead of relying on the poolPrice function, effectively mitigating the risk of overflow.
 
 ```solidity
+// pool price
+
 function poolPrice() private view returns (uint256) {
     address rocketTokenRETHAddress = RocketStorageInterface(
         ROCKET_STORAGE_ADDRESS
@@ -299,6 +354,8 @@ function poolPrice() private view returns (uint256) {
 **Dopex:** The PerpetualAtlanticVaultLP contract enables users to deposit WETH and receive shares in return, which can later be redeemed for a proportional amount of WETH and rdpx. This mechanism can be exploited to swap WETH for rdpx without incurring swap fees from the V2 Permissioned AMM. The issue arises because the vault calculates the rdpx return based on its proportion in the vault at the time of the initial deposit rather than its current market value. This discrepancy allows for potential arbitrage opportunities, as users can effectively swap WETH for rdpx at a discount, thereby reducing the value for depositors and causing the AMM to lose out on swap fees. To mitigate this, it is recommended to use up-to-date rdpx prices when calculating redemption amounts and consider mechanisms to prevent immediate deposit and redeem actions.
 
 ```solidity
+// pool price
+
   function _convertToAssets(
     uint256 shares
   ) internal view virtual returns (uint256 assets, uint256 rdpxAmount) {
@@ -324,6 +381,8 @@ function poolPrice() private view returns (uint256) {
 **Dopex:** The vulnerability in reLPContract.reLP() is identified through its indirect invocation by RdpxV2Core.bond(), allowing potential exploitation via a sandwich attack. This occurs because users can manipulate the bonding amount in RdpxV2Core.bond() to control the amount of liquidity removed and subsequently using ETH from flash loan to inflate rDPX price via UniswapV2 within reLPContract.reLP() without requiring mempool access. reLPContract.reLP() performs swaps and liquidity additions, further impacting prices. Profit realization by swapping rDPX back to ETH and repaying the flash loan. Despite slippage protection measures, the attacker can adjust transaction sizes to profitably exploit price discrepancies.
 
 ```solidity
+// inflate price by sandwich attack
+
   function bond(
     uint256 _amount,
     uint256 rdpxBondId,
@@ -346,6 +405,8 @@ function poolPrice() private view returns (uint256) {
 **Asymmetry:** Uniswap rETH/WETH pool for swaps has higher fees and lower liquidity compared to alternatives like Balancer and Curve pools. The Uniswap pool has $5 million in liquidity with a 0.05% fee, while Balancer has $80 million in liquidity with a 0.04% fee, and Curve has $8 million in liquidity with a 0.037% fee. The use of the Uniswap pool results in higher slippage and unnecessary fees, diminishing user value. The recommended mitigation is to use RocketPool’s RocketSwapRouter.sol contract’s swapTo() function, which optimizes the swap path between Balancer and Uniswap pools. Alternatively, modifying Reth.sol to use the Balancer pool would also reduce swap fees and slippage costs.
 
 ```solidity
+// lower fees and higher liquidity
+
 function swapExactInputSingleHop(
     address _tokenIn,
     address _tokenOut,
@@ -368,17 +429,19 @@ function swapExactInputSingleHop(
 }
 ```
 
-### Attack #8. Fee
+### Attack #8. Fee calculation & transfer
 
 **Definition:** A swap fee, also known as a trading fee or transaction fee, is a small percentage of the transaction value that is charged by a decentralized exchange (DEX) like Uniswap for facilitating trades between different token pairs. This fee is typically paid by the trader and is distributed to liquidity providers (LPs) as an incentive for supplying liquidity to the pool.
 
 **Impact:** The primary impact of this bug is the loss of swap commission fees that should be collected on ITM positions. This affects the profitability of the protocol since it reduces the overall revenue generated from swap commissions.
 
-**Example:** Panoptic
+**Example:** Panoptic, Tally
 
 **Panoptic:** The main invariant of Panoptic, "Fees paid to a given user should not exceed the amount of fees earned by the liquidity owned by that user," can be broken due to a slight difference in fee computation methods. Panoptic calculates fees as (currFeeGrowth _ liquidity / Q128) - (prevFeeGrowth _ liquidity / Q128), whereas Uniswap V3 calculates it as (currFeeGrowth - prevFeeGrowth) \* liquidity / Q128. This difference can result in a user collecting more fees than they should, potentially reducing the fees available for other users.
 
 ```solidity
+// difference between equation
+
 int256 amountToCollect = _getFeesBase(univ3pool, startingLiquidity, liquidityChunk).sub(
             s_accountFeesBase[positionKey]
         );
@@ -390,6 +453,8 @@ int256 amountToCollect = _getFeesBase(univ3pool, startingLiquidity, liquidityChu
 **Panoptic:** The Panoptic protocol's CollateralTracker contract has a potential issue where the swap commission paid on the intrinsic value could be zero if the Uniswap pool fee is set below 0.01%. This situation arises because of the way the \_poolFee and s_ITMSpreadFee are calculated. To address this issue, it's recommended to use Uniswap's DECIMALS (1e6) instead of 10,000 and update all related code accordingly. This change ensures that even lower fee levels are appropriately handled by the Panoptic protocol.
 
 ```solidity
+// decimals
+
     function startToken(
         bool underlyingIsToken0,
         address token0,
@@ -412,6 +477,327 @@ int256 amountToCollect = _getFeesBase(univ3pool, startingLiquidity, liquidityChu
             s_ITMSpreadFee = uint128((ITM_SPREAD_MULTIPLIER * _poolFee) / DECIMALS);
         }
     }
+```
+
+**Tally:** The use of `transfer()` in `Swap.sol` can cause ETH to be irretrievable or undelivered if the recipient is a smart contract that either lacks a payable fallback function or requires more than 2300 gas units to execute its fallback function. This can lead to potential loss of funds, particularly if gas costs change. To mitigate this, it is recommended to replace `transfer()` with `msg.sender.call.value(amount)` or use the OpenZeppelin `Address.sendValue` library, as re-entrancy has already been accounted for in the contract.
+
+```solidity
+    // transfer() swap fee
+
+    /// @notice Sweeps accrued ETH and ERC20 swap fees to the pre-established
+    ///         fee recipient address.
+    /// @dev Fees are tracked based on the contract's balances, rather than
+    ///      using any additional bookkeeping. If there are bugs in swap
+    ///      accounting, this function could jeopardize funds.
+    /// @param tokens An array of ERC20 contracts to withdraw token fees
+    function sweepFees(
+        address[] calldata tokens
+    ) external nonReentrant {
+        require(
+            feeRecipient != address(0),
+            "Swap::withdrawAccruedFees: feeRecipient is not initialized"
+        );
+        for (uint8 i = 0; i<tokens.length; i++) {
+            uint256 balance = IERC20(tokens[i]).balanceOf(address(this));
+            if (balance > 0) {
+                IERC20(tokens[i]).safeTransfer(feeRecipient, balance);
+                emit FeesSwept(tokens[i], balance, feeRecipient);
+            }
+        }
+@=>audit        feeRecipient.transfer(address(this).balance);
+        emit FeesSwept(address(0), address(this).balance, feeRecipient);
+    }
+
+```
+
+**Tally:** Users can exploit the `Swap.swapByQuote()` function to execute an ETH swap without paying the required swap fees by tricking the system into believing an ERC20 swap is occurring. This is achieved by setting `zrxBuyTokenAddress` to a malicious contract, which manipulates the balance checks to make the system treat the gained ETH as a refund rather than part of the swap, thus bypassing the fee. The recommended fix is to ensure swap fees are charged on refunded ETH in such scenarios. Charge swap fees for the “refunded ETH” on ERC20 swaps (when boughtERC20Amount > 0), or require boughtETHAmount == 0.
+
+```solidity
+// forget to charge fee
+
+    function swapByQuote(
+        address zrxSellTokenAddress,
+        uint256 amountToSell,
+        address zrxBuyTokenAddress,
+        uint256 minimumAmountReceived,
+        address zrxAllowanceTarget,
+        address payable zrxTo,
+        bytes calldata zrxData,
+        uint256 deadline
+    ) external payable whenNotPaused nonReentrant {
+...
+        if (boughtERC20Amount > 0) {
+            // take the swap fee from the ERC20 proceeds and return the rest
+            uint256 toTransfer = SWAP_FEE_DIVISOR.sub(swapFee).mul(boughtERC20Amount).div(SWAP_FEE_DIVISOR);
+            IERC20(zrxBuyTokenAddress).safeTransfer(msg.sender, toTransfer);
+            // return any refunded ETH
+            payable(msg.sender).transfer(boughtETHAmount);
+
+            emit SwappedTokens(
+                zrxSellTokenAddress,
+                zrxBuyTokenAddress,
+                amountToSell,
+                boughtERC20Amount,
+                boughtERC20Amount.sub(toTransfer)
+            );
+        } else {
+
+            // take the swap fee from the ETH proceeds and return the rest. Note
+            // that if any 0x protocol fee is refunded in ETH, it also suffers
+            // the swap fee tax
+            uint256 toTransfer = SWAP_FEE_DIVISOR.sub(swapFee).mul(boughtETHAmount).div(SWAP_FEE_DIVISOR);
+            payable(msg.sender).transfer(toTransfer);
+            emit SwappedTokens(
+                zrxSellTokenAddress,
+                zrxBuyTokenAddress,
+                amountToSell,
+                boughtETHAmount,
+                boughtETHAmount.sub(toTransfer)
+            );
+        }
+        if (zrxAllowanceTarget != address(0)) {
+            // remove any dangling token allowance
+            IERC20(zrxSellTokenAddress).safeApprove(zrxAllowanceTarget, 0);
+        }
+    }
+
+```
+
+### Attack #9. liquidity
+
+**Definition:** Pool liquidity refers to the availability of assets in a liquidity pool on a decentralized exchange (DEX) like Uniswap or Sushiswap. Liquidity pools are collections of funds locked in a smart contract, provided by liquidity providers (LPs) to facilitate trading. The liquidity in a pool determines how easily assets can be swapped without significant price impact. High liquidity means trades can be executed smoothly with minimal slippage, while low liquidity can lead to higher slippage and difficulty in executing large trades.
+
+**Impact:** liquidity mismatch leads to reduced market efficiency and potential financial losses for users relying on the adapter for accurate liquidity assessment.
+
+**Example:** Mochi
+
+**Mochi:** The `UniswapV2TokenAdapter` does not support assets exclusive to Sushiswap due to its `supports` function only checking UniswapV2 liquidity. If the liquidity is below the minimum threshold, it returns false without considering Sushiswap's liquidity. This could allow an attacker to create an empty UniswapV2 pool, causing the adapter to ignore a potentially liquid Sushiswap pool. The recommended solution is to compare Sushiswap liquidity if UniswapV2 liquidity is insufficient. This issue is confirmed by ryuheimat (Mochi).
+
+```solidity
+// ignore other pool's liquidity
+
+try uniswapCSSR.getLiquidity(_asset, _pairedWith) returns (
+            uint256 liq
+        ) {
+    float memory price = cssrRouter.getPrice(_pairedWith);
+    // @audit this returns early. if it's false it should check sushiswap first
+    return convertToValue(liq, price) >= minimumLiquidity;
+} catch {
+    try sushiCSSR.getLiquidity(_asset, _pairedWith) returns (
+        uint256 liq
+    ) {
+        float memory price = cssrRouter.getPrice(_pairedWith);
+        return convertToValue(liq, price) >= minimumLiquidity;
+    } catch {
+        return false;
+    }
+}
+
+```
+
+### Attack #10. Access control
+
+**Definition:** DEXs allow users to trade cryptocurrencies directly without relying on a central authority. However, Users are not supposed to interact with the pool contracts directly.
+
+**Impact:** Without proper validation, users might inject malicious code or manipulate swap parameters for personal gain. Bypassing checks could lead to unintended consequences during the swap process, potentially causing financial losses or disrupting DEX operations.
+
+**Example:** Vader Protocol
+
+**Vader Protocol:** The `BasePool.swap()` function in the Vader protocol lacks an `onlyRouter` modifier, unlike `BasePoolV2.swap()`. This allows users to directly call `BasePool.swap()` without necessary input validation, potentially bypassing checks performed by `VaderRouter._swap()`. The impact is that users can exploit this function directly, leading to potential misuse. The recommended fix is to add an `onlyRouter` modifier to `BasePool.swap()`.
+
+```solidity
+// lacks `onlyRouter` modifier, although same to UniswapV2
+
+    function swap(
+        uint256 nativeAmountIn,
+        uint256 foreignAmountIn,
+        address to
+    ) public override nonReentrant validateGas returns (uint256) {
+        require(
+            (nativeAmountIn > 0 && foreignAmountIn == 0) ||
+                (nativeAmountIn == 0 && foreignAmountIn > 0),
+            "BasePool::swap: Only One-Sided Swaps Supported"
+        );
+        (uint112 nativeReserve, uint112 foreignReserve, ) = getReserves(); // gas savings
+
+        uint256 nativeBalance;
+        uint256 foreignBalance;
+        uint256 nativeAmountOut;
+        uint256 foreignAmountOut;
+        {
+            // scope for _token{0,1}, avoids stack too deep errors
+            IERC20 _nativeAsset = nativeAsset;
+            IERC20 _foreignAsset = foreignAsset;
+            nativeBalance = _nativeAsset.balanceOf(address(this));
+            foreignBalance = _foreignAsset.balanceOf(address(this));
+
+            require(
+                to != address(_nativeAsset) && to != address(_foreignAsset),
+                "BasePool::swap: Invalid Receiver"
+            );
+
+            if (foreignAmountIn > 0) {
+                require(
+                    foreignAmountIn <= foreignBalance - foreignReserve,
+                    "BasePool::swap: Insufficient Tokens Provided"
+                );
+                require(
+                    foreignAmountIn <= foreignReserve,
+                    "BasePool::swap: Unfavourable Trade"
+                );
+
+                nativeAmountOut = VaderMath.calculateSwap(
+                    foreignAmountIn,
+                    foreignReserve,
+                    nativeReserve
+                );
+
+                require(
+                    nativeAmountOut > 0 && nativeAmountOut <= nativeReserve,
+                    "BasePool::swap: Swap Impossible"
+                );
+
+                _nativeAsset.safeTransfer(to, nativeAmountOut); // optimistically transfer tokens
+            } else {
+                require(
+                    nativeAmountIn <= nativeBalance - nativeReserve,
+                    "BasePool::swap: Insufficient Tokens Provided"
+                );
+                require(
+                    nativeAmountIn <= nativeReserve,
+                    "BasePool::swap: Unfavourable Trade"
+                );
+
+                foreignAmountOut = VaderMath.calculateSwap(
+                    nativeAmountIn,
+                    nativeReserve,
+                    foreignReserve
+                );
+
+                require(
+                    foreignAmountOut > 0 && foreignAmountOut <= foreignReserve,
+                    "BasePool::swap: Swap Impossible"
+                );
+
+                _foreignAsset.safeTransfer(to, foreignAmountOut); // optimistically transfer tokens
+            }
+
+            nativeBalance = _nativeAsset.balanceOf(address(this));
+            foreignBalance = _foreignAsset.balanceOf(address(this));
+        }
+
+        _update(nativeBalance, foreignBalance, nativeReserve, foreignReserve);
+
+        emit Swap(
+            msg.sender,
+            nativeAmountIn,
+            foreignAmountIn,
+            nativeAmountOut,
+            foreignAmountOut,
+            to
+        );
+
+        return nativeAmountOut > 0 ? nativeAmountOut : foreignAmountOut;
+    }
+
+```
+
+### Attack #11. swap type & calculation
+
+**Definition:** In decentralized finance (DeFi), liquidity pools enable the trading of cryptocurrencies by maintaining a constant product formula, which is crucial for determining the price of tokens within the pool. swap calculation ensures that the product of the amounts of the two tokens in the pool remains constant before and after a swap, allowing for dynamic pricing based on the ratio of the tokens in the pool.
+
+**Impact:** Any bugs or inaccuracies in swap calculations can lead to incorrect pricing information, impacting both liquidity providers and traders.
+
+**Example:** Vader Protocol
+
+**Vader Protocol:** The issue in `VaderRouter._swap` involves incorrect handling of swap arguments within a 3-path swap sequence. The function is designed to perform a series of swaps where foreign assets are first exchanged for native assets, and then the received native assets are swapped for different foreign assets. However, the implementation mistakenly uses the `amountIn` parameter as `nativeAmountIn` when calling the swap functions on `pool0` and `pool1`, leading to incorrect behavior. This results in failed swap operations due to mismatches in expected native and foreign amounts, impacting the functionality of 3-path swaps through `VaderRouter`. The recommended mitigation is to correct the argument order to ensure proper execution of the swap sequence, specifically using `pool1.swap(pool0.swap(0, amountIn, address(pool1)), 0, to);` to correctly handle foreign and native asset swaps in sequence.
+
+```solidity
+
+// wrong swap order from native to foreign assets
+
+function _swap(
+    uint256 amountIn,
+    address[] calldata path,
+    address to
+) private returns (uint256 amountOut) {
+    if (path.length == 3) {
+      // ...
+      // @audit calls this with nativeAmountIn = amountIn. but should be foreignAmountIn (second arg)
+      return pool1.swap(0, pool0.swap(amountIn, 0, address(pool1)), to);
+    }
+}
+// @audit should be this instead
+return pool1.swap(pool0.swap(0, amountIn, address(pool1)), 0, to);
+
+```
+
+**Vader Protocol:** The issue in `VaderRouter.calculateOutGivenIn` involves incorrect sequence handling of swap operations within a 3-path swap scenario. The function is intended to execute a sequence where foreign assets are first swapped to native assets in `pool0`, followed by exchanging the received native assets for different foreign assets in `pool1`. However, the code mistakenly performs the initial swap in `pool1` instead of `pool0`, resulting in incorrect calculations of asset swaps. This error affects all computations for 3-path swaps, potentially causing transaction failures or financial losses for smart contracts or frontend applications relying on accurate swap calculations. The recommended fix involves correcting the sequence to ensure swaps begin correctly in `pool0` before proceeding to `pool1`, thereby ensuring accurate swap outcomes and preventing potential financial risks.
+
+```solidity
+// wrong calculation by order
+
+function calculateOutGivenIn(uint256 amountIn, address[] calldata path)
+    external
+    view
+    returns (uint256 amountOut)
+{
+  if(...) {
+  } else {
+    return
+        VaderMath.calculateSwap(
+            VaderMath.calculateSwap(
+                // @audit the inner trade should not be in pool1 for a forward swap. amountIn foreign => next param should be foreignReserve0
+                amountIn,
+                nativeReserve1,
+                foreignReserve1
+            ),
+            foreignReserve0,
+            nativeReserve0
+        );
+  }
+ /** @audit instead should first be trading in pool0!
+    VaderMath.calculateSwap(
+        VaderMath.calculateSwap(
+            amountIn,
+            foreignReserve0,
+            nativeReserve0
+        ),
+        nativeReserve1,
+        foreignReserve1
+    );
+  */
+
+```
+
+### Attack #12. governance
+
+**Definition:** Governance in decentralized finance (DeFi) plays a crucial role in shaping the future of protocols, including those focused on swapping tokens. Governance mechanisms allow the community to make collective decisions regarding the protocol's direction, including changes to fee structures, addition of new tokens, or adjustments to liquidity incentives.
+
+**Impact:** Swap governance attacks in decentralized finance (DeFi) target the governance mechanisms of protocols that facilitate token swaps. These attacks aim to exploit vulnerabilities in the governance process, potentially leading to unauthorized changes in the protocol's parameters, such as fee structures, liquidity incentives, or even the introduction of new tokens.
+
+**Example:** PoolTogether
+
+**PoolTogether:** The vulnerability identified in `SwappableYieldSource.sol` involves the `swapYieldSource` function, which allows the owner or asset manager to switch the yield source contract at any time. This capability could potentially be exploited maliciously to immediately withdraw all funds from the current yield source to a new, possibly malicious contract that implements a compatible `depositToken()` function. This could lead to a rug pull scenario where funds are effectively stolen. Recommendations to mitigate this risk include implementing checks to ensure the new yield source is from a trusted registry, or enforcing a timelock mechanism for governance approval before executing such swaps.
+
+```solidity
+// owner modifier
+
+  /// @notice Swap current yield source for new yield source.
+  /// @dev This function is only callable by the owner or asset manager.
+  /// @dev We set a new yield source and then transfer funds from the now previous yield source to the new current yield source.
+  /// @param _newYieldSource New yield source address to set and transfer funds to.
+  /// @return true if operation is successful.
+  function swapYieldSource(IYieldSource _newYieldSource) external onlyOwnerOrAssetManager returns (bool) {
+    IYieldSource _currentYieldSource = yieldSource;
+    uint256 balance = _currentYieldSource.balanceOfToken(address(this));
+
+    _setYieldSource(_newYieldSource);
+    _transferFunds(_currentYieldSource, balance);
+
+    return true;
+  }
+
 ```
 
 ### Remediation Summary
