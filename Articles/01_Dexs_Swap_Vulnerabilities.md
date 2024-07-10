@@ -959,9 +959,15 @@ function calculateOutGivenIn(uint256 amountIn, address[] calldata path)
 ### Remediation Summary
 
 To mitigate the risk of dex swap attacks, several strategies can be employed:
+
 **Improved Liquidity Management:** Optimizing liquidity management algorithms to better handle large trade orders without causing significant price movements.
+
 **Dynamic Fee Structure:** Adjusting trading fees based on the size of the order to discourage large orders that could cause slippage.
+
 **Anti-Front Running Measures:** Implementing measures to prevent or mitigate front-running, which could indirectly address slippage attacks.
+
 **Order Execution Delays:** Introducing a slight delay in executing trades after they are placed to allow the market to adjust to changes in liquidity.
+
 **Price Oracles and Decentralized Data Feeds:** Ensuring that the price used for executing trades is accurate and not easily manipulated.
+
 **Layer 2 Scaling Solutions:** Improving the speed and efficiency of DEX transactions, reducing the likelihood of slippage during times of high network congestion.
