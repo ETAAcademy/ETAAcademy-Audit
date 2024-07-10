@@ -429,13 +429,13 @@ function swapExactInputSingleHop(
 }
 ```
 
-### Attack #8. Fee calculation & transfer
+### Attack #8. Fee calculation & on transfer
 
 **Definition:** A swap fee, also known as a trading fee or transaction fee, is a small percentage of the transaction value that is charged by a decentralized exchange (DEX) like Uniswap for facilitating trades between different token pairs. This fee is typically paid by the trader and is distributed to liquidity providers (LPs) as an incentive for supplying liquidity to the pool.
 
 **Impact:** The primary impact of this bug is the loss of swap commission fees that should be collected on ITM positions. This affects the profitability of the protocol since it reduces the overall revenue generated from swap commissions.
 
-**Example:** Panoptic, Tally
+**Example:** Panoptic, Tally, Vader Protocol
 
 **Panoptic:** The main invariant of Panoptic, "Fees paid to a given user should not exceed the amount of fees earned by the liquidity owned by that user," can be broken due to a slight difference in fee computation methods. Panoptic calculates fees as (currFeeGrowth _ liquidity / Q128) - (prevFeeGrowth _ liquidity / Q128), whereas Uniswap V3 calculates it as (currFeeGrowth - prevFeeGrowth) \* liquidity / Q128. This difference can result in a user collecting more fees than they should, potentially reducing the fees available for other users.
 
@@ -513,7 +513,7 @@ int256 amountToCollect = _getFeesBase(univ3pool, startingLiquidity, liquidityChu
 **Tally:** Users can exploit the `Swap.swapByQuote()` function to execute an ETH swap without paying the required swap fees by tricking the system into believing an ERC20 swap is occurring. This is achieved by setting `zrxBuyTokenAddress` to a malicious contract, which manipulates the balance checks to make the system treat the gained ETH as a refund rather than part of the swap, thus bypassing the fee. The recommended fix is to ensure swap fees are charged on refunded ETH in such scenarios. Charge swap fees for the “refunded ETH” on ERC20 swaps (when boughtERC20Amount > 0), or require boughtETHAmount == 0.
 
 ```solidity
-// forget to charge fee
+// not charge fee
 
     function swapByQuote(
         address zrxSellTokenAddress,
@@ -560,6 +560,162 @@ int256 amountToCollect = _getFeesBase(univ3pool, startingLiquidity, liquidityChu
             IERC20(zrxSellTokenAddress).safeApprove(zrxAllowanceTarget, 0);
         }
     }
+
+```
+
+**Vader Protocol**: The issue centers around the BasePoolV2.sol contract's mint() function, which assumes that transferred amounts equal received amounts, leading to potential discrepancies when handling ERC20 tokens like Vader that charge fees on transfers. This function transfers assets and calculates liquidity units based on these amounts, potentially ignoring fees incurred during transfers.
+
+```solidity
+// not charge fee
+
+function mint(
+    IERC20 foreignAsset,
+    uint256 nativeDeposit,
+    uint256 foreignDeposit,
+    address from,
+    address to
+)
+    external
+    override
+    nonReentrant
+    onlyRouter
+    supportedToken(foreignAsset)
+    returns (uint256 liquidity)
+{
+    (uint112 reserveNative, uint112 reserveForeign, ) = getReserves(
+        foreignAsset
+    ); // gas savings
+
+    nativeAsset.safeTransferFrom(from, address(this), nativeDeposit);
+    foreignAsset.safeTransferFrom(from, address(this), foreignDeposit);
+
+    PairInfo storage pair = pairInfo[foreignAsset];
+    uint256 totalLiquidityUnits = pair.totalSupply;
+    if (totalLiquidityUnits == 0) liquidity = nativeDeposit;
+    else
+        liquidity = VaderMath.calculateLiquidityUnits(
+            nativeDeposit,
+            reserveNative,
+            foreignDeposit,
+            reserveForeign,
+            totalLiquidityUnits
+        );
+
+    require(
+        liquidity > 0,
+        "BasePoolV2::mint: Insufficient Liquidity Provided"
+    );
+
+    uint256 id = positionId++;
+
+    pair.totalSupply = totalLiquidityUnits + liquidity;
+    _mint(to, id);
+
+    positions[id] = Position(
+        foreignAsset,
+        block.timestamp,
+        liquidity,
+        nativeDeposit,
+        foreignDeposit
+    );
+
+    _update(
+        foreignAsset,
+        reserveNative + nativeDeposit,
+        reserveForeign + foreignDeposit,
+        reserveNative,
+        reserveForeign
+    );
+
+    emit Mint(from, to, nativeDeposit, foreignDeposit);
+    emit PositionOpened(from, to, id, liquidity);
+}
+
+```
+
+**OpenLeverage:** The OpenLevV1 contract has a vulnerability when interacting with V3 DEX for closing trades, where it fails to account for fee-on-transfer tokens, resulting in potential system funds deficits and user fund freezes. Malicious users can exploit this by repeatedly opening and closing positions with taxed tokens, draining contract funds. The issue primarily arises when the received funds are less than indicated by the DEX, leading to incorrect repayment accounting and failures in the `closeTrade` function. The recommended mitigation is to implement balance checks before and after DEX operations to ensure accurate accounting.
+
+```solidity
+// receive less amount to drain the funds
+
+    function closeTrade(uint16 marketId, bool longToken, uint closeHeld, uint minOrMaxAmount, bytes memory dexData) external override nonReentrant onlySupportDex(dexData) {
+        // In the trade.depositToken != longToken case when flashSell is used this can imply inability to send remainder funds to a user and the failure of the whole closeTrade function, the end result is a freezing of user’s funds within the system.
+
+        if (trade.depositToken != longToken) {
+            minOrMaxAmount = Utils.maxOf(closeTradeVars.repayAmount, minOrMaxAmount);
+            closeTradeVars.receiveAmount = flashSell(marketId, address(marketVars.buyToken), address(marketVars.sellToken), closeTradeVars.closeAmountAfterFees, minOrMaxAmount, dexData);
+            require(closeTradeVars.receiveAmount >= closeTradeVars.repayAmount, "ISR");
+
+            closeTradeVars.sellAmount = closeTradeVars.closeAmountAfterFees;
+            marketVars.buyPool.repayBorrowBehalf(msg.sender, closeTradeVars.repayAmount);
+
+            closeTradeVars.depositReturn = closeTradeVars.receiveAmount.sub(closeTradeVars.repayAmount);
+            doTransferOut(msg.sender, marketVars.buyToken, closeTradeVars.depositReturn);
+        } else {
+            uint balance = marketVars.buyToken.balanceOf(address(this));
+            minOrMaxAmount = Utils.minOf(closeTradeVars.closeAmountAfterFees, minOrMaxAmount);
+            closeTradeVars.sellAmount = flashBuy(marketId, address(marketVars.buyToken), address(marketVars.sellToken), closeTradeVars.repayAmount, minOrMaxAmount, dexData);
+            closeTradeVars.receiveAmount = marketVars.buyToken.balanceOf(address(this)).sub(balance);
+            require(closeTradeVars.receiveAmount >= closeTradeVars.repayAmount, "ISR");
+
+            marketVars.buyPool.repayBorrowBehalf(msg.sender, closeTradeVars.repayAmount);
+            closeTradeVars.depositReturn = closeTradeVars.closeAmountAfterFees.sub(closeTradeVars.sellAmount);
+            require(marketVars.sellToken.balanceOf(address(this)) >= closeTradeVars.depositReturn, "ISB");
+            doTransferOut(msg.sender, marketVars.sellToken, closeTradeVars.depositReturn);
+        }
+
+    }
+
+```
+
+**OpenLeverage:** The uniClassSell() function relies on getAmountOut() to determine the buy amount, which does not account for tokens with fees on transfer. This can result in receiving fewer tokens than expected, potentially falling below minBuyAmount. Update uniClassSell() to use the actual balance received rather than the output from getAmountOut() to ensure the minimum buy amount requirement is met.
+
+```solidity
+// not support fee on transfer
+// check operates on getAmountOut() and not the bought output.
+
+function uniClassSell(DexInfo memory dexInfo,
+    address buyToken,
+    address sellToken,
+    uint sellAmount,
+    uint minBuyAmount,
+    address payer,
+    address payee
+) internal returns (uint bought){
+    address pair = getUniClassPair(buyToken, sellToken, dexInfo.factory);
+    IUniswapV2Pair(pair).sync();
+    (uint256 token0Reserves, uint256 token1Reserves,) = IUniswapV2Pair(pair).getReserves();
+    sellAmount = transferOut(IERC20(sellToken), payer, pair, sellAmount);
+    uint balanceBefore = IERC20(buyToken).balanceOf(payee);
+    dexInfo.fees = getPairFees(dexInfo, pair);
+    if (buyToken < sellToken) {
+        buyAmount = getAmountOut(sellAmount, token1Reserves, token0Reserves, dexInfo.fees);
+        IUniswapV2Pair(pair).swap(buyAmount, 0, payee, "");
+    } else {
+        buyAmount = getAmountOut(sellAmount, token0Reserves, token1Reserves, dexInfo.fees);
+        IUniswapV2Pair(pair).swap(0, buyAmount, payee, "");
+    }
+    uint bought = IERC20(buyToken).balanceOf(payee).sub(balanceBefore);
+    require(bought >= minBuyAmount, 'buy amount less than min');
+}
+
+```
+
+**Goat Trading:** Some tokens take a transfer fee (e.g. STA, PAXG), some do not currently charge a fee but may do so in the future (e.g. USDT, USDC). The router is not designed to handle tokens that charge a fee on transfers. This causes issues in various functions, such as removeLiquidity, where the actual amount of tokens received is less than expected due to transfer fees. Add functionality to the router to support fee on transfer tokens, a good example of where this is correctly implememented is the [Uniswap Router02](https://etherscan.io/address/0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D).
+
+```solidity
+
+address pair = GoatV1Factory(FACTORY).getPool(token);
+
+IERC20(pair).safeTransferFrom(msg.sender, pair, liquidity); //-> 1. Transfers liquidity tokens to the pair
+(amountWeth, amountToken) = GoatV1Pair(pair).burn(to); //-> 2. Burns the liquidity tokens and sends WETH and TOKEN to the recipient
+if (amountWeth < wethMin) { //-> 3. Ensures enough WETH has been transferred
+    revert GoatErrors.InsufficientWethAmount();
+}
+if (amountToken < tokenMin) { //4. Ensures enough TOKEN has been transferred
+    revert GoatErrors.InsufficientTokenAmount();
+}
+
 
 ```
 
