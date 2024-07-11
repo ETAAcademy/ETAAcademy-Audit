@@ -161,7 +161,7 @@ DEXs swap attacks primarily revolve around exploiting vulnerabilities in decentr
 
 **Impact:** Without a deadline, the transaction can be manipulated by validators, resulting in significant slippage and potential losses for users. For example, a user stakes funds, which are converted using Uniswap. A validator could delay the transaction, waiting for a favorable market condition to front-run the original user, causing maximum slippage.
 
-**Example:** Asymmetry
+**Example:** Asymmetry, Dexe
 
 **Asymmetry:** Lack of a deadline parameter in the `ISwapRouter.exactInputSingle` function can lead to front-running vulnerabilities, where a validator might delay a transaction to exploit market conditions, causing significant slippage. The problem arises when users stake and Uniswap is used to convert ETH to WETH without a set deadline, making the transaction susceptible to manipulation. The recommended mitigation is to include a user-input deadline parameter in the `Reth.deposit()` function and pass it to the swap functions to prevent such exploits and to ensure that the transaction can be executed in a short period of time. And, introduce a deadline parameter to the functions withdraw() for WstEth.sol and SfrxEth.sol and deposit() for Reth.sol.
 
@@ -186,6 +186,22 @@ modifier ensure(uint deadline) {
 	require(deadline >= block.timestamp, 'UniswapV2Router: EXPIRED');
 	_;
 }
+```
+
+**Dexe:** Using `block.timestamp` as a swap deadline in smart contracts fails to protect against manipulation in proof-of-stake (PoS) systems, where validators can delay transactions to exploit more favorable block timestamps. This undermines the security of time-sensitive operations like swaps. To mitigate this risk, smart contracts should allow users to specify swap deadlines as input parameters rather than relying solely on `block.timestamp`. This approach prevents manipulation by validators and enhances transaction security. Due to these vulnerabilities, functionality dependent on `block.timestamp` for swap deadlines was removed in Dexe to safeguard against potential exploits and ensure fair and secure transactions.
+
+```solidity
+
+// caller specify swap deadline input parameter instead of block.timestamp
+
+        uint256[] memory outs = uniswapV2Router.swapExactTokensForTokens(
+            amountIn,
+            minAmountOut,
+            foundPath.path,
+            msg.sender,
+            block.timestamp
+        );
+
 ```
 
 ### Attack #3. Directed Attacks Against Liquidity Provider Pools
@@ -376,7 +392,7 @@ function poolPrice() private view returns (uint256) {
 
 **Impact:** Legitimate users may face higher slippage, meaning they receive less favorable prices for their swaps. This can lead to significant financial losses, especially for large transactions. Manipulators can profit at the expense of regular traders, creating an uneven playing field and disadvantaging smaller or less-experienced traders.
 
-**Example:** Dopex
+**Example:** Dopex, Malt Finance
 
 **Dopex:** The vulnerability in reLPContract.reLP() is identified through its indirect invocation by RdpxV2Core.bond(), allowing potential exploitation via a sandwich attack. This occurs because users can manipulate the bonding amount in RdpxV2Core.bond() to control the amount of liquidity removed and subsequently using ETH from flash loan to inflate rDPX price via UniswapV2 within reLPContract.reLP() without requiring mempool access. reLPContract.reLP() performs swaps and liquidity additions, further impacting prices. Profit realization by swapping rDPX back to ETH and repaying the flash loan. Despite slippage protection measures, the attacker can adjust transaction sizes to profitably exploit price discrepancies.
 
@@ -392,6 +408,75 @@ function poolPrice() private view returns (uint256) {
     //@audit an attacker can indirectly trigger this to perform a large trade and sandwich attack it
     // reLP
     if (isReLPActive) IReLP(addresses.reLPContract).reLP(_amount);
+
+```
+
+**Malt Finance:** The vulnerability in UniswapHandler involves its interaction with UniswapV2Router during token swaps and liquidity removal, where it fails to set minimum output thresholds, exposing it to frontrunning attacks. This allows malicious actors to manipulate transaction order in the mempool, inflating token prices before executing advantageous trades, thereby profiting at the expense of UniswapHandler and related contracts. Mitigation involves implementing proper price slippage checks and restricting direct access to UniswapV2Router to prevent unauthorized manipulation, crucial for safeguarding against potential financial losses across affected functionalities.
+
+```solidity
+// frontrun without minimum output
+
+  function buyMalt()
+    external
+    onlyRole(BUYER_ROLE, "Must have buyer privs")
+    returns (uint256 purchased)
+  {
+    uint256 rewardBalance = rewardToken.balanceOf(address(this));
+
+    if (rewardBalance == 0) {
+      return 0;
+    }
+
+    rewardToken.approve(address(router), rewardBalance);
+
+    address[] memory path = new address[](2);
+    path[0] = address(rewardToken);
+    path[1] = address(malt);
+
+    router.swapExactTokensForTokens(
+      rewardBalance,
+      0, // amountOutMin
+      path,
+      address(this),
+      now
+    );
+
+    purchased = malt.balanceOf(address(this));
+    malt.safeTransfer(msg.sender, purchased);
+  }
+
+  function sellMalt() external returns (uint256 rewards) {
+    uint256 maltBalance = malt.balanceOf(address(this));
+
+    if (maltBalance == 0) {
+      return 0;
+    }
+
+    malt.approve(address(router), maltBalance);
+
+    address[] memory path = new address[](2);
+    path[0] = address(malt);
+    path[1] = address(rewardToken);
+
+    router.swapExactTokensForTokens(
+      maltBalance,
+      0,
+      path,
+      address(this),
+      now
+    );
+
+    rewards = rewardToken.balanceOf(address(this));
+    rewardToken.safeTransfer(msg.sender, rewards);
+  }
+
+    function removeLiquidity() external returns (uint256 amountMalt, uint256 amountReward) {
+    uint256 liquidityBalance = lpToken.balanceOf(address(this));
+
+    if (liquidityBalance == 0) {
+      return (0, 0);
+    }
+
 ```
 
 ### Attack #7. Superior swap strategies
@@ -435,7 +520,7 @@ function swapExactInputSingleHop(
 
 **Impact:** The primary impact of this bug is the loss of swap commission fees that should be collected on ITM positions. This affects the profitability of the protocol since it reduces the overall revenue generated from swap commissions.
 
-**Example:** Panoptic, Tally, Vader Protocol
+**Example:** Panoptic, Tally, Vader Protocol, OpenLeverage, Goat
 
 **Panoptic:** The main invariant of Panoptic, "Fees paid to a given user should not exceed the amount of fees earned by the liquidity owned by that user," can be broken due to a slight difference in fee computation methods. Panoptic calculates fees as (currFeeGrowth _ liquidity / Q128) - (prevFeeGrowth _ liquidity / Q128), whereas Uniswap V3 calculates it as (currFeeGrowth - prevFeeGrowth) \* liquidity / Q128. This difference can result in a user collecting more fees than they should, potentially reducing the fees available for other users.
 
@@ -932,7 +1017,7 @@ function calculateOutGivenIn(uint256 amountIn, address[] calldata path)
 
 **Impact:** Swap governance attacks in decentralized finance (DeFi) target the governance mechanisms of protocols that facilitate token swaps. These attacks aim to exploit vulnerabilities in the governance process, potentially leading to unauthorized changes in the protocol's parameters, such as fee structures, liquidity incentives, or even the introduction of new tokens.
 
-**Example:** PoolTogether
+**Example:** PoolTogether，SolidlyV3AMM
 
 **PoolTogether:** The vulnerability identified in `SwappableYieldSource.sol` involves the `swapYieldSource` function, which allows the owner or asset manager to switch the yield source contract at any time. This capability could potentially be exploited maliciously to immediately withdraw all funds from the current yield source to a new, possibly malicious contract that implements a compatible `depositToken()` function. This could lead to a rug pull scenario where funds are effectively stolen. Recommendations to mitigate this risk include implementing checks to ensure the new yield source is from a trusted registry, or enforcing a timelock mechanism for governance approval before executing such swaps.
 
@@ -955,6 +1040,10 @@ function calculateOutGivenIn(uint256 amountIn, address[] calldata path)
   }
 
 ```
+
+**SolidlyV3AMM:** The Solidly V3 AMM protocol allows the owner to control swap fees through the feeCollector role assigned by the SolidlyV3Factory. This role, initially held by a RewardsDistributor contract, lets the owner set a Merkle root determining who can claim fees. Risks include the owner directing fees to themselves, setting a Merkle root that benefits only them, or leaving fees unclaimable indefinitely. Despite using a multi-sig and Timelock contract, the 24-hour delay may not suffice for LPs to claim their yield, suggesting a need to reconsider the fee claiming mechanism(owner direct fees to themselves).
+
+https://solodit.xyz/issues/m-02-protocol-owner-has-control-over-swap-fees-earned-pashov-audit-group-none-solidlyv3amm-markdown
 
 ### Remediation Summary
 
