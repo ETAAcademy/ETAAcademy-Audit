@@ -28,13 +28,15 @@ A Decentralized Crypto Exchange (DEX) allows users to trade cryptocurrencies dir
 
 DEXs swap attacks primarily revolve around exploiting vulnerabilities in decentralized exchanges (DEXs), particularly those related to liquidity management, transaction execution, and the inherent trustlessness of these platforms. These attacks can range from sophisticated exploits targeting smart contract vulnerabilities to more straightforward manipulations of market conditions, such as slippage attacks, pool closures, Money Laundering, transaction deadlines, price manipulation, superior swap strategies, sandwich attacks, inaccuracies in calculating amountIn and amountOut, and fee calculations. Here's a detailed look at the types of attacks and how they exploit the unique characteristics of DEXs:
 
-### Attack #1. Slippage Attacks
+### Attack #1. Slippage Attacks (two issues of slippage protection )
 
 **Definition:** Slippage attacks exploit the difference between the expected price of a trade and the actual executed price due to market volatility or liquidity issues. In DEXs, slippage can occur because of rapid changes in the available liquidity for a particular token pair, especially during periods of high volatility or low liquidity.
 
 **Impact:** Traders may end up receiving fewer tokens than expected when buying or selling, or they may pay a higher price than expected when buying. This can be particularly problematic for larger trades, where the size of the trade order can significantly impact the available liquidity in the market.
 
 **Example:** BakerFi, Lybra Finance, Dopex
+
+**No slippage protection**
 
 **BakerFi:** The protocol's `_swap()` method lacks slippage protection by not setting the `amountOutMinimum` parameter, posing risks of front-running and price manipulation. This issue affects several functions, including `_convertFromWETH()` and `_convertToWETH()`, leading to potential vulnerabilities in multiple swap operations. The recommended fix involves setting `amountOutMinimum` to `params.amountOut` to enforce slippage protection. This issue was confirmed and addressed in a subsequent update, as detailed in [GitHub Pull Request #41](https://github.com/baker-fi/bakerfi-contracts/pull/41).
 
@@ -102,6 +104,8 @@ DEXs swap attacks primarily revolve around exploiting vulnerabilities in decentr
     }
 ```
 
+**Invalid slippage protection**
+
 **Dopex:** In the \_curveSwap function, there is an issue with the order of calling getDpxEthPrice() and getEthPrice(). This mistake results in incorrect slippage calculations when performing swaps between ETH and DPXETH. Specifically, when \_ethToDpxEth is true, indicating a swap from ETH to DPXETH, getDpxEthPrice() is erroneously used, which actually returns the price of DPXETH in terms of ETH (DPXETH/ETH). Conversely, when swapping from DPXETH to ETH, getEthPrice() is incorrectly employed, as it provides the price of ETH in terms of DPXETH (ETH/DPXETH).
 
 ```solidity
@@ -155,7 +159,100 @@ DEXs swap attacks primarily revolve around exploiting vulnerabilities in decentr
   }
 ```
 
-### Attack #2. Transaction deadlines
+### Attack #2. Price manipulation(Sandwich attacks & front-running)
+
+**Definition:** Price manipulation in the context of decentralized exchanges (DEXs) involves activities where a trader or a group of traders artificially influence the price of assets during swap transactions. This can be achieved through tactics such as front-running, where a manipulator observes a pending large transaction and places their own transactions to benefit from the expected price change, or sandwich attacks, where the manipulator places a buy order before and a sell order after a large transaction to profit from the price movement caused by the large transaction.
+
+**Impact:** Legitimate users may face higher slippage, meaning they receive less favorable prices for their swaps. This can lead to significant financial losses, especially for large transactions. Manipulators can profit at the expense of regular traders, creating an uneven playing field and disadvantaging smaller or less-experienced traders.
+
+**Example:** Dopex, Malt Finance
+
+**Dopex:** The vulnerability in reLPContract.reLP() is identified through its indirect invocation by RdpxV2Core.bond(), allowing potential exploitation via a sandwich attack. This occurs because users can manipulate the bonding amount in RdpxV2Core.bond() to control the amount of liquidity removed and subsequently using ETH from flash loan to inflate rDPX price via UniswapV2 within reLPContract.reLP() without requiring mempool access. reLPContract.reLP() performs swaps and liquidity additions, further impacting prices. Profit realization by swapping rDPX back to ETH and repaying the flash loan. Despite slippage protection measures, the attacker can adjust transaction sizes to profitably exploit price discrepancies.
+
+```solidity
+// inflate price by sandwich attack
+
+  function bond(
+    uint256 _amount,
+    uint256 rdpxBondId,
+    address _to
+  ) public returns (uint256 receiptTokenAmount) {
+    ...
+    //@audit an attacker can indirectly trigger this to perform a large trade and sandwich attack it
+    // reLP
+    if (isReLPActive) IReLP(addresses.reLPContract).reLP(_amount);
+
+```
+
+**Malt Finance:** The vulnerability in UniswapHandler involves its interaction with UniswapV2Router during token swaps and liquidity removal, where it fails to set minimum output thresholds, exposing it to frontrunning attacks. This allows malicious actors to manipulate transaction order in the mempool, inflating token prices before executing advantageous trades, thereby profiting at the expense of UniswapHandler and related contracts. Mitigation involves implementing proper price slippage checks and restricting direct access to UniswapV2Router to prevent unauthorized manipulation, crucial for safeguarding against potential financial losses across affected functionalities.
+
+```solidity
+// frontrun without minimum output
+
+  function buyMalt()
+    external
+    onlyRole(BUYER_ROLE, "Must have buyer privs")
+    returns (uint256 purchased)
+  {
+    uint256 rewardBalance = rewardToken.balanceOf(address(this));
+
+    if (rewardBalance == 0) {
+      return 0;
+    }
+
+    rewardToken.approve(address(router), rewardBalance);
+
+    address[] memory path = new address[](2);
+    path[0] = address(rewardToken);
+    path[1] = address(malt);
+
+    router.swapExactTokensForTokens(
+      rewardBalance,
+      0, // amountOutMin
+      path,
+      address(this),
+      now
+    );
+
+    purchased = malt.balanceOf(address(this));
+    malt.safeTransfer(msg.sender, purchased);
+  }
+
+  function sellMalt() external returns (uint256 rewards) {
+    uint256 maltBalance = malt.balanceOf(address(this));
+
+    if (maltBalance == 0) {
+      return 0;
+    }
+
+    malt.approve(address(router), maltBalance);
+
+    address[] memory path = new address[](2);
+    path[0] = address(malt);
+    path[1] = address(rewardToken);
+
+    router.swapExactTokensForTokens(
+      maltBalance,
+      0,
+      path,
+      address(this),
+      now
+    );
+
+    rewards = rewardToken.balanceOf(address(this));
+    rewardToken.safeTransfer(msg.sender, rewards);
+  }
+
+    function removeLiquidity() external returns (uint256 amountMalt, uint256 amountReward) {
+    uint256 liquidityBalance = lpToken.balanceOf(address(this));
+
+    if (liquidityBalance == 0) {
+      return (0, 0);
+    }
+
+```
+
+### Attack #3. Transaction deadlines
 
 **Definition:** When making a swap, Automated Market Makers (AMMs) provide users with a deadline parameter, ensuring the swap transaction will only be executed within the specified time frame. Without a deadline, the transaction can remain pending and may be executed long after the user submits it. By that time, the trade may occur at an unfavorable price, negatively impacting the user's position.
 
@@ -204,7 +301,7 @@ modifier ensure(uint deadline) {
 
 ```
 
-### Attack #3. Directed Attacks Against Liquidity Provider Pools
+### Attack #4. Loss of accuracy
 
 **Definition:** IUnlike Uniswap v3, KyberSwap Elastic introduces an innovative feature called the Reinvestment Curve. This is an additional AMM pool that accumulates fees charged from users’ swaps in the pool, with a curve that supports a price range from 0 to infinity. KyberSwap Elastic combines the reinvestment curve with the original price curve (i.e., the curves are separate, but the funds remain in the same pool), allowing LPs to compound their fees and earn returns even when the price exceeds their position range.
 
@@ -323,24 +420,6 @@ function computeSwapStep(
 }
 ```
 
-### Attack #4. Money Laundering Through DEXs
-
-**Definition:** Criminals can use DEXs for crypto-to-crypto swaps to launder criminal proceeds. This involves obtaining Ether or Ethereum-based tokens (for example, by hacking an exchange), swapping them at a DEX for new tokens, and then depositing these new tokens at a legitimate exchange to cash out for fiat.
-
-**Impact:** While DEXs offer advantages in terms of bypassing compliance controls and lacking a central administrator, they also present challenges for money laundering. All DEX crypto-to-crypto swaps are recorded in smart contracts on the blockchain, allowing for visibility into these transactions and the potential tracing of illicit funds.
-
-**Example:** Tornado cash, Blender.io
-
-**Tornado cash:** By sending illicit funds to Tornado Cash, criminals can obfuscate the funds trail – making it more difficult to decipher their activity. In the recent Ronin Bridge hack attributed to North Korea’s Lazarus Group, the hackers made extensive use of Tornado Cash to launder some of the stolen cryptoassets from the heist, which at the time of the theft totalled $540 million.
-
-A money laundering typology involving DEXs works as follows:
-1)a criminal obtains Ether or Ethereum-based tokens, for example by hacking a DeFi lending platform;
-2)the criminal sends the stolen funds to a Tornado Cash address;
-3)the criminal receives new “clean” tokens from Tornado cash; and
-4)the new tokens are deposited at a centralized exchange platform, and cashed out for fiat.
-
-**Blender.io:** As an aside, Bitcoin mixer Blender.io recently became the first virtual asset mixer to be targeted by sanctions from the US Office of Foreign Assets Control (OFAC). However, it is a mixer that handles Bitcoin exclusively.
-
 ### Attack #5. Price Arbitrage
 
 **Definition:** In the context of a decentralized exchange (DEX) swap, the price refers to the exchange rate between two different cryptocurrencies or tokens. This rate determines how much of one token you will receive in exchange for a certain amount of another token. Arbitrage in the context of DEX swaps involves exploiting price discrepancies of the same asset across different markets or liquidity pools to generate a profit.
@@ -390,135 +469,7 @@ function poolPrice() private view returns (uint256) {
   }
 ```
 
-### Attack #6. Price manipulation(Sandwich attacks & front-running)
-
-**Definition:** Price manipulation in the context of decentralized exchanges (DEXs) involves activities where a trader or a group of traders artificially influence the price of assets during swap transactions. This can be achieved through tactics such as front-running, where a manipulator observes a pending large transaction and places their own transactions to benefit from the expected price change, or sandwich attacks, where the manipulator places a buy order before and a sell order after a large transaction to profit from the price movement caused by the large transaction.
-
-**Impact:** Legitimate users may face higher slippage, meaning they receive less favorable prices for their swaps. This can lead to significant financial losses, especially for large transactions. Manipulators can profit at the expense of regular traders, creating an uneven playing field and disadvantaging smaller or less-experienced traders.
-
-**Example:** Dopex, Malt Finance
-
-**Dopex:** The vulnerability in reLPContract.reLP() is identified through its indirect invocation by RdpxV2Core.bond(), allowing potential exploitation via a sandwich attack. This occurs because users can manipulate the bonding amount in RdpxV2Core.bond() to control the amount of liquidity removed and subsequently using ETH from flash loan to inflate rDPX price via UniswapV2 within reLPContract.reLP() without requiring mempool access. reLPContract.reLP() performs swaps and liquidity additions, further impacting prices. Profit realization by swapping rDPX back to ETH and repaying the flash loan. Despite slippage protection measures, the attacker can adjust transaction sizes to profitably exploit price discrepancies.
-
-```solidity
-// inflate price by sandwich attack
-
-  function bond(
-    uint256 _amount,
-    uint256 rdpxBondId,
-    address _to
-  ) public returns (uint256 receiptTokenAmount) {
-    ...
-    //@audit an attacker can indirectly trigger this to perform a large trade and sandwich attack it
-    // reLP
-    if (isReLPActive) IReLP(addresses.reLPContract).reLP(_amount);
-
-```
-
-**Malt Finance:** The vulnerability in UniswapHandler involves its interaction with UniswapV2Router during token swaps and liquidity removal, where it fails to set minimum output thresholds, exposing it to frontrunning attacks. This allows malicious actors to manipulate transaction order in the mempool, inflating token prices before executing advantageous trades, thereby profiting at the expense of UniswapHandler and related contracts. Mitigation involves implementing proper price slippage checks and restricting direct access to UniswapV2Router to prevent unauthorized manipulation, crucial for safeguarding against potential financial losses across affected functionalities.
-
-```solidity
-// frontrun without minimum output
-
-  function buyMalt()
-    external
-    onlyRole(BUYER_ROLE, "Must have buyer privs")
-    returns (uint256 purchased)
-  {
-    uint256 rewardBalance = rewardToken.balanceOf(address(this));
-
-    if (rewardBalance == 0) {
-      return 0;
-    }
-
-    rewardToken.approve(address(router), rewardBalance);
-
-    address[] memory path = new address[](2);
-    path[0] = address(rewardToken);
-    path[1] = address(malt);
-
-    router.swapExactTokensForTokens(
-      rewardBalance,
-      0, // amountOutMin
-      path,
-      address(this),
-      now
-    );
-
-    purchased = malt.balanceOf(address(this));
-    malt.safeTransfer(msg.sender, purchased);
-  }
-
-  function sellMalt() external returns (uint256 rewards) {
-    uint256 maltBalance = malt.balanceOf(address(this));
-
-    if (maltBalance == 0) {
-      return 0;
-    }
-
-    malt.approve(address(router), maltBalance);
-
-    address[] memory path = new address[](2);
-    path[0] = address(malt);
-    path[1] = address(rewardToken);
-
-    router.swapExactTokensForTokens(
-      maltBalance,
-      0,
-      path,
-      address(this),
-      now
-    );
-
-    rewards = rewardToken.balanceOf(address(this));
-    rewardToken.safeTransfer(msg.sender, rewards);
-  }
-
-    function removeLiquidity() external returns (uint256 amountMalt, uint256 amountReward) {
-    uint256 liquidityBalance = lpToken.balanceOf(address(this));
-
-    if (liquidityBalance == 0) {
-      return (0, 0);
-    }
-
-```
-
-### Attack #7. Superior swap strategies
-
-**Definition:** Superior swap strategies involve using liquidity pools with greater liquidity to reduce slippage and improve trading efficiency. For example, depositing more ETH than the available in a pool can cause the swap to fail due to slippage protection. Instead of making large deposits in one go, the strategy should involve multiple smaller steps. Implementing a timelock mechanism that can dynamically move funds between different protocols allows for more granular rebalancing, enhanced transparency, and gives users time to react to changes in protocol exposure.
-
-**Impact:** By using liquidity pools with higher liquidity, users can achieve lower slippage and better trade execution. This approach not only optimizes the use of available liquidity but also enhances the overall user experience by providing more reliable and efficient swaps. Additionally, the use of a timelock mechanism ensures better fund management and allows users to make informed decisions based on changes in protocol exposure, thereby increasing trust and transparency in the system.
-
-**Example:** Asymmetry
-
-**Asymmetry:** Uniswap rETH/WETH pool for swaps has higher fees and lower liquidity compared to alternatives like Balancer and Curve pools. The Uniswap pool has $5 million in liquidity with a 0.05% fee, while Balancer has $80 million in liquidity with a 0.04% fee, and Curve has $8 million in liquidity with a 0.037% fee. The use of the Uniswap pool results in higher slippage and unnecessary fees, diminishing user value. The recommended mitigation is to use RocketPool’s RocketSwapRouter.sol contract’s swapTo() function, which optimizes the swap path between Balancer and Uniswap pools. Alternatively, modifying Reth.sol to use the Balancer pool would also reduce swap fees and slippage costs.
-
-```solidity
-// lower fees and higher liquidity
-
-function swapExactInputSingleHop(
-    address _tokenIn,
-    address _tokenOut,
-    uint24 _poolFee,
-    uint256 _amountIn,
-    uint256 _minOut
-) private returns (uint256 amountOut) {
-    IERC20(_tokenIn).approve(UNISWAP_ROUTER, _amountIn);
-    ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
-        .ExactInputSingleParams({
-            tokenIn: _tokenIn,
-            tokenOut: _tokenOut,
-            fee: _poolFee,
-            recipient: address(this),
-            amountIn: _amountIn,
-            amountOutMinimum: _minOut,
-            sqrtPriceLimitX96: 0
-        });
-    amountOut = ISwapRouter(UNISWAP_ROUTER).exactInputSingle(params);
-}
-```
-
-### Attack #8. Fee calculation & on transfer
+### Attack #6. Fee calculation & operation
 
 **Definition:** A swap fee, also known as a trading fee or transaction fee, is a small percentage of the transaction value that is charged by a decentralized exchange (DEX) like Uniswap for facilitating trades between different token pairs. This fee is typically paid by the trader and is distributed to liquidity providers (LPs) as an incentive for supplying liquidity to the pool.
 
@@ -722,6 +673,12 @@ function mint(
 
 ```
 
+### Attack #7. Fee on transfer
+
+**Definition:** Some tokens take a transfer fee (e.g. STA, PAXG), some do not currently charge a fee but may do so in the future (e.g. USDT, USDC).
+
+**Impact:** A vulnerability fails to account for fee-on-transfer tokens, resulting in potential system funds deficits and user fund freezes, where the actual amount of tokens received is less than expected due to transfer fees.
+
 **OpenLeverage:** The OpenLevV1 contract has a vulnerability when interacting with V3 DEX for closing trades, where it fails to account for fee-on-transfer tokens, resulting in potential system funds deficits and user fund freezes. Malicious users can exploit this by repeatedly opening and closing positions with taxed tokens, draining contract funds. The issue primarily arises when the received funds are less than indicated by the DEX, leading to incorrect repayment accounting and failures in the `closeTrade` function. The recommended mitigation is to implement balance checks before and after DEX operations to ensure accurate accounting.
 
 ```solidity
@@ -808,7 +765,7 @@ if (amountToken < tokenMin) { //4. Ensures enough TOKEN has been transferred
 
 ```
 
-### Attack #9. liquidity
+### Attack #8. Ignore liquidity
 
 **Definition:** Pool liquidity refers to the availability of assets in a liquidity pool on a decentralized exchange (DEX) like Uniswap or Sushiswap. Liquidity pools are collections of funds locked in a smart contract, provided by liquidity providers (LPs) to facilitate trading. The liquidity in a pool determines how easily assets can be swapped without significant price impact. High liquidity means trades can be executed smoothly with minimal slippage, while low liquidity can lead to higher slippage and difficulty in executing large trades.
 
@@ -840,7 +797,7 @@ try uniswapCSSR.getLiquidity(_asset, _pairedWith) returns (
 
 ```
 
-### Attack #10. Access control
+### Attack #9. Access control
 
 **Definition:** DEXs allow users to trade cryptocurrencies directly without relying on a central authority. However, Users are not supposed to interact with the pool contracts directly.
 
@@ -947,7 +904,7 @@ try uniswapCSSR.getLiquidity(_asset, _pairedWith) returns (
 
 ```
 
-### Attack #11. swap type & calculation
+### Attack #10. Swap type & calculation
 
 **Definition:** In decentralized finance (DeFi), liquidity pools enable the trading of cryptocurrencies by maintaining a constant product formula, which is crucial for determining the price of tokens within the pool. swap calculation ensures that the product of the amounts of the two tokens in the pool remains constant before and after a swap, allowing for dynamic pricing based on the ratio of the tokens in the pool.
 
@@ -1015,7 +972,42 @@ function calculateOutGivenIn(uint256 amountIn, address[] calldata path)
 
 ```
 
-### Attack #12. governance
+### Attack #11. Superior swap strategies
+
+**Definition:** Superior swap strategies involve using liquidity pools with greater liquidity to reduce slippage and improve trading efficiency. For example, depositing more ETH than the available in a pool can cause the swap to fail due to slippage protection. Instead of making large deposits in one go, the strategy should involve multiple smaller steps. Implementing a timelock mechanism that can dynamically move funds between different protocols allows for more granular rebalancing, enhanced transparency, and gives users time to react to changes in protocol exposure.
+
+**Impact:** By using liquidity pools with higher liquidity, users can achieve lower slippage and better trade execution. This approach not only optimizes the use of available liquidity but also enhances the overall user experience by providing more reliable and efficient swaps. Additionally, the use of a timelock mechanism ensures better fund management and allows users to make informed decisions based on changes in protocol exposure, thereby increasing trust and transparency in the system.
+
+**Example:** Asymmetry
+
+**Asymmetry:** Uniswap rETH/WETH pool for swaps has higher fees and lower liquidity compared to alternatives like Balancer and Curve pools. The Uniswap pool has $5 million in liquidity with a 0.05% fee, while Balancer has $80 million in liquidity with a 0.04% fee, and Curve has $8 million in liquidity with a 0.037% fee. The use of the Uniswap pool results in higher slippage and unnecessary fees, diminishing user value. The recommended mitigation is to use RocketPool’s RocketSwapRouter.sol contract’s swapTo() function, which optimizes the swap path between Balancer and Uniswap pools. Alternatively, modifying Reth.sol to use the Balancer pool would also reduce swap fees and slippage costs.
+
+```solidity
+// lower fees and higher liquidity
+
+function swapExactInputSingleHop(
+    address _tokenIn,
+    address _tokenOut,
+    uint24 _poolFee,
+    uint256 _amountIn,
+    uint256 _minOut
+) private returns (uint256 amountOut) {
+    IERC20(_tokenIn).approve(UNISWAP_ROUTER, _amountIn);
+    ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+        .ExactInputSingleParams({
+            tokenIn: _tokenIn,
+            tokenOut: _tokenOut,
+            fee: _poolFee,
+            recipient: address(this),
+            amountIn: _amountIn,
+            amountOutMinimum: _minOut,
+            sqrtPriceLimitX96: 0
+        });
+    amountOut = ISwapRouter(UNISWAP_ROUTER).exactInputSingle(params);
+}
+```
+
+### Attack #12. Governance check & manipulation
 
 **Definition:** Governance in decentralized finance (DeFi) plays a crucial role in shaping the future of protocols, including those focused on swapping tokens. Governance mechanisms allow the community to make collective decisions regarding the protocol's direction, including changes to fee structures, addition of new tokens, or adjustments to liquidity incentives.
 
@@ -1047,7 +1039,23 @@ function calculateOutGivenIn(uint256 amountIn, address[] calldata path)
 
 **SolidlyV3AMM:** The Solidly V3 AMM protocol allows the owner to control swap fees through the feeCollector role assigned by the SolidlyV3Factory. This role, initially held by a RewardsDistributor contract, lets the owner set a Merkle root determining who can claim fees. Risks include the owner directing fees to themselves, setting a Merkle root that benefits only them, or leaving fees unclaimable indefinitely. Despite using a multi-sig and Timelock contract, the 24-hour delay may not suffice for LPs to claim their yield, suggesting a need to reconsider the fee claiming mechanism(owner direct fees to themselves).
 
-https://solodit.xyz/issues/m-02-protocol-owner-has-control-over-swap-fees-earned-pashov-audit-group-none-solidlyv3amm-markdown
+### Appendix. Money Laundering Through DEXs
+
+**Definition:** Criminals can use DEXs for crypto-to-crypto swaps to launder criminal proceeds. This involves obtaining Ether or Ethereum-based tokens (for example, by hacking an exchange), swapping them at a DEX for new tokens, and then depositing these new tokens at a legitimate exchange to cash out for fiat.
+
+**Impact:** While DEXs offer advantages in terms of bypassing compliance controls and lacking a central administrator, they also present challenges for money laundering. All DEX crypto-to-crypto swaps are recorded in smart contracts on the blockchain, allowing for visibility into these transactions and the potential tracing of illicit funds.
+
+**Example:** Tornado cash, Blender.io
+
+**Tornado cash:** By sending illicit funds to Tornado Cash, criminals can obfuscate the funds trail – making it more difficult to decipher their activity. In the recent Ronin Bridge hack attributed to North Korea’s Lazarus Group, the hackers made extensive use of Tornado Cash to launder some of the stolen cryptoassets from the heist, which at the time of the theft totalled $540 million.
+
+A money laundering typology involving DEXs works as follows:
+1)a criminal obtains Ether or Ethereum-based tokens, for example by hacking a DeFi lending platform;
+2)the criminal sends the stolen funds to a Tornado Cash address;
+3)the criminal receives new “clean” tokens from Tornado cash; and
+4)the new tokens are deposited at a centralized exchange platform, and cashed out for fiat.
+
+**Blender.io:** As an aside, Bitcoin mixer Blender.io recently became the first virtual asset mixer to be targeted by sanctions from the US Office of Foreign Assets Control (OFAC). However, it is a mixer that handles Bitcoin exclusively.
 
 ### Remediation Summary
 
