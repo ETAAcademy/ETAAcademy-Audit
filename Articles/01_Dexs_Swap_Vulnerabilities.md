@@ -210,7 +210,7 @@ modifier ensure(uint deadline) {
 
 **Impact:** Due to the Reinvestment Curve feature of KyberSwap Elastic pool, when both base liquidity and reinvestment liquidity are considered as actual liquidity, it calculates the amount of tokens needed for exchange at the scale boundary using the calcReachAmount function. This calculation resulted in a higher than expected amount, causing the next price sqrtP to exceed the boundary scale’s sqrtP. The pool, using an inequality to check sqrtP, led to the protocol not updating liquidity and crossing the tick as expected through \_updateLiquidityAndCrossTick.
 
-**Example:** KyberSwap
+**Example:** [KyberSwap](https://slowmist.medium.com/a-deep-dive-into-the-kyberswap-hack-3e13f3305d3a)
 
 **KyberSwap:** The attack on KyberSwap, where the attacker stole funds mostly in Ether, wrapped ether (wETH), and USDC from multiple cross-chain deployments of KyberSwap. This suggests that the theft targeted the liquidity provider pools themselves, indicating a directed attack against the core infrastructure of the DEX. Due to the Reinvestment Curve feature of KyberSwap Elastic pool, when both base liquidity and reinvestment liquidity are considered as actual liquidity, it calculates the amount of tokens needed for exchange at the scale boundary using the calcReachAmount function. This calculation resulted in a higher than expected amount, causing the next price sqrtP to exceed the boundary scale’s sqrtP. The pool, using an inequality to check sqrtP, led to the protocol not updating liquidity and crossing the tick as expected through \_updateLiquidityAndCrossTick.
 
