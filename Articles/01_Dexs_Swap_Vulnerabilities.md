@@ -166,7 +166,7 @@ DEXs swap attacks primarily revolve around exploiting vulnerabilities in decentr
 **Asymmetry:** Lack of a deadline parameter in the `ISwapRouter.exactInputSingle` function can lead to front-running vulnerabilities, where a validator might delay a transaction to exploit market conditions, causing significant slippage. The problem arises when users stake and Uniswap is used to convert ETH to WETH without a set deadline, making the transaction susceptible to manipulation. The recommended mitigation is to include a user-input deadline parameter in the `Reth.deposit()` function and pass it to the swap functions to prevent such exploits and to ensure that the transaction can be executed in a short period of time. And, introduce a deadline parameter to the functions withdraw() for WstEth.sol and SfrxEth.sol and deposit() for Reth.sol.
 
 ```solidity
-    // deadline
+    // check deadline： outdated maximum slippage value
 
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
@@ -214,7 +214,11 @@ modifier ensure(uint deadline) {
 
 **KyberSwap:** The attack on KyberSwap, where the attacker stole funds mostly in Ether, wrapped ether (wETH), and USDC from multiple cross-chain deployments of KyberSwap. This suggests that the theft targeted the liquidity provider pools themselves, indicating a directed attack against the core infrastructure of the DEX. Due to the Reinvestment Curve feature of KyberSwap Elastic pool, when both base liquidity and reinvestment liquidity are considered as actual liquidity, it calculates the amount of tokens needed for exchange at the scale boundary using the calcReachAmount function. This calculation resulted in a higher than expected amount, causing the next price sqrtP to exceed the boundary scale’s sqrtP. The pool, using an inequality to check sqrtP, led to the protocol not updating liquidity and crossing the tick as expected through \_updateLiquidityAndCrossTick.
 
+![01_swap.webp](./img/01_swap.webp)
+
 ```solidity
+    // fee reinvestment => the next price sqrtP to exceed the boundary scale’s sqrtP. The pool, but not updating liquidity and crossing the tick as expected by Invalid validation
+    // flashloan attack => final reverse swap resulted in more funds than anticipated
     // swapData.reinvestL,
     // if swapData.sqrtP != swapData.nexSqrtP
 
@@ -1022,7 +1026,7 @@ function calculateOutGivenIn(uint256 amountIn, address[] calldata path)
 **PoolTogether:** The vulnerability identified in `SwappableYieldSource.sol` involves the `swapYieldSource` function, which allows the owner or asset manager to switch the yield source contract at any time. This capability could potentially be exploited maliciously to immediately withdraw all funds from the current yield source to a new, possibly malicious contract that implements a compatible `depositToken()` function. This could lead to a rug pull scenario where funds are effectively stolen. Recommendations to mitigate this risk include implementing checks to ensure the new yield source is from a trusted registry, or enforcing a timelock mechanism for governance approval before executing such swaps.
 
 ```solidity
-// owner modifier
+// not check _newYieldSource(yield receiver) contract
 
   /// @notice Swap current yield source for new yield source.
   /// @dev This function is only callable by the owner or asset manager.
