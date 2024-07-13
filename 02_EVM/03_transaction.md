@@ -271,3 +271,76 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: Cross-chain USDO and TOFT flows using approvals may be vulnerable to DoS attacks through permit-based griefing. Attackers can exploit front-run exploits by monitoring permit signatures in the mempool and executing them before intended transactions, rendering transactions ineffective. This limits Tapioca's architecture to single signature without revokes.
 - Impact & Recommendation: Use Permits for granting approvals(with try-catch), avoiding their use for revoking approvals to prevent front-run exploits. Suggest granting higher allowances and implementing renounceAllowance for TOFT tokens to enforce a secure allowance pattern.
   <br> 🐬: [Source](https://code4rena.com/reports/2024-02-tapioca#m-25-same-contract-multi-permits-fundamentally-cannot-be-solved-via-the-chosen-standards) & [Report](https://code4rena.com/reports/2024-02-tapioca)
+
+## 9.[Medium] The signatures are replayable
+
+### No Nonce and check
+
+- Summary: User-signed orders lack a nonce, making signatures replayable and allowing the same order to be reused multiple times. The system only verifies the user's signature without ensuring the signed order matches the parameters used in execution, which can lead to unauthorized actions and potential fund loss.
+
+- Impact & Recommendation: The recommended fix is to add a nonce and verify that operator parameters align with the user's signed order.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-krystal-defi#m-02-the-signatures-are-replayable) & [Report](https://code4rena.com/reports/2024-06-krystal-defi)
+
+<details><summary>POC</summary>
+
+```solidity
+
+@>  StructHash.Order emptyUserConfig; // todo: remove this when we fill user configuration
+    function setUp() external {
+        _setupBase();
+    }
+    function testAutoAdjustRange() external {
+        // add liquidity to existing (empty) position (add 1 DAI / 0 USDC)
+        _increaseLiquidity();
+        (address userAddress, uint256 privateKey) = makeAddrAndKey("positionOwnerAddress");
+        vm.startPrank(TEST_NFT_ACCOUNT);
+        NPM.safeTransferFrom(TEST_NFT_ACCOUNT, userAddress, TEST_NFT);
+        vm.stopPrank();
+@>      bytes memory signature = _signOrder(emptyUserConfig, privateKey);
+        uint256 countBefore = NPM.balanceOf(userAddress);
+        (, , , , , , , uint128 liquidityBefore, , , , ) = NPM.positions(
+            TEST_NFT
+        );
+        V3Automation.ExecuteParams memory params = V3Automation.ExecuteParams(
+            V3Automation.Action.AUTO_ADJUST,
+            Common.Protocol.UNI_V3,
+            NPM,
+            TEST_NFT,
+            liquidityBefore,
+            address(USDC),
+            500000000000000000,
+            400000,
+            _get05DAIToUSDCSwapData(),
+            0,
+            0,
+            "",
+            0,
+            0,
+            block.timestamp,
+            184467440737095520, // 0.01 * 2^64
+            0,
+            MIN_TICK_500,
+            -MIN_TICK_500,
+            true,
+            0,
+            0,
+            emptyUserConfig,
+            signature
+        );
+        // using approve / execute pattern
+        vm.prank(userAddress);
+        NPM.setApprovalForAll(address(v3automation), true);
+        vm.prank(TEST_OWNER_ACCOUNT);
+        v3automation.execute(params);
+        // now we have 2 NFTs (1 empty)
+        uint256 countAfter = NPM.balanceOf(userAddress);
+        assertGt(countAfter, countBefore);
+        (, , , , , , , uint128 liquidityAfter, , , , ) = NPM.positions(
+            TEST_NFT
+        );
+        assertEq(liquidityAfter, 0);
+    }
+
+```
+
+</details>

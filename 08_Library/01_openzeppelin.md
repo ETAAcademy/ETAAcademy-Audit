@@ -853,3 +853,136 @@ index 6c5a1d7..196e3a0 100644
   ```
 
   </details>
+
+## 15.[Medium] \_deductFees() is incompatible with tokens that revert on zero value transfers
+
+### Zero value transfers
+
+- Summary: The function \_deductFees() in Krystal DeFi's protocol can cause transactions to revert when interacting with tokens that do not support zero value transfers. This is because SafeERC20.safeTransfer() is called even when the fee amount is zero, leading to potential reversion. This issue affects the main functionality of V3Automation and V3Utils.
+
+- Impact & Recommendation: The recommended fix is to modify \_deductFees() to call SafeERC20.safeTransfer() only if the fee amount is greater than zero.
+  <br> 🐬: [Source](<https://code4rena.com/reports/2024-06-krystal-defi#m-03-_deductFees()-is-incompatible-with-tokens-that-revert-on-zero-value-transfers>) & [Report](https://code4rena.com/reports/2024-06-krystal-defi)
+
+<details><summary>POC</summary>
+
+```solidity
+
+if (params.feeX64 == 0) {
+    revert NoFees();
+}
+if (params.amount0 > 0) {
+    feeAmount0 = FullMath.mulDiv(params.amount0, params.feeX64, Q64);
+    amount0Left = params.amount0 - feeAmount0;
+    SafeERC20.safeTransfer(IERC20(params.token0), FEE_TAKER, feeAmount0);
+}
+if (params.amount1 > 0) {
+    feeAmount1 = FullMath.mulDiv(params.amount1, params.feeX64, Q64);
+    amount1Left = params.amount1 - feeAmount1;
+    SafeERC20.safeTransfer(IERC20(params.token1), FEE_TAKER, feeAmount1);
+}
+if (params.amount2 > 0) {
+    feeAmount2 = FullMath.mulDiv(params.amount2, params.feeX64, Q64);
+    amount2Left = params.amount2 - feeAmount2;
+    SafeERC20.safeTransfer(IERC20(params.token2), FEE_TAKER, feeAmount2);
+}
+
+```
+
+</details>
+
+## 16.[Medium] The Protocol breaks the Allowance Mechanism of the NFTs
+
+### ERC721 allowance
+
+- Summary: The protocol's mechanism for transferring Position NFTs to and from the protocol for executing actions breaks the ERC721 allowance mechanism, which zeroes out approvals for the tokens. This causes users to lose their approved entities, disrupting any pre-set approvals. For instance, if a user has approved another party to manage their positions, the approvals will be reset, preventing the approved party from acting on the user's behalf.
+
+- Impact & Recommendation: The suggested mitigation is to use the isAuthorizedForToken modifier to ensure proper authorization without breaking existing approvals. However, Krystal DeFi acknowledges that using the onERC721Received hook is currently the safest option for maintaining user convenience.
+  <br> 🐬: [Source](<https://code4rena.com/reports/2024-06-krystal-defi#m-04-the protocol-breaks-the-allowance-mechanism-of-the-NFTs>) & [Report](https://code4rena.com/reports/2024-06-krystal-defi)
+
+<details><summary>POC</summary>
+
+```solidity
+333:     function _transfer(address from, address to, uint256 tokenId) internal virtual {
+334:         require(ERC721.ownerOf(tokenId) == from, "ERC721: transfer from incorrect owner");
+335:         require(to != address(0), "ERC721: transfer to the zero address");
+336:
+337:         _beforeTokenTransfer(from, to, tokenId, 1);
+338:
+339:         // Check that tokenId was not transferred by `_beforeTokenTransfer` hook
+340:         require(ERC721.ownerOf(tokenId) == from, "ERC721: transfer from incorrect owner");
+341:
+342:         // Clear approvals from the previous owner
+343:   >>    delete _tokenApprovals[tokenId];
+344:
+345:         unchecked {
+346:             // `_balances[from]` cannot overflow for the same reason as described in `_burn`:
+347:             // `from`'s balance is the number of token held, which is at least one before the current
+348:             // transfer.
+349:             // `_balances[to]` could overflow in the conditions described in `_mint`. That would require
+350:             // all 2**256 token ids to be minted, which in practice is impossible.
+351:             _balances[from] -= 1;
+352:             _balances[to] += 1;
+353:         }
+354:         _owners[tokenId] = to;
+355:
+356:         emit Transfer(from, to, tokenId);
+357:
+358:         _afterTokenTransfer(from, to, tokenId, 1);
+359:     }
+
+```
+
+</details>
+
+## 17.[Medium] Swapping logic would be broken for some supported tokens
+
+### Zero value approvals
+
+- Summary: Krystal DeFi's swapping logic is incompatible with tokens that revert on zero value approvals, such as BNB, which the protocol intends to support. The issue arises in the `_swap()` function, which attempts to reset approvals to zero after a swap. This reverts for tokens that do not allow zero value approvals, breaking the swap functionality for these tokens.
+
+- Impact & Recommendation: The recommended mitigation is to either use `_safeResetAndApprove()` within `_swap()` or avoid supporting tokens that revert on zero value approvals.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-krystal-defi#m-06-swapping-logic-would-be-broken-for-some-supported-tokens) & [Report](https://code4rena.com/reports/2024-06-krystal-defi)
+
+<details><summary>POC</summary>
+
+```solidity
+    function _swap(IERC20 tokenIn, IERC20 tokenOut, uint256 amountIn, uint256 amountOutMin, bytes memory swapData) internal returns (uint256 amountInDelta, uint256 amountOutDelta) {
+        if (amountIn != 0 && swapData.length != 0 && address(tokenOut) != address(0)) {
+            uint256 balanceInBefore = tokenIn.balanceOf(address(this));
+            uint256 balanceOutBefore = tokenOut.balanceOf(address(this));
+            // approve needed amount
+            _safeApprove(tokenIn, swapRouter, amountIn);
+            // execute swap
+            (bool success,) = swapRouter.call(swapData);
+            if (!success) {
+                revert ("swap failed!");
+            }
+            // reset approval
+            //@audit resetting the approval would never work for these tokens
+            _safeApprove(tokenIn, swapRouter, 0);
+            uint256 balanceInAfter = tokenIn.balanceOf(address(this));
+            uint256 balanceOutAfter = tokenOut.balanceOf(address(this));
+            amountInDelta = balanceInBefore - balanceInAfter;
+            amountOutDelta = balanceOutAfter - balanceOutBefore;
+            // amountMin slippage check
+            if (amountOutDelta < amountOutMin) {
+                revert SlippageError();
+            }
+            // event for any swap with exact swapped value
+            emit Swap(address(tokenIn), address(tokenOut), amountInDelta, amountOutDelta);
+        }
+    }
+
+    /// @dev some tokens require allowance == 0 to approve new amount
+    /// but some tokens does not allow approve ammount = 0
+    /// we try to set allowance = 0 before approve new amount. if it revert means that
+    /// the token not allow to approve 0, which means the following line code will work properly
+    function _safeResetAndApprove(IERC20 token, address _spender, uint256 _value) internal {
+        /// @dev ommited approve(0) result because it might fail and does not break the flow
+        address(token).call(abi.encodeWithSelector(token.approve.selector, _spender, 0));
+        /// @dev value for approval after reset must greater than 0
+        require(_value > 0);
+        _safeApprove(token, _spender, _value);
+    }
+
+```
