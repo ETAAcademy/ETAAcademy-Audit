@@ -576,3 +576,50 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 10.[High] Malicious operators can bypass checks in DSS Hooks
+
+### Insufficient gas
+
+- Summary: When an operator registers and stakes in the DSS, the function `callHookIfInterfaceImplemented` checks if the DSS supports the required interface and then calls the corresponding hook. The issue arises because a low-level call is used to check for the interface support and execute the hook, which can be manipulated by supplying insufficient gas. Specifically, a malicious operator can provide a very low gas limit for the low-level call, causing it to fail due to out-of-gas (OOG) error. The protocol does not handle this failure correctly and assumes the DSS does not implement the hook, allowing the operator to bypass essential registration and stake update checks.
+
+- Impact & Recommendation: it is recommended to ensure sufficient gas is available before making the low-level call in `callHookIfInterfaceImplemented`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-karak-pro-league#h-02-malicious-operators-can-bypass-checks-in-dss-hooks) & [Report](https://code4rena.com/reports/2024-06-karak-pro-league)
+
+<details><summary>POC</summary>
+
+```solidity
+    function callHookIfInterfaceImplemented(
+        IERC165 dss,
+        bytes memory data,
+        bytes4 interfaceId,
+        bool ignoreFailure,
+        uint256 gas
+    ) internal returns (bool) {
++       if (gasleft() < Constants.SUPPORTS_INTERFACE_GAS_LIMIT ) revert NotEnoughGas();
+        (bool success,) = address(dss).call{gas: Math.min(Constants.SUPPORTS_INTERFACE_GAS_LIMIT, gasleft())}(
+            abi.encodeWithSelector(IERC165.supportsInterface.selector, interfaceId)
+        );
+        if (!success) {
+            emit InterfaceNotSupported();
+            return false;
+        }
+        return callHook(address(dss), data, ignoreFailure, gas);
+    }
+
+        function registerOperatorToDSS(State storage self, IDSS dss, address operator, bytes memory registrationHookData)
+        external
+    {
+        if (self.dssMap.length() == Constants.MAX_DSS_PER_OPERATOR) revert MaxDSSCapacityReached();
+        self.dssMap.set(address(dss), 1); // Set a non zero value for dss
+        HookLib.callHookIfInterfaceImplemented(
+            dss,
+            abi.encodeWithSelector(dss.registrationHook.selector, operator, registrationHookData),
+            dss.registrationHook.selector,
+            false,
+            Constants.DEFAULT_HOOK_GAS
+        );
+    }
+```
+
+</details>

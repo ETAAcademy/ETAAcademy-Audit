@@ -1487,3 +1487,12 @@ func getBVMETHBalanceKey(addr common.Address) common.Hash {
 ```
 
 </details>
+
+## 24. [High] DSS can slash more assets than are allowed against a vault within a single slashing event
+
+### Duplicates
+
+- Summary: The vulnerability lies in the slashing logic, which allows multiple slashing requests for the same vault to be processed in a single event. For example, if the maxSlashingWad is set to 5%, a malicious DSS can submit slashing requests such as [VaultA=5%, VaultA=5%, VaultA=5%], thereby slashing a total of 15% from VaultA in a single event.
+
+- Impact & Recommendation: Ensure that the slashingRequest.vault does not contain duplicate entries.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-karak-pro-league#h-01-dss-can-slash-more-assets-than-are-allowed-against-a-vault-within-a-single-slashing-event) & [Report](https://code4rena.com/reports/2024-06-karak-pro-league)

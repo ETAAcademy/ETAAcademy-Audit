@@ -648,3 +648,37 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 9.[High] validateAndUpdateVaultStakeInDSS() forwards incorrect operator address to finishUpdateStakeHook()
+
+### `msg.sender` as the operator address
+
+- Summary: A vulnerability in the `validateAndUpdateVaultStakeInDSS` function of the `DSS` protocol incorrectly forwards the `msg.sender` as the operator address to the `finishUpdateStakeHook`. This can lead to unauthorized addresses being treated as operators, potentially causing incorrect registration for rewards or other associated logic.
+
+- Impact & Recommendation: it is recommended to include the operator address in the `QueuedStakeUpdate` structure and forward the correct operator address to the `finishUpdateStakeHook` in `validateAndUpdateVaultStakeInDSS`.
+  <br> 🐬: [Source](<https://code4rena.com/reports/2024-06-karak-pro-league#lines-of-code#h-03-validateAndUpdateVaultStakeInDSS()-forwards-incorrect-operator-address-to-finishUpdateStakeHook()>) & [Report](https://code4rena.com/reports/2024-06-karak-pro-league)
+
+<details><summary>POC</summary>
+
+```solidity
+    function finishUpdateStakeHook(address operator) external;
+
+    ...
+        HookLib.callHookIfInterfaceImplemented(
+        dss,
+        abi.encodeWithSelector(dss.finishUpdateStakeHook.selector, msg.sender),
+        dss.finishUpdateStakeHook.selector,
+        true,
+        Constants.DEFAULT_HOOK_GAS
+    );
+    ...
+
+    /// @notice Allows anyone to finish the queued request for an operator to update assets delegated to a DSS
+    /// @dev Only operator can finish their queued request valid only after a
+    /// minimum delay of `Constants.MIN_STAKE_UPDATE_DELAY` after starting the request
+    function finalizeUpdateVaultStakeInDSS(Operator.QueuedStakeUpdate memory queuedStake, address operator)
+    ...
+
+```
+
+</details>
