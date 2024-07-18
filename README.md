@@ -2,7 +2,7 @@
 
 <span>
 🐬Recipe: ETAAcademy-Audit<br>
-💓Ingredients:  1 to 4 interesting high-medium bugs are shared from each new report, which are different from the existing 120+ bugs in the repository.<br>
+💓Ingredients:  1 to 4 interesting high-medium bugs are shared from each new report, which are different from the existing 150+ bugs in the repository.<br>
 🥰Tips: No new report, no update  🫡 💓 🚀 
 </span>
 
