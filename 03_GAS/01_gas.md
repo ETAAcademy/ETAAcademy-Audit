@@ -623,3 +623,34 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 11.[Medium] Adding staking instance as nominee before it is created
+
+### Unnecessary iteration
+
+- Summary: An attacker could add a staking instance as a nominee before it is created, causing unnecessary iteration over epochs when claiming incentives and leading to excessive gas consumption. By predicting the address of future instances, attackers can add them as nominees early on, forcing the system to process irrelevant epochs when the instance is eventually created and claims rewards.
+
+- Impact & Recommendation: Ensure nominees are already created before being added and incorporating the `initPayload` into the address generation process to prevent such prediction-based attacks.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-olas#m-03-adding-staking-instance-as-nominee-before-it-is-created) & [Report](https://code4rena.com/reports/2024-05-olas)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function addNomineeEVM(address account, uint256 chainId) external {
+        require(IStakingFactory.mapInstanceParams(account).implementation != address(0), " the nominee is not created yet");
+        // ....
+    }
+
+    function createStakingInstance(
+        address implementation,
+        bytes memory initPayload
+    ) external returns (address payable instance) {
+        //.....
+        bytes32 salt = keccak256(abi.encodePacked(block.chainid, localNonce, keccak256(initPayload)));
+        //.....
+    }
+
+```
+
+</details>

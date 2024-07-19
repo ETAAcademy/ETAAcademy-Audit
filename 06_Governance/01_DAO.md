@@ -640,3 +640,41 @@ function _vote(
 ```
 
 </details>
+
+## 10.[Medium] Less active nominees can be left without rewards after an year of inactivity
+
+### Lose voting power
+
+- Summary: The VoteWeighting contract requires nominee activity at least every 53 weeks to ensure proper functionality. Currently, if a nominee remains inactive for over a year, the nomineeRelativeWeight() function returns 0, causing users with long-term locked veOLAS tokens to lose their voting power and rewards. This problem arises because the contract’s one-year lookbehind period does not retain historical data beyond 53 weeks, leading to unfair distribution of voting power.
+
+- Impact & Recommendation: It is recommended to extend the lookbehind period to cover the maximum lock period plus one additional year, similar to Curve’s approach.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-olas#m-02-less-active-nominees-can-be-left-without-rewards-after-an-year-of-inactivity) & [Report](https://code4rena.com/reports/2024-05-olas)
+
+<details><summary>POC</summary>
+
+```solidity
+
+        for (uint256 i = 0; i < MAX_NUM_WEEKS; i++) {
+            if (t > block.timestamp) {
+                break;
+            }
+            t += WEEK;
+            uint256 dBias = pt.slope * WEEK;
+            if (pt.bias > dBias) {
+                pt.bias -= dBias;
+                uint256 dSlope = changesWeight[nomineeHash][t];
+                pt.slope -= dSlope;
+            } else {
+                pt.bias = 0;
+                pt.slope = 0;
+            }
+
+            pointsWeight[nomineeHash][t] = pt;
+            if (t > block.timestamp) {
+                timeWeight[nomineeHash] = t;
+            }
+        }
+
+```
+
+</details>

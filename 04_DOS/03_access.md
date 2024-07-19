@@ -682,3 +682,30 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 10.[High] Arbitrary tokens and data can be bridged to GnosisTargetDispenserL2 to manipulate staking incentives
+
+### not verify the message or the token received
+
+- Summary: The `GnosisTargetDispenserL2` contract can be exploited because its `onTokenBridged()` callback does not verify the sender of message or the token received. This allows attackers to send any tokens with fake staking data, which the contract processes as valid, leading to potential redistribution of withheld funds or storage of amounts for later redemption.
+
+- Impact & Recommendation: It is recommended to separate token bridging and staking data transmission, removing the `onTokenBridged()` callback to ensure staking data is validated from an authentic L1 source.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-olas#h-02-arbitrary-tokens-and-data-can-be-bridged-to-gnosistargetdispenserl2-to-manipulate-staking-incentives) & [Report](https://code4rena.com/reports/2024-05-olas)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function onTokenBridged(address, uint256, bytes calldata data) external {
+        // Check for the message to come from the L2 token relayer
+        if (msg.sender != l2TokenRelayer) {
+            revert TargetRelayerOnly(msg.sender, l2TokenRelayer);
+        }
+
+        // Process the data
+        _receiveMessage(l2MessageRelayer, l1DepositProcessor, data);
+    }
+
+```
+
+</details>

@@ -1993,3 +1993,91 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 19.[Medium] checkpoint function is not called before staking which can cause loss of rewards for already staked services
+
+### Update the availableRewards
+
+- Summary: The `checkpoint` function is not called before staking in the contract, which can lead to a loss of rewards for previously staked services. When a new service ID is staked without calling `checkpoint`, rewards are not distributed correctly, causing existing stakers to receive less than they should. For example, if rewards are not updated before a new stake is added, the total available rewards may be divided incorrectly among more services, reducing the rewards for earlier stakers.
+
+- Impact & Recommendation: The `checkpoint` function should be called at the start of the `stake` function to ensure that rewards are distributed correctly before allowing new stakes.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-olas#m-01-checkpoint-function-is-not-called-before-staking-which-can-cause-loss-of-rewards-for-already-staked-services) & [Report](https://code4rena.com/reports/2024-05-olas)
+
+<details><summary>POC</summary>
+
+```solidity
+
+function stake(uint256 serviceId) external {
+==>         checkpoint();
+        // Check if there available rewards
+        if (availableRewards == 0) {
+            revert NoRewardsAvailable();
+        }
+        // Check if the evicted service has not yet unstaked
+        ServiceInfo storage sInfo = mapServiceInfo[serviceId];
+        // tsStart being greater than zero means that the service was not yet unstaked: still staking or evicted
+        if (sInfo.tsStart > 0) {
+            revert ServiceNotUnstaked(serviceId);
+        }
+        // Check for the maximum number of staking services
+        uint256 numStakingServices = setServiceIds.length;
+        if (numStakingServices == maxNumServices) {
+            revert MaxNumServicesReached(maxNumServices);
+        }
+        // Check the service conditions for staking
+        IService.Service memory service = IService(serviceRegistry).getService(serviceId);
+        // Check the number of agent instances
+        if (numAgentInstances != service.maxNumAgentInstances) {
+            revert WrongServiceConfiguration(serviceId);
+        }
+        // Check the configuration hash, if applicable
+        if (configHash != 0 && configHash != service.configHash) {
+            revert WrongServiceConfiguration(serviceId);
+        }
+        // Check the threshold, if applicable
+        if (threshold > 0 && threshold != service.threshold) {
+            revert WrongServiceConfiguration(serviceId);
+        }
+        // The service must be deployed
+        if (service.state != IService.ServiceState.Deployed) {
+            revert WrongServiceState(uint256(service.state), serviceId);
+        }
+        // Check that the multisig address corresponds to the authorized multisig proxy bytecode hash
+        bytes32 multisigProxyHash = keccak256(service.multisig.code);
+        if (proxyHash != multisigProxyHash) {
+            revert UnauthorizedMultisig(service.multisig);
+        }
+        // Check the agent Ids requirement, if applicable
+        uint256 size = agentIds.length;
+        if (size > 0) {
+            uint256 numAgents = service.agentIds.length;
+            if (size != numAgents) {
+                revert WrongServiceConfiguration(serviceId);
+            }
+            for (uint256 i = 0; i < numAgents; ++i) {
+                // Check that the agent Ids
+                if (agentIds[i] != service.agentIds[i]) {
+                    revert WrongAgentId(agentIds[i]);
+                }
+            }
+        }
+        // Check service staking deposit and token, if applicable
+        _checkTokenStakingDeposit(serviceId, service.securityDeposit, service.agentIds);
+        // ServiceInfo struct will be an empty one since otherwise the safeTransferFrom above would fail
+        sInfo.multisig = service.multisig;
+        sInfo.owner = msg.sender;
+        // This function might revert if it's incorrectly implemented, however this is not a protocol's responsibility
+        // It is safe to revert in this place
+        uint256[] memory nonces = IActivityChecker(activityChecker).getMultisigNonces(service.multisig);
+        sInfo.nonces = nonces;
+        sInfo.tsStart = block.timestamp;
+        // Add the service Id to the set of staked services
+        setServiceIds.push(serviceId);
+        // Transfer the service for staking
+        IService(serviceRegistry).safeTransferFrom(msg.sender, address(this), serviceId);
+        emit ServiceStaked(epochCounter, serviceId, msg.sender, service.multisig, nonces);
+    }
+
+```
+
+</details>
