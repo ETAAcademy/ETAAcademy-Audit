@@ -855,3 +855,132 @@ File: contracts/core/strategies/StrategyLeverage.sol
 ```
 
 </details>
+
+## 14.[Medium] Stuck rewards in FeeSplitter contract
+
+### Precision loss in reward calculations
+
+- Summary: The FeeSplitter contract in the Curves protocol has a flaw causing rewards to become stuck due to precision loss in reward calculations as token supply increases and the absence of a withdraw function. This issue leads to unclaimable excess rewards accumulating in the contract, which grow with each token transaction.
+
+- Impact & Recommendation: Rewards become increasingly trapped, highlighting the need to either implement a withdrawal mechanism or adjust the reward calculation to prevent future stuck rewards.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-01-curves#m-05-stuck-rewards-in-feesplitter-contract) & [Report](https://code4rena.com/reports/2024-01-curves)
+
+<details><summary>POC</summary>
+
+```solidity
+
+
+├── 2024-01-curves
+│ ├── test
+│ ├──FeeSplitterTest.t.sol
+
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.8.7;
+import {Test, console2} from "forge-std/Test.sol";
+import {Curves} from "../contracts/Curves.sol";
+import {CurvesERC20Factory} from "../contracts/CurvesERC20Factory.sol";
+import {FeeSplitter} from "../contracts/FeeSplitter.sol";
+import {CurvesERC20} from "../contracts/CurvesERC20.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+contract FeeSplitterTest is Test {
+    Curves public curves;
+    CurvesERC20Factory public factory;
+    FeeSplitter public feeSplitter;
+    //fees:
+    uint256 i_protocolFee = 5e16; // 5%
+    uint256 i_subjectFee = 5e16; // 5%
+    uint256 i_referralFee = 0; // 0%
+    uint256 i_holdersFee = 5e16; // 5%
+    //fee destination:
+    address protocolFeeDestination = makeAddr("protocolFeeDestination");
+    //subjects addresses:
+    address subjectOne = makeAddr("subjectOne");
+    //subject tokens addresses:
+    address subjectOneToken;
+    function setUp() public {
+        //1. deploy required contracts:
+        feeSplitter = new FeeSplitter();
+        factory = new CurvesERC20Factory();
+        curves = new Curves(address(factory), address(feeSplitter));
+        feeSplitter.setCurves(curves);
+        //2. set fees:
+        curves.setMaxFeePercent(i_protocolFee + i_subjectFee + i_holdersFee);
+        curves.setProtocolFeePercent(i_protocolFee, protocolFeeDestination);
+        curves.setExternalFeePercent(i_subjectFee, i_referralFee, i_holdersFee);
+        //3.add a subject token:
+        vm.startPrank(subjectOne);
+        curves.buyCurvesTokenWithName(subjectOne, 1, "subjectOne", curves.DEFAULT_SYMBOL());
+        subjectOneToken = curves.symbolToSubject("CURVES1");
+        vm.stopPrank();
+    }
+    function testSetUp() public {
+        // test fee setup:
+        (uint256 protocolFee, uint256 subjectFee, uint256 referralFee, uint256 holdersFee, ) = curves.getFees(1 ether);
+        assertGt(protocolFee, 0);
+        assertGt(subjectFee, 0);
+        assertEq(referralFee, 0);
+        assertGt(holdersFee, 0);
+        // test if subject token is created:
+        assertFalse(subjectOneToken == address(0));
+    }
+    //! forge test --mt testDrainFeeSplitter
+    function testDrainFeeSplitter() public {
+        uint256 numberOfBuyers = 100;
+        address[] memory buyers = new address[](numberOfBuyers);
+        uint256 boughtAmount = 200; // each one of the buyers will buy 200 subject tokens
+        //1. 100 users buy subjectOne token:
+        for (uint256 i; i < numberOfBuyers; ++i) {
+            buyers[i] = makeAddr(string(Strings.toString(i)));
+            uint256 buyerBalanceBefore = curves.curvesTokenBalance(subjectOne, buyers[i]);
+            assert(buyerBalanceBefore == 0);
+            uint256 price = curves.getBuyPriceAfterFee(subjectOne, boughtAmount + i);
+            vm.deal(buyers[i], price);
+            vm.startPrank(buyers[i]);
+            curves.buyCurvesToken{value: price}(subjectOne, boughtAmount + i);
+            vm.stopPrank();
+            uint256 buyerBalanceAfter = curves.curvesTokenBalance(subjectOne, buyers[i]);
+            assert(buyerBalanceAfter == boughtAmount + i);
+        }
+        uint256 feeSplitterBalanceBeforeClaims = address(feeSplitter).balance;
+        // 2. now these users will claim their rewards from the splitter contract:
+        uint256 totalClaimableByUsers;
+        for (uint256 i; i < numberOfBuyers; ++i) {
+            uint256 buyerETHBalanceBefore = buyers[i].balance;
+            assert(buyerETHBalanceBefore == 0);
+            uint256 claimedFeesByBuyer = feeSplitter.getClaimableFees(subjectOne, buyers[i]);
+            vm.startPrank(buyers[i]);
+            feeSplitter.claimFees(subjectOne);
+            vm.stopPrank();
+            uint256 buyerETHBalanceAfter = buyers[i].balance;
+            assertGt(buyerETHBalanceAfter, buyerETHBalanceBefore);
+            assert(buyerETHBalanceAfter == claimedFeesByBuyer);
+            totalClaimableByUsers += claimedFeesByBuyer;
+        }
+        //3. As can be noticed: the splitter balance is larger than the claimable rewards which will result in the difference being stuck in the contract:
+        uint256 feeSplitterBalanceAfterClaims = address(feeSplitter).balance;
+        assertGt(totalClaimableByUsers - feeSplitterBalanceAfterClaims, 0); // stucke balance
+        assert(feeSplitterBalanceBeforeClaims - totalClaimableByUsers == feeSplitterBalanceAfterClaims);
+        console2.log("totalClaimableByUsers (# of ETH): ", totalClaimableByUsers / 1e18);
+        console2.log("--------------------------------------------------");
+        console2.log("stuck rewards in the splitter contract (# of ETH): ", feeSplitterBalanceAfterClaims / 1e18);
+        //4. to prove it more, another purchase is made, and the buyer claimed his rewards while the stuck amount is increased:
+        address lastBuyer = makeAddr("lastBuyer");
+        uint256 price = curves.getBuyPriceAfterFee(subjectOne, boughtAmount);
+        //---------- buying subjectOne tokens:
+        vm.deal(lastBuyer, price);
+        vm.startPrank(lastBuyer);
+        curves.buyCurvesToken{value: price}(subjectOne, boughtAmount);
+        //---------- lastBuyer claims his rewards:
+        feeSplitter.claimFees(subjectOne);
+        vm.stopPrank();
+        //-----
+        console2.log("--------------------------------------------------");
+        console2.log(
+            "stuck rewards in the splitter contract after the lastBuyer claimed his rewards (# of ETH): ",
+            address(feeSplitter).balance / 1e18
+        );
+    }
+}
+```
+
+</details>

