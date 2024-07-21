@@ -2081,3 +2081,82 @@ function stake(uint256 serviceId) external {
 ```
 
 </details>
+
+## 20.[High] Liquidators can bypass remaining negative margin check and leave the loss to the protocol
+
+### Negative margin check
+
+- Summary: The vulnerability allows liquidators to profit at the expense of the protocol by nearly closing a position and bypassing the negative margin check, which leaves the protocol with the loss; this occurs because the current code only checks for negative margin if the position is fully closed.
+
+- Impact & Recommendation: The suggested fix involves checking for negative margin even when the position is not fully closed.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-predy#h-02-liquidators-can-bypass-remaining-negative-margin-check-and-leave-the-loss-to-the-protocol) & [Report](https://code4rena.com/reports/2024-05-predy)
+
+<details><summary>POC</summary>
+
+```solidity
+if (!hasPosition) {
+    int256 remainingMargin = vault.margin;
+    if (remainingMargin > 0) {
+        if (vault.recipient != address(0)) {
+            // Send the remaining margin to the recipient.
+            vault.margin = 0;
+            sentMarginAmount = uint256(remainingMargin);
+            ERC20(pairStatus.quotePool.token).safeTransfer(vault.recipient, sentMarginAmount);
+        }
+    }
+}
+else{
+    if (remainingMargin < 0) {
+        vault.margin = 0;
+        // To prevent the liquidator from unfairly profiting through arbitrage trades in the AMM and passing losses onto the protocol,
+        // any losses that cannot be covered by the vault must be compensated by the liquidator
+        ERC20(pairStatus.quotePool.token).safeTransferFrom(msg.sender, address(this), uint256(-remainingMargin));
+    }
+}
+
+```
+
+</details>
+
+## 21.[High] Liquidation incorrectly tries to transfer token from Market instead of liquidator if remainingMargin is negative
+
+### Transfer tokens from the Market contract instead of the liquidator
+
+- Summary: The Predy protocol has a critical flaw in its liquidation process where, if a vault's position is fully liquidated and results in a negative margin (bad debt), the code incorrectly tries to transfer tokens from the Market contract instead of the liquidator. This mistake makes it impossible to clear the bad debt, causing it to accumulate continuously. The issue arises because the `safeTransferFrom` function is called on the Market protocol (msg.sender) instead of the liquidator, leading to failed transactions since the Market contract doesn't have the necessary token allowance.
+
+- Impact & Recommendation: The recommended fix is to transfer tokens directly from the liquidator to cover the bad debt.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-predy#h-04-Liquidation-incorrectly-tries-to-ransfer-token-from-Market-instead-of-liquidator-if-remainingMargin-is-negative) & [Report](https://code4rena.com/reports/2024-05-predy)
+
+<details><summary>POC</summary>
+
+```solidity
+
+function liquidate(
+        uint256 vaultId,
+        uint256 closeRatio,
+        GlobalDataLibrary.GlobalData storage globalData,
+        bytes memory settlementData
+    ) external returns (IPredyPool.TradeResult memory tradeResult) {
+        ...
+        if (!hasPosition) {
+            int256 remainingMargin = vault.margin;
+            if (remainingMargin > 0) {
+                if (vault.recipient != address(0)) {
+                    // Send the remaining margin to the recipient.
+                    vault.margin = 0;
+                    sentMarginAmount = uint256(remainingMargin);
+                    ERC20(pairStatus.quotePool.token).safeTransfer(vault.recipient, sentMarginAmount);
+                }
+            } else if (remainingMargin < 0) {
+                vault.margin = 0;
+>               // To prevent the liquidator from unfairly profiting through arbitrage trades in the AMM and passing losses onto the protocol,
+>               // any losses that cannot be covered by the vault must be compensated by the liquidator
+>               ERC20(pairStatus.quotePool.token).safeTransferFrom(msg.sender, address(this), uint256(-remainingMargin));
+            }
+        }
+        ...
+    }
+
+```
+
+</details>
