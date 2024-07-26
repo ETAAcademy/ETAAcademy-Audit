@@ -2160,3 +2160,59 @@ function liquidate(
 ```
 
 </details>
+
+## 22.[High] OraclePoolOfferHandler’s \_getFactors allows exact tokenId offer terms to be used for collection offers. A borrower can take on a loan with incorrect terms
+
+### Inconsistent conditional checks for loan offers.
+
+- Summary: The OraclePoolOfferHandler in `MultiSourceLoan.sol` has a high-risk vulnerability due to inconsistent conditional checks for loan offers. The `_getFactors` function and `_checkValidators` function use opposite criteria to validate collection offers versus exact token ID offers. This discrepancy allows a borrower to exploit the system by validating an exact token ID offer as a collection offer, or vice versa, leading to incorrect loan terms. For example, a borrower can use a cheaper token as collateral but receive a higher loan amount intended for a more expensive token, resulting in unfair loans that disadvantage lenders.
+
+- Impact & Recommendation: The recommended fix is to swap the if conditions in `_getFactors()` to align with `_checkValidators()`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-gondi#h-02-OraclePoolOfferHandler’s-_getFactors-allows-exact-tokenId-offer-terms-to-be-used-for-collection-offers.-A-borrower-can-take-on-a-loan-with-incorrect-terms) & [Report](https://code4rena.com/reports/2024-06-gondi)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function _getFactors(
+        address _collateralAddress,
+        uint256 _collateralTokenId,
+        uint256 _duration,
+        IBaseLoan.OfferValidator[] memory _validators
+    ) private view returns (PrincipalFactors memory) {
+        bytes32 key;
+        if (_validators.length == 0) {
+            key = _hashKey(_collateralAddress, uint96(_duration), "");
+        } else if (_validators.length == 1 && _isZeroAddress(_validators[0].validator)) {
+            PrincipalFactorsValidationData memory validationData =
+                abi.decode(_validators[0].arguments, (PrincipalFactorsValidationData));
+            if (validationData.code == 1) {
+                // Range
+                (uint256 min, uint256 max) = abi.decode(validationData.data, (uint256, uint256));
+                if (_collateralTokenId < min && _collateralTokenId > max) {
+                    revert InvalidInputError();
+                }
+                key = _hashKey(_collateralAddress, uint96(_duration), validationData.data);
+            } else if (validationData.code == 2) {
+                // MerkleRoot
+                (bytes32[] memory proof, bytes32 root) = abi.decode(validationData.data, (bytes32[], bytes32));
+                bytes32 leaf = keccak256(abi.encodePacked(_collateralTokenId));
+                MerkleProofLib.verify(proof, root, leaf);
+                key = _hashKey(_collateralAddress, uint96(_duration), abi.encodePacked(root));
+            } else if (validationData.code == 3) {
+                // Individual
+                uint256 tokenId = abi.decode(validationData.data, (uint256));
+                if (_collateralTokenId != tokenId) {
+                    revert InvalidInputError();
+                }
+                key = _hashKey(_collateralAddress, uint96(_duration), validationData.data);
+            } else {
+                revert InvalidInputError();
+            }
+        }
+        return _principalFactors[key];
+    }
+
+```
+
+</details>

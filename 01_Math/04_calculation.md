@@ -984,3 +984,36 @@ contract FeeSplitterTest is Test {
 ```
 
 </details>
+
+## 15.[Medium] AprPremium calculation might be incorrect due to loss of precision
+
+### Precision loss in APR premium calculations
+
+- Summary: In the calculation of the APR premium there is a loss of precision. The `utilizationFactor` is in `PRECISION` (1e27), while `minPremium` is in BPS (1e4). However, in the `_calculateAprPremium()` function, the ratio of `totalOutstanding` to `totalAssets` is not properly scaled to BPS before adding `aprFactors.minPremium`. This leads to incorrect APR premium values, resulting in higher-than-expected APRs being validated.
+
+- Impact & Recommendation: The recommended fix is to scale up `totalOutstanding` by 1e4 before performing the division and addition to ensure accurate APR premium calculations.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-gondi#m-02-AprPremium-calculation-might-be-incorrect-due-to-loss-of-precision) & [Report](https://code4rena.com/reports/2024-06-gondi)
+
+<details><summary>POC</summary>
+
+```solidity
+    /// @notice UtilizationFactor Expressed in `PRECISION`. minPremium in BPS
+    struct AprFactors {
+        uint128 minPremium;
+        uint128 utilizationFactor;
+    }
+
+    function _calculateAprPremium() private view returns (uint128) {
+        /// @dev cached
+        Pool pool = Pool(getPool);
+        AprFactors memory aprFactors = getAprFactors;
+        uint256 totalAssets = pool.totalAssets();
+        uint256 totalOutstanding = totalAssets - pool.getUndeployedAssets();
+        return uint128(
+|>          totalOutstanding.mulDivUp(aprFactors.utilizationFactor, totalAssets * PRECISION) + aprFactors.minPremium
+        );
+    }
+
+```
+
+</details>

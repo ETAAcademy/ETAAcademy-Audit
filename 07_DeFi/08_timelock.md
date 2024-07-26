@@ -381,3 +381,51 @@ function _lock(
 ```
 
 </details>
+
+## 7.[High] Lido’s apr can be maliciously updated to 0 value due to missing getLidoUpdateTolerance check, DOS pool lending
+
+### Timestamp validation check
+
+- Summary: The function `updateLidoValues()` in `LidoEthBaseInterestAllocator.sol` is permissionless and lacks a timestamp validation check. This function allows anyone to update Lido's APR (`aprBps`) without restrictions. Lido’s stETH rebases daily, and a malicious actor can exploit this by calling `updateLidoValues()` between rebases, setting `aprBps` to 0. This causes the `getBaseAprWithUpdate()` function to revert with an `InvalidAprError`, leading to a Denial-of-Service (DoS) that prevents the pool from validating new offers and effectively halts lending.
+
+- Impact & Recommendation: It's recommended to add a check ensuring `_updateLidoValues()` only executes when the time since the last update exceeds a certain tolerance, i.e., `(block.timestamp - lidoData.lastTs > getLidoUpdateTolerance)`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-gondi#h-01-lido’s-apr-can-be-maliciously-updated-to-0-value-due-to-missing-getLidoUpdateTolerance-check,-DOS-pool-lending) & [Report](https://code4rena.com/reports/2024-06-gondi)
+
+<details><summary>POC</summary>
+
+```solidity
+//src/lib/pools/LidoEthBaseInterestAllocator.sol
+    //@audit anyone can call updateLidoValues at any time, risks of _lidoData.aprBps being set to 0.
+    function updateLidoValues() external {
+        _updateLidoValues(getLidoData);
+    }
+    function _updateLidoValues(LidoData memory _lidoData) private {
+        uint256 shareRate = _currentShareRate();
+        _lidoData.aprBps = uint16(
+            (_BPS * _SECONDS_PER_YEAR * (shareRate - _lidoData.shareRate)) /
+                _lidoData.shareRate /
+                (block.timestamp - _lidoData.lastTs)
+        );
+        _lidoData.shareRate = uint144(shareRate);
+        _lidoData.lastTs = uint96(block.timestamp);
+        getLidoData = _lidoData;
+        emit LidoValuesUpdated(_lidoData);
+    }
+
+    //test/pools/LidoEthBaseInterestAllocator.t.sol
+...
+    function testMaliciousUpdateLidoValues() public {
+        assertEq(_baseAllocator.getBaseAprWithUpdate(), 1000);
+        (uint96 lastTs, , ) = _baseAllocator.getLidoData();
+        vm.warp(uint256(lastTs) + 12);
+        _baseAllocator.updateLidoValues();
+        (, , uint16 newAprBps) = _baseAllocator.getLidoData();
+        assertEq(newAprBps, 0);
+        vm.expectRevert(abi.encodeWithSignature("InvalidAprError()"));
+        _baseAllocator.getBaseAprWithUpdate();
+    }
+...
+
+```
+
+</details>
