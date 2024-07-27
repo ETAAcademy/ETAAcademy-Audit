@@ -94,3 +94,82 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 2.[High] Function refinanceFromLoanExecutionData() does not check executionData.tokenId == loan.nftCollateralTokenId
+
+### Check tokenId
+
+- The `refinanceFromLoanExecutionData()` function in the contract allows borrowers to refinance their loans using new offers without transferring the NFT collateral out of the protocol. However, this function does not check if the `executionData.tokenId` matches the `loan.nftCollateralTokenId`, potentially leading to a situation where the new loan has a collateral NFT that does not match what the lender requested in their offers.
+
+- Impact & Recommendation: Add a check to ensure `executionData.tokenId` is equal to `loan.nftCollateralTokenId`.
+  <br> 🐬: [Source](<https://code4rena.com/reports/2024-04-gondi#h-04-Function-refinanceFromLoanExecutionData()-does-not-check-executionData.tokenId-==-loan.nftCollateralTokenId>) & [Report](https://code4rena.com/reports/2024-04-gondi)
+
+<details><summary>POC</summary>
+
+```solidity
+
+  function _processOffersFromExecutionData(
+    address _borrower,
+    address _principalReceiver,
+    address _principalAddress,
+    address _nftCollateralAddress,
+    uint256 _tokenId,
+    uint256 _duration,
+    OfferExecution[] calldata _offerExecution
+) private returns (uint256, uint256[] memory, Loan memory, uint256) {
+  ...
+  _validateOfferExecution(
+      thisOfferExecution,
+      _tokenId,
+      offer.lender,
+      offer.lender,
+      thisOfferExecution.lenderOfferSignature,
+      protocolFee.fraction,
+      totalAmount
+  );
+  ...
+}
+
+function _checkValidators(LoanOffer calldata _loanOffer, uint256 _tokenId) private {
+    uint256 offerTokenId = _loanOffer.nftCollateralTokenId;
+    if (_loanOffer.nftCollateralTokenId != 0) {
+        if (offerTokenId != _tokenId) {
+            revert InvalidCollateralIdError();
+        }
+    } else {
+        uint256 totalValidators = _loanOffer.validators.length;
+        if (totalValidators == 0 && _tokenId != 0) {
+            revert InvalidCollateralIdError();
+        } else if ((totalValidators == 1) && (_loanOffer.validators[0].validator == address(0))) {
+            return;
+        }
+        for (uint256 i = 0; i < totalValidators;) {
+            IBaseLoan.OfferValidator memory thisValidator = _loanOffer.validators[i];
+            IOfferValidator(thisValidator.validator).validateOffer(_loanOffer, _tokenId, thisValidator.arguments);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+}
+
+```
+
+</details>
+
+## 3.[High] Function refinanceFromLoanExecutionData() does not check executionData.tokenId == loan.nftCollateralTokenId
+
+### Check tokenId
+
+- The `refinanceFromLoanExecutionData()` function in the contract allows borrowers to refinance their loans using new offers without transferring the NFT collateral out of the protocol. However, this function does not check if the `executionData.tokenId` matches the `loan.nftCollateralTokenId`, potentially leading to a situation where the new loan has a collateral NFT that does not match what the lender requested in their offers.
+
+- Impact & Recommendation: Add a check to ensure `executionData.tokenId` is equal to `loan.nftCollateralTokenId`.
+  <br> 🐬: [Source](<https://code4rena.com/reports/2024-04-gondi#h-04-Function-refinanceFromLoanExecutionData()-does-not-check-executionData.tokenId-==-loan.nftCollateralTokenId>) & [Report](https://code4rena.com/reports/2024-04-gondi)
+
+<details><summary>POC</summary>
+
+```solidity
+
+```
+
+</details>

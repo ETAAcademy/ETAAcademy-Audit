@@ -344,3 +344,61 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 10.[High] refinanceFull/addNewTranche reusing a lender’s signature leads to unintended behavior
+
+### Reuse signature
+
+- Summary: The `refinanceFull` and `addNewTranche` functions in the `MultiSourceLoan` contract use the same signature from `RenegotiationOffer`. This allows a malicious user to reuse the signature intended for `refinanceFull` to execute `addNewTranche`, leading to unintended and risky behavior.
+
+- Impact & Recommendation: Introduce a `type` field in `RenegotiationOffer` to differentiate between the types of operations (`refinanceFull` and `addNewTranche`). This would prevent the misuse of signatures intended for one operation being used in another.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-gondi#h-17-refinanceFull/addNewTranche-reusing-a-lender’s-signature-leads-to-unintended-behavior) & [Report](https://code4rena.com/reports/2024-04-gondi)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function refinanceFull(
+        RenegotiationOffer calldata _renegotiationOffer,
+        Loan memory _loan,
+        bytes calldata _renegotiationOfferSignature
+    ) external nonReentrant returns (uint256, Loan memory) {
+...
+        if (lenderInitiated) {
+            if (_isLoanLocked(_loan.startTime, _loan.startTime + _loan.duration)) {
+                revert LoanLockedError();
+            }
+            _checkStrictlyBetter(
+                _renegotiationOffer.principalAmount,
+                _loan.principalAmount,
+                _renegotiationOffer.duration + block.timestamp,
+                _loan.duration + _loan.startTime,
+                _renegotiationOffer.aprBps,
+                totalAnnualInterest / _loan.principalAmount,
+                _renegotiationOffer.fee
+            );
+        } else if (msg.sender != _loan.borrower) {
+            revert InvalidCallerError();
+        } else {
+            /// @notice Borrowers clears interest
+@>          _checkSignature(_renegotiationOffer.lender, _renegotiationOffer.hash(), _renegotiationOfferSignature);
+            netNewLender -= totalAccruedInterest;
+            totalAccruedInterest = 0;
+        }
+    function addNewTranche(
+        RenegotiationOffer calldata _renegotiationOffer,
+        Loan memory _loan,
+        bytes calldata _renegotiationOfferSignature
+    ) external nonReentrant returns (uint256, Loan memory) {
+...
+        uint256 loanId = _renegotiationOffer.loanId;
+        _baseLoanChecks(loanId, _loan);
+        _baseRenegotiationChecks(_renegotiationOffer, _loan);
+@>      _checkSignature(_renegotiationOffer.lender, _renegotiationOffer.hash(), _renegotiationOfferSignature);
+        if (_loan.tranche.length == getMaxTranches) {
+            revert TooManyTranchesError();
+        }
+
+```
+
+</details>

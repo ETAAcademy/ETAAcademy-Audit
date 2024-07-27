@@ -733,3 +733,62 @@ function setCurves(Curves curves_) public onlyManager {
 ```
 
 </details>
+
+## 12.[High] Merging tranches could make \_loanTermination() accounting incorrect
+
+### No access control of loanId changes distrupt accouting logic
+
+- Summary: The issue arises when tranches in the `Loan` contract are merged by the `mergeTranches()` function, altering the `loanId` of the merged tranches. This process is currently unrestricted, allowing anyone to trigger it. Such changes can disrupt the accounting logic of the `Pool` contract, which relies on the `loanId` for accurate internal accounting.
+
+- Impact & Recommendation: The recommended mitigation is to restrict the `mergeTranches()` function so that only lenders can call it, ensuring accountability.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-gondi#h-01-merging-tranches-could-make-_loantermination-accounting-incorrect-) & [Report](https://code4rena.com/reports/2024-04-gondi)
+
+<details><summary>POC</summary>
+
+```solidity
+function _loanTermination(
+    ...
+) private {
+    uint256 pendingIndex = _pendingQueueIndex;
+    uint256 totalQueues = getMaxTotalWithdrawalQueues + 1;
+    uint256 idx;
+    /// @dev oldest queue is the one after pendingIndex
+    uint256 i;
+    for (i = 1; i < totalQueues;) {
+        idx = (pendingIndex + i) % totalQueues;
+        if (getLastLoanId[idx][_loanContract] >= _loanId) {
+            break;
+        }
+        unchecked {
+            ++i;
+        }
+    }
+    /// @dev We iterated through all queues and never broke, meaning it was issued after the newest one.
+    if (i == totalQueues) {
+        _outstandingValues =
+            _updateOutstandingValuesOnTermination(_outstandingValues, _principalAmount, _apr, _interestEarned);
+        return;
+    } else {
+        uint256 pendingToQueue =
+            _received.mulDivDown(PRINCIPAL_PRECISION - _queueAccounting[idx].netPoolFraction, PRINCIPAL_PRECISION);
+        getTotalReceived[idx] += _received;
+        getAvailableToWithdraw += pendingToQueue;
+        _queueOutstandingValues[idx] = _updateOutstandingValuesOnTermination(
+            _queueOutstandingValues[idx], _principalAmount, _apr, _interestEarned
+        );
+    }
+}
+
+tranche[_minTranche] = IMultiSourceLoan.Tranche(
+    _newLoanId, // @audit can be used to change loanId
+    _loan.tranche[_minTranche].floor,
+    principalAmount,
+    lender,
+    accruedInterest,
+    startTime,
+    cumAprBps / principalAmount
+);
+
+```
+
+</details>

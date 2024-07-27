@@ -611,3 +611,36 @@ describe("Make Curve Subject To Be A Honey Pot test", () => {
 ```
 
 </details>
+
+## 9.[High] The attackers front-running repayloans so that the debt cannot be repaid
+
+### frontrun on loan operations
+
+- Summary: Attackers can exploit a front-running attack on the repayLoan function, causing the debt repayment to fail and leading to the liquidation of the borrower’s collateral. An attacker can front-run the repayLoan call by executing mergeTranches or addNewTranche, which alters the loan ID in \_loans. This makes it impossible for the borrower to repay their loan, potentially causing collateral to be liquidated.
+
+- Impact & Recommendation: Avoid deleting or updating the \_loanId in a way that affects ongoing loan operations. Alternatively, consider restricting functions that modify loan IDs near the loan's expiry to prevent such attacks.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-04-gondi#h-010-The-attackers-front-running-repayloans-so-that-the-debt-cannot-be-repaid) & [Report](https://code4rena.com/reports/2024-04-gondi)
+
+<details><summary>POC</summary>
+
+```solidity
+    function repayLoan(LoanRepaymentData calldata _repaymentData) external override nonReentrant {
+        uint256 loanId = _repaymentData.data.loanId;
+        Loan calldata loan = _repaymentData.loan;
+        .....
+@>      _baseLoanChecks(loanId, loan);
+        .....
+    }
+
+    function _baseLoanChecks(uint256 _loanId, Loan memory _loan) private view {
+        if (_loan.hash() != _loans[_loanId]) {
+            revert InvalidLoanError(_loanId);
+        }
+        if (_loan.startTime + _loan.duration < block.timestamp) {
+            revert LoanExpiredError();
+        }
+    }
+
+```
+
+</details>

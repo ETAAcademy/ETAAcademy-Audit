@@ -2126,6 +2126,7 @@ else{
 
 - Impact & Recommendation: The recommended fix is to transfer tokens directly from the liquidator to cover the bad debt.
   <br> 🐬: [Source](https://code4rena.com/reports/2024-05-predy#h-04-Liquidation-incorrectly-tries-to-ransfer-token-from-Market-instead-of-liquidator-if-remainingMargin-is-negative) & [Report](https://code4rena.com/reports/2024-05-predy)
+  <br> others:[Source](<https://code4rena.com/reports/2024-04-gondi#h-05-triggerFee-is-stolen-from-other-auctions-during-settleWithBuyout()>) & [Report](https://code4rena.com/reports/2024-04-gondi)
 
 <details><summary>POC</summary>
 
