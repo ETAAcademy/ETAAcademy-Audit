@@ -778,7 +778,7 @@ function _loanTermination(
         );
     }
 }
-
+-
 tranche[_minTranche] = IMultiSourceLoan.Tranche(
     _newLoanId, // @audit can be used to change loanId
     _loan.tranche[_minTranche].floor,

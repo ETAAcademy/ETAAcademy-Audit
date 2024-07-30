@@ -402,3 +402,24 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 11.[Medium] A malicious user can frontrun permit transaction to make it revert due to invalid signature
+
+### Front-run a permit
+
+- Summary: In the StrategOperatorProxy and StrategUserInteractions smart contracts, a vulnerability was identified where a malicious user could front-run a permit transaction, causing the signature to become invalid and resulting in transaction reversion. The issue stemmed from the executePermit() function, which directly called asset.permit() with the permit signature, allowing attackers to exploit this by using the signature before it was properly validated.
+
+- Impact & Recommendation: Wrap the asset.permit() call in a try-catch block.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-strateg-proleague#m-01-a-malicious-user-can-frontrun-permit-transaction-to-make-it-revert-due-to-invalid-signature) & [Report](https://code4rena.com/reports/2024-06-strateg-proleague)
+
+<details><summary>POC</summary>
+
+```solidity
+    function executePermit(address _asset, address _from, address _to, uint256 _amount, bytes memory _permitParams) internal {
+        DataTypes.PermitParams memory p = abi.decode(_permitParams, (DataTypes.PermitParams));
+        ERC20Permit(_asset).permit(_from, _to, _amount, p.deadline, p.v, p.r, p.s);
+    }
+
+```
+
+</details>

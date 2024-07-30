@@ -1017,3 +1017,44 @@ contract FeeSplitterTest is Test {
 ```
 
 </details>
+
+## 16.[High] Duplicate strategies in Vault cause assets to be counted repeatedly
+
+### Repeated counting of assets
+
+- Summary: In the StrategVault smart contract, duplicate strategies can be set, leading to the repeated counting of assets. This issue allows malicious actors to exploit the protocol by inflating total assets and receiving disproportionate rewards.
+
+- Impact & Recommendation: The oracleExit function in the strategies should be updated to prevent duplicate token counts. This can be achieved by utilizing the tokenExists function introduced in version 0.1.17 of the strateg-protocol-libraries, which helps avoid counting duplicate tokens.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-strateg-proleague#h-1-duplicate-strategies-in-vault-cause-assets-to-be-counted-repeatedly) & [Report](https://code4rena.com/reports/2024-06-strateg-proleague)
+
+<details><summary>POC</summary>
+
+```solidity
+    function _getNativeTVL() internal view returns (uint256) {
+        address _asset = asset();
+        DataTypes.OracleState memory oracleState;
+        oracleState.vault = address(this);
+        uint256 _strategyBlocksLength = strategyBlocksLength;
+        if (_strategyBlocksLength == 0 || !isLive) {
+            return IERC20(_asset).balanceOf(address(this)) + IERC20(_asset).allowance(buffer, address(this));
+        } else if (_strategyBlocksLength == 1) {
+            oracleState =
+                IStrategStrategyBlock(strategyBlocks[0]).oracleExit(
+                    oracleState,
+                    LibBlock.getStrategyStorageByIndex(0),
+                    10000
+                );
+        } else {
+            uint256 revertedIndex = _strategyBlocksLength - 1;
+            for (uint256 i = 0; i < _strategyBlocksLength; i++) {
+                uint256 index = revertedIndex - i;
+                oracleState = IStrategStrategyBlock(strategyBlocks[index]).oracleExit(
+                    oracleState, LibBlock.getStrategyStorageByIndex(index), 10000
+                );
+            }
+        }
+
+
+```
+
+</details>
