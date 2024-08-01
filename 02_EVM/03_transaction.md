@@ -465,3 +465,38 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 13.[Medium] Users can bypass limits and purchase more licenses than allowed by re-entering functions
+
+### Re-entrancy via call
+
+- Summary: The `PlayFiLicenseSale` contract has a vulnerability in the `claimLicensePartner()` and `claimLicensePublic()` functions where the commission is sent via a low-level call before state variables are updated. This allows for re-entrancy, enabling users to bypass purchase limits and acquire more licenses than allowed. An attacker can exploit this by creating a malicious contract to re-enter the purchase function.
+
+- Impact & Recommendation: Use `nonReentrant` modifiers on affected functions and transfer commissions after updating state variables.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-playfi-proleague#h-02-Users-can-bypass-limits-and-purchase-more-licenses-than-allowed-by-re-entering-functions) & [Report](https://code4rena.com/reports/2024-06-playfi-proleague)
+
+<details><summary>POC</summary>
+
+```solidity
+
+function claimLicensePublic(uint256 amount, uint256 tier, string memory referral) public payable {
+    if(!publicSaleActive) revert PublicSaleNotActive();
+    if(tiers[tier].totalClaimed + amount > tiers[tier].totalCap) revert TotalTierCapExceeded();
+    if(claimsPerTierPerAddress[tier][msg.sender] + amount > tiers[tier].individualCap) revert IndividualTierCapExceeded();
+    (uint256 toPay, uint256 commission,) = paymentDetailsForReferral(amount, tier, referral, false);
+    if(msg.value < toPay) revert InsufficientPayment();
+    if(commission > 0) {
+        (bool sent, ) = payable(referrals[referral].receiver).call{ value: commission }("");
+        if (!sent) revert CommissionPayoutFailed();
+        emit CommissionPaid(referral, referrals[referral].receiver, commission);
+    }
+    tiers[tier].totalClaimed += amount;
+    publicClaimsPerAddress[msg.sender] += amount;
+    totalLicenses += amount;
+    referrals[referral].totalClaims += amount;
+    emit PublicLicensesClaimed(msg.sender, amount, tier, toPay, referral);
+}
+
+```
+
+</details>

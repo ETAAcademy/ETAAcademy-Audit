@@ -386,3 +386,29 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 8. [Medium] Reorgs may cause licenses to be sold at 0 price
+
+### Polygon reorgs
+
+- Summary: The `PlayFiLicenseSale` contract had a vulnerability where reorgs on the Polygon network could result in licenses being sold at a price of 0. This issue occurred because the price of the licenses (`tiers[1].price`) could be set in a later block than the user's claim transaction, which relies on different variables.
+
+- Impact & Recommendation: Ensure a sufficient time interval between the price setting transaction and the status update transaction, or to add a check to revert if `tiers[1].price` is zero.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-playfi-proleague#m-01-Reorgs-may-cause-licenses-to-be-sold-at-0-price) & [Report](https://code4rena.com/reports/2024-06-playfi-proleague)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+      function claimLicenseEarlyAccess(uint256 amount, bytes calldata data, bytes32[] calldata merkleProof) public payable {
+        if(!earlyAccessSaleActive) revert EarlyAccessSaleNotActive();
+        (uint256 index, uint256 claimCap) = abi.decode(data,(uint256,uint256));
+        uint256 claimedLicenses = earlyAccessClaimsPerAddress[msg.sender];
+        if(amount + claimedLicenses > claimCap) revert IndividualClaimCapExceeded();
+        bytes32 node = keccak256(abi.encodePacked(index, msg.sender, claimCap));
+        if (!MerkleProof.verify(merkleProof, earlyAccessMerkleRoot, node)) revert InvalidProof();
+        uint256 toPay = tiers[1].price * amount;
+
+  ```
+
+  </details>
