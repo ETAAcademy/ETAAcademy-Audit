@@ -1041,3 +1041,78 @@ if (params.amount2 > 0) {
 ```
 
 </details>
+
+## 20.[High] Storage collision with slot0 of between BaseIndividualTokenMarket and ProxyWithRegistry
+
+### Storage collision
+
+- Summary: The issue involves a storage collision in slot 0 between `BaseIndividualTokenMarket` and `ProxyWithRegistry` due to inheritance from `BlastGasAndYield` and `Ownable`. Both contracts use slot 0 for different variables, which can cause conflicts. `ProxyWithRegistry` inherits from `BlastGasAndYield` and `Ownable`, allocating `_owner` at slot 0, while `BaseIndividualTokenMarket` allocates `version` at slot 0. This overlap can lead to critical issues if the implementation is changed by the `ImplementationRegistry`.
+
+- Impact & Recommendation: Remove `BlastGasAndYield` and `Ownable`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-tornado-launcher-proleague#h-01-Storage-collision-with-slot0-of-between-BaseInd-ividualTokenMarket-and-ProxyWithRegistry) & [Report](https://code4rena.com/reports/2024-06-tornado-launcher-proleague)
+
+<details><summary>POC</summary>
+
+```solidity
+{
+  "storage": [
+    {
+      "astId": 8,
+      "contract": "src/commons/ProxyWithRegistry.sol:ProxyWithRegistry",
+      "label": "_owner",
+      "offset": 0,
+      "slot": "0", ==> using slot 0
+      "type": "t_address"
+    }
+  ],
+  "types": {
+    "t_address": {
+      "encoding": "inplace",
+      "label": "address",
+      "numberOfBytes": "20"
+    }
+  }
+}
+
+{
+  "storage": [
+    {
+      "astId": 69510,
+      "contract": "src/tokenLauncher/IndividualTokenMarket.sol:BaseIndividualTokenMarket",
+      "label": "version",
+      "offset": 0,
+      "slot": "0", ==> using slot 0
+      "type": "t_string_storage"
+    },
+    {
+      "astId": 69548,
+      "contract": "src/tokenLauncher/IndividualTokenMarket.sol:BaseIndividualTokenMarket",
+      "label": "maxExpArray",
+      "offset": 0,
+      "slot": "1",
+      "type": "t_array(t_uint256)128_storage"
+    }
+  ],
+  "types": {
+    "t_array(t_uint256)128_storage": {
+      "encoding": "inplace",
+      "label": "uint256[128]",
+      "numberOfBytes": "4096",
+      "base": "t_uint256"
+    },
+    "t_string_storage": {
+      "encoding": "bytes",
+      "label": "string",
+      "numberOfBytes": "32"
+    },
+    "t_uint256": {
+      "encoding": "inplace",
+      "label": "uint256",
+      "numberOfBytes": "32"
+    }
+  }
+}
+
+```
+
+</details>

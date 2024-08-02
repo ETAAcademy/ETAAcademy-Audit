@@ -1058,3 +1058,22 @@ contract FeeSplitterTest is Test {
 ```
 
 </details>
+
+## 17.[Medium] Rebasing WETH token on Blast is not taken into account in Tornado
+
+### Rebasing WETH accounting
+
+- Summary: The rebasing WETH token on Blast is not considered in Tornado's accounting, leading to potential problems in the `IndividualTokenMarket`. If the WETH balance increases due to yield generation, but only a fixed amount (e.g., 3 ether) is withdrawn, any excess yield remains trapped in the WETH contract. This is problematic since the WETH balance doesn't decrease as expected.
+
+- Impact & Recommendation: Opt-out of WETH yield generation when creating the market.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-tornado-launcher-proleague#m-1-Rebasing-WETH-token-on-Blast-is-not-taken-into-account-in-Tornado) & [Report](https://code4rena.com/reports/2024-06-tornado-launcher-proleague)
+
+<details><summary>POC</summary>
+
+```solidity
+
+WETHTyped().withdraw(MAX_WETH_RESERVE());
+
+```
+
+</details>

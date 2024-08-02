@@ -642,3 +642,12 @@ contract CollectFee is Test {
     }
 
 ```
+
+## 12.[Medium] Users might be enforced to buy the token from Dex through Tornado which goes against the protocol design
+
+### Buying from Dex
+
+- Summary: In the `Router.sol` contract, users may unintentionally be forced to buy tokens from a decentralized exchange (Dex) through Tornado when the market's WETH reserve reaches its maximum (`MAX_WETH_RESERVE`). This issue can occur either when the market closes after reaching the maximum reserve or when it remains open but users end up buying from Dex automatically.
+
+- Impact & Recommendation: A flag should be added allowing users to opt out of buying from Dex if the reserve limit is reached.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-tornado-launcher-proleague#m-3-Users-might-be-enforced-to-buy-the-token-from-Dex -through-Tornado-which-goes-against-the-protocol-design) & [Report](https://code4rena.com/reports/2024-06-tornado-launcher-proleague)

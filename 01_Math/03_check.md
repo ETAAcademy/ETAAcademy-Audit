@@ -1496,3 +1496,28 @@ func getBVMETHBalanceKey(addr common.Address) common.Hash {
 
 - Impact & Recommendation: Ensure that the slashingRequest.vault does not contain duplicate entries.
   <br> 🐬: [Source](https://code4rena.com/reports/2024-06-karak-pro-league#h-01-dss-can-slash-more-assets-than-are-allowed-against-a-vault-within-a-single-slashing-event) & [Report](https://code4rena.com/reports/2024-06-karak-pro-league)
+
+## 25. [Medium] In case `msg.value + marketWethReserve == MAX_WETH_RESERVE`, `swapExactETHForTokens` function will fail
+
+### Non-zero input
+
+- Summary: In the `Router.sol` contract, if `msg.value + marketWethReserve` equals `MAX_WETH_RESERVE`, the function `swapExactETHForTokens` will fail. This is because after purchasing from the Bonding Curve, it attempts to buy from Thruster with zero ETH, which is not allowed and causes a revert.
+
+- Impact & Recommendation: The function `getAmountOut` in Thruster requires a non-zero input amount.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-tornado-launcher-proleague#m-2-In-case-`msg.value+marketWethReserve==MAX_WETH_RESERVE`,`swapExactETHForTokens`-function-will-fail) & [Report](https://code4rena.com/reports/2024-06-tornado-launcher-proleague)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    // given an input amount of an asset and pair reserves, returns the maximum output amount of the other asset
+    function getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut)
+        internal
+        pure
+        returns (uint256 amountOut)
+    {
+        require(amountIn > 0, "ThrusterLibrary: INSUFFICIENT_INPUT_AMOUNT");
+
+```
+
+</details>
