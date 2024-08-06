@@ -1521,3 +1521,37 @@ func getBVMETHBalanceKey(addr common.Address) common.Hash {
 ```
 
 </details>
+
+## 26. [High] Vultisig whitelisting can be bypassed by anyone
+
+### Check non-whitelisted accounts
+
+- Summary: The `checkWhitelist()` function in the `Whitelist.sol` contract has a flaw that allows non-whitelisted users to bypass the whitelist and participate in token purchases, potentially exceeding the 3 ETH limit by using other non-whitelisted accounts. The issue arises from the erroneous check where `_whitelistIndex[to] > _allowedWhitelistIndex` does not revert for non-whitelisted users with `_whitelistIndex[to]` set to 0. This oversight can significantly impact the token price and disadvantage legitimate whitelisted users.
+
+- Impact & Recommendation: Adjust the check to `if (_whitelistIndex[to] == 0 || _whitelistIndex[to] > _allowedWhitelistIndex)`, ensuring only whitelisted users can participate.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-vultisig#h-02-Vultisig-whitelisting-can-be-bypassed-by-anyone) & [Report](https://code4rena.com/reports/2024-06-vultisig)
+
+<details><summary>POC</summary>
+
+```solidity
+
+it.only("Bypasses whitelisting", async function () {
+    const { owner, whitelist, pool, otherAccount, mockOracleSuccess, mockContract } = await loadFixture(deployWhitelistFixture);
+    await whitelist.setVultisig(mockContract);
+    await whitelist.setLocked(false);
+    await whitelist.setOracle(mockOracleSuccess);
+    // `otherAccount` is not whitelisted and can't bypass the whitelist check
+    await expect(whitelist.connect(mockContract).checkWhitelist(pool, otherAccount, 0)).to.be.revertedWithCustomError(
+    whitelist,
+    "NotWhitelisted",
+    );
+    // Until an `_allowedWhitelistIndex` limit is set
+    // This value is intended as a limit, not as a flag not allow non-whitelisted users
+    await whitelist.setAllowedWhitelistIndex(10);
+    // `otherAccount` and any other user can now bypass the whitelisting
+    await whitelist.connect(mockContract).checkWhitelist(pool, otherAccount, 0);
+});
+
+```
+
+</details>

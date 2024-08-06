@@ -1116,3 +1116,59 @@ if (params.amount2 > 0) {
 ```
 
 </details>
+
+## 21.[High] Vultisig should be burnable
+
+### ERC20 burn
+
+- Summary: The Vultisig token contract lacks a burnable feature, despite documentation indicating its inclusion. This absence may lead to confusion and reduced trust among users.
+
+- Impact & Recommendation: To address this, the contract should be updated to include `burn` and `burnFrom` functions, allowing users to destroy tokens and enabling burning from an account with sufficient allowance.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-vultisig#m-01-Vultisig-should-be-burnable) & [Report](https://code4rena.com/reports/2024-06-vultisig)
+
+<details><summary>POC</summary>
+
+```solidity
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IApproveAndCallReceiver} from "./interfaces/IApproveAndCallReceiver.sol";
+/**
+ * @title ERC20 based Vultisig token contract
+ */
+contract Vultisig is ERC20, Ownable {
+    constructor() ERC20("Vultisig Token", "VULT") {
+        _mint(_msgSender(), 100_000_000 * 1e18);
+    }
+    function approveAndCall(
+        address spender,
+        uint256 amount,
+        bytes calldata extraData
+    ) external returns (bool) {
+        // Approve the spender to spend the tokens
+        _approve(msg.sender, spender, amount);
+        // Call the receiveApproval function on the spender contract
+        IApproveAndCallReceiver(spender).receiveApproval(
+            msg.sender,
+            amount,
+            address(this),
+            extraData
+        );
+        return true;
+    }
++    function burn(uint256 amount) public {
++        _burn(msg.sender, amount);
++    }
++    function burnFrom(address account, uint256 amount) public {
++        uint256 currentAllowance = allowance(account, msg.sender);
++        require(currentAllowance >= amount, "ERC20: burn amount exceeds + allowance");
++        _approve(account, msg.sender, currentAllowance - amount);
++        _burn(account, amount);
++    }
+}
+
+```
+
+</details>
