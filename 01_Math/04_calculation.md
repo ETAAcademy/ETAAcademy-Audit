@@ -1025,7 +1025,7 @@ contract FeeSplitterTest is Test {
 - Summary: In the StrategVault smart contract, duplicate strategies can be set, leading to the repeated counting of assets. This issue allows malicious actors to exploit the protocol by inflating total assets and receiving disproportionate rewards.
 
 - Impact & Recommendation: The oracleExit function in the strategies should be updated to prevent duplicate token counts. This can be achieved by utilizing the tokenExists function introduced in version 0.1.17 of the strateg-protocol-libraries, which helps avoid counting duplicate tokens.
-  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-strateg-proleague#h-1-duplicate-strategies-in-vault-cause-assets-to-be-counted-repeatedly) & [Report](https://code4rena.com/reports/2024-06-strateg-proleague)
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-strateg-proleague#h-01-duplicate-strategies-in-vault-cause-assets-to-be-counted-repeatedly) & [Report](https://code4rena.com/reports/2024-06-strateg-proleague)
 
 <details><summary>POC</summary>
 
@@ -1066,13 +1066,45 @@ contract FeeSplitterTest is Test {
 - Summary: The rebasing WETH token on Blast is not considered in Tornado's accounting, leading to potential problems in the `IndividualTokenMarket`. If the WETH balance increases due to yield generation, but only a fixed amount (e.g., 3 ether) is withdrawn, any excess yield remains trapped in the WETH contract. This is problematic since the WETH balance doesn't decrease as expected.
 
 - Impact & Recommendation: Opt-out of WETH yield generation when creating the market.
-  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-tornado-launcher-proleague#m-1-Rebasing-WETH-token-on-Blast-is-not-taken-into-account-in-Tornado) & [Report](https://code4rena.com/reports/2024-06-tornado-launcher-proleague)
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-tornado-launcher-proleague#m-01-Rebasing-WETH-token-on-Blast-is-not-taken-into-account-in-Tornado) & [Report](https://code4rena.com/reports/2024-06-tornado-launcher-proleague)
 
 <details><summary>POC</summary>
 
 ```solidity
 
 WETHTyped().withdraw(MAX_WETH_RESERVE());
+
+```
+
+</details>
+
+## 18.[Medium] Incorrect comparison logic in post-operation checks
+
+### Reversed >= <=
+
+- Summary: The `_doCheckValueType` function in the `LeverageMacroBase` contract contains reversed logic for the `gte` (greater than or equal to) and `lte` (less than or equal to) comparisons, causing incorrect post-operation validations. This flaw can lead to improper validation of Collateralized Debt Position (CDP) states and potential system manipulation.
+
+- Impact & Recommendation: Correct the comparison logic.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-badger#m-01-Incorrect-comparison-logic-in-post-operation-checks) & [Report](https://code4rena.com/reports/2024-06-badger)
+
+<details><summary>POC</summary>
+
+```solidity
+
+function _doCheckValueType(CheckValueAndType memory check, uint256 valueToCheck) internal {
+    if (check.operator == Operator.skip) {
+        // Early return
+        return;
+    } else if (check.operator == Operator.gte) {
+        require(valueToCheck >= check.value, "!LeverageMacroReference: gte post check");
+    } else if (check.operator == Operator.lte) {
+        require(valueToCheck <= check.value, "!LeverageMacroReference: lte post check");
+    } else if (check.operator == Operator.equal) {
+        require(check.value == valueToCheck, "!LeverageMacroReference: equal post check");
+    } else {
+        revert("Operator not found");
+    }
+}
 
 ```
 

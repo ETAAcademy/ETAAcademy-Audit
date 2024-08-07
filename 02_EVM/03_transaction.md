@@ -500,3 +500,38 @@ function claimLicensePublic(uint256 amount, uint256 tier, string memory referral
 ```
 
 </details>
+
+## 14.[Medium] Staking ETH incorrectly assumes revert bubbling
+
+### Lido's submit function
+
+- Summary: The EbtcLeverageZapRouter and EbtcZapRouter contracts incorrectly assume revert bubbling when staking ETH with Lido's stETH, using a low-level call that does not handle reverts from paused staking or exceeded staking limits. This oversight allows subsequent operations to proceed despite failed staking attempts, potentially leading to improper states and fund loss.
+
+- Impact & Recommendation: Use Lido's submit function to ensure reverts are correctly propagated.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-badger#m-02-Staking-ETH-incorrectly-assumes-revert-bubbling) & [Report](https://code4rena.com/reports/2024-06-badger)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function test_ZapOpenCdp_WithEth_LidoRReverts() external {
+        seedActivePool();
+        // Pausing deposits to mimic Lido's pauseStaking() or stakeLimit being set & exceeded
+        CollateralTokenTester(collateral).pauseDeposits();
+        // Logic equivalent to that from createLeveragedPosition(MarginType.ETH)
+        // Extracted to test correctly using expectRevert()
+        address user = vm.addr(userPrivateKey);
+        uint256 _debt = 1e18;
+        uint256 flAmount = _debtToCollateral(_debt);
+        uint256 marginAmount = 5 ether;
+        vm.deal(user, type(uint96).max);
+        IEbtcZapRouter.PositionManagerPermit memory pmPermit = createPermit(user);
+        vm.prank(user);
+        // Fails on the last step of BorrowerOperations::_openCdp(); transfer of collateral to the active pool
+        vm.expectRevert("ERC20: transfer amount exceeds balance");
+        _openTestCdp(MarginType.ETH, _debt, flAmount, marginAmount, pmPermit);
+    }
+
+```
+
+</details>
