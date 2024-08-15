@@ -1172,3 +1172,43 @@ contract Vultisig is ERC20, Ownable {
 ```
 
 </details>
+
+## 22. [Medium] requestRedeem() can be DoS for specific controller
+
+### ERC-7540: non-fungibility between different requests
+
+- Summary: The `FractalityV2Vault.sol` contract had a vulnerability where a single `requestRedeem()` could block legitimate redemptions for a specific controller by allowing an attacker to make a request with minimal shares and not redeem it, thus stalling all future requests for that controller.
+
+- Impact & Recommendation: Allow multiple redeem requests per controller, each uniquely identified by both the controller address and a request ID. This approach avoids issues with the ERC-7540 standard by ensuring non-fungibility between different requests.
+  <br> 🐬: [Source](<https://code4rena.com/reports/2024-08-fractality-pro-league#m-06-requestRedeem()-can-be-DoS-for-specific-controller>) & [Report](https://code4rena.com/reports/2024-08-fractality-pro-league)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function requestRedeem(
+        uint256 shares,
+        address controller,
+        address owner
+    )
+        external
+        onlyWhenNotHalted
+        operatorCheck(owner)
+        nonReentrant
+        returns (uint8)
+    {
+        if (controller == address(0) || owner == address(0)) {
+            revert ZeroAddress();
+        }
+        uint256 assets = convertToAssets(shares);
+        if (assets == 0) {
+            revert ZeroAssets();
+        }
+           RedeemRequestData storage request = redeemRequests[controller];
+        if (request.redeemRequestCreationTime > 0) {
+            revert ExistingRedeemRequest();
+        }
+
+```
+
+</details>

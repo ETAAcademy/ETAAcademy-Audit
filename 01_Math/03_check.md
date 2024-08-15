@@ -1555,3 +1555,56 @@ it.only("Bypasses whitelisting", async function () {
 ```
 
 </details>
+
+## 27. [Medium] Users who requested assets redemptions may be affected by the new claimableDelay and redeemFeeBasisPoints
+
+### Redemptions affected by claimableDelay and redeemFeeBasisPoints
+
+- Summary: The `FractalityV2Vault.sol` contract had issues with fairness regarding the `claimableDelay` and `redeemFeeBasisPoints` when changes were made after users had already submitted redemption requests. Specifically, increasing the `claimableDelay` unfairly extended redemption times for previous requests, and raising `redeemFeeBasisPoints` imposed higher fees on earlier requests.
+
+- Impact & Recommendation: Calculate the redemption date and fee at the time of the request creation to ensure consistency.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-08-fractality-pro-league#m-03-Users-who-requested-assets-redemptions-may-be-affected-by-the-new-claimableDelay-and-redeemFeeBasisPoints) & [Report](https://code4rena.com/reports/2024-08-fractality-pro-league)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function setClaimableDelay(
+        uint32 _newClaimableDelay
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        claimableDelay = _newClaimableDelay;
+        emit ClaimableDelaySet(_newClaimableDelay);
+    }
+
+    function setRedeemFee(
+        uint16 _newRedeemFeeBasisPoints
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (_newRedeemFeeBasisPoints > _MAX_BASIS_POINTS) {
+            revert InvalidRedeemFee();
+        }
+        redeemFeeBasisPoints = _newRedeemFeeBasisPoints;
+        emit RedeemFeeSet(_newRedeemFeeBasisPoints);
+    }
+
+-      request.redeemRequestCreationTime = uint96(block.timestamp);
++      request.redeemRequestFulfillTime = uint96(block.timestamp) + claimableDelay;
++      request.redeemRequestFee = _calculateWithdrawFee(assets);
+
+
+        if (
+-          block.timestamp < request.redeemRequestCreationTime + claimableDelay
++          block.timestamp < request.redeemRequestFulfillTime
+        ) {
+
+        uint256 netAssetRedeemAmount = request.redeemRequestAssetAmount -
+            request.redeemRequestFee;
+        if (
+            !asset.transfer(redeemFeeCollector, request.redeemRequestFee) ||
+            !asset.transfer(receiver, netAssetRedeemAmount)
+        ) {
+            revert ERC20TransferFailed();
+        }
+
+```
+
+</details>
