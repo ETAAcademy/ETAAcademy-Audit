@@ -384,3 +384,68 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 8. [Medium] Unvalidated memory access in readMem and writeMem functions
+
+### Validate memory address
+
+- Summary: Unvalidated memory access in the `readMem()` and `writeMem()` functions do not enforce proper bounds checking on memory addresses. This oversight allows unauthorized access to memory outside the intended range, potentially enabling malicious users to read or write sensitive data, manipulate program flow, or disrupt memory allocation. Specifically, the lack of address validation could allow access to the entire 4GB address space. The proof of concept demonstrates how high memory addresses can be used for unauthorized operations.
+
+- Impact & Recommendation: Implement strict bounds checks to limit accessible memory and prevent such exploits.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-07-optimism#m-04-Unvalidated-memory-access-in-readMem-and-writeMem-functions) & [Report](https://code4rena.com/reports/2024-07-optimism)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function testUnauthorizedMemoryAccess() public {
+        // Setup initial state
+        bytes32 initialMemRoot = bytes32(uint256(1));
+        uint32 initialPC = 0x1000;
+        uint32 initialHeap = 0x40000000;
+        bytes memory stateData = abi.encodePacked(
+            initialMemRoot,    // memRoot
+            bytes32(0),        // preimageKey
+            uint32(0),         // preimageOffset
+            initialPC,         // pc
+            initialPC + 4,     // nextPC
+            uint32(0),         // lo
+            uint32(0),         // hi
+            initialHeap,       // heap
+            uint8(0),          // exitCode
+            false,             // exited
+            uint64(0),         // step
+            uint32(0x8C020000) // lw $v0, 0($zero) - load word instruction
+        );
+        // Add register data (32 registers)
+        for (uint i = 0; i < 32; i++) {
+            stateData = abi.encodePacked(stateData, uint32(0));
+        }
+        // Create a proof that allows reading from any address
+        bytes memory proof = new bytes(28 * 32);
+        for (uint i = 0; i < 28; i++) {
+            bytes32 proofElement = bytes32(uint256(i + 1));
+            assembly {
+                mstore(add(proof, mul(add(i, 1), 32)), proofElement)
+            }
+        }
+        // Step 1: Read from a very high address (to out of bounds)
+        uint32 highAddress = 0xFFFFFFFC;
+        bytes memory maliciousStateData = abi.encodePacked(
+            stateData,
+            uint32(0x8C020000 | highAddress) // lw $v0, 0($zero) with high address
+        );
+        vm.expectRevert("Memory address out of bounds");
+        mips.step(maliciousStateData, proof, bytes32(0));
+        // Step 2: Write to a very high address (should be out of bounds)
+        maliciousStateData = abi.encodePacked(
+            stateData,
+            uint32(0xAC020000 | highAddress) // sw $v0, 0($zero) with high address
+        );
+        vm.expectRevert("Memory address out of bounds");
+        mips.step(maliciousStateData, proof, bytes32(0));
+    }
+
+```
+
+</details>

@@ -318,3 +318,41 @@ File:  code/contracts/ethereum/contracts/state-transition/StateTransitionManager
 ```
 
 </details>
+
+## 10. [High] Single plot can be occupied by multiple renters
+
+### Plot management and reward attribution
+
+- Summary: LandManager contract allows a token to be transferred to a new plot without updating the `plotId` in the `ToilerState` struct, causing the contract to incorrectly assume the token is still in the original plot. This flaw can lead to issues such as plots being misidentified as occupied or unoccupied, incorrect reward calculations, and potential staking of tokens in plots that should be vacant, especially if the total number of plots is reduced.
+
+- Impact & Recommendation: Update the `plotId` field in the `ToilerState` to reflect the new plot to ensure accurate plot management and reward attribution.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-07-munchables#h-01-Single-plot-can-be-occupied-by-multiple-renters) & [Report](https://code4rena.com/reports/2024-07-munchables)
+
+<details><summary>POC</summary>
+
+```solidity
+it("successful path with logging plotId", async () => {
+  //@audit-note Log plotId before transfer
+  const beforeState =
+    await testContracts.landManagerProxy.contract.read.getToilerState([1]);
+  console.log("PlotId before transfer: " + beforeState.plotId);
+  const { request } =
+    await testContracts.landManagerProxy.contract.simulate.transferToUnoccupiedPlot(
+      [1, 10],
+      {
+        account: bob,
+      },
+    );
+  const txHash = await testClient.writeContract(request);
+  await assertTxSuccess({ txHash: txHash });
+  //@audit-note Log plotId after transfer
+  const afterState =
+    await testContracts.landManagerProxy.contract.read.getToilerState([1]);
+  console.log("PlotId after transfer: " + afterState.plotId);
+  //@audit-note Assert plotId hasn't changed
+  assert.equal(beforeState.plotId, afterState.plotId, "PlotId did not change");
+});
+
+```
+
+</details>
