@@ -1109,3 +1109,122 @@ function _doCheckValueType(CheckValueAndType memory check, uint256 valueToCheck)
 ```
 
 </details>
+
+## 19.[Medium] The average price was calculated incorrectly
+
+### Average price
+
+- Summary: The calculation of the position's average price and the global average price incorrectly mixed raw price and price impact price without properly accounting for `priceImpactUsd` within the `PositionLogic.sol` contract. This led to incorrect determination of profit or loss for a position, as `priceImpactUsd` was not directly factored into the calculation.
+
+- Impact & Recommendation: Modify the calculations to ensure that `priceImpactUsd` is correctly included in determining the profit or loss. Additionally, raw price should be used when calculating the delta of the position's profit or loss, rather than the price impact price.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-jul-gemnify-proleague#h-06-The-average-price-was-calculated-incorrectly) & [Report](https://code4rena.com/reports/2024-jul-gemnify-proleague)
+
+<details><summary>POC</summary>
+
+```solidity
+    function getNextAveragePrice(
+        address _indexToken,
+        uint256 _size,
+        uint256 _averagePrice,
+        bool _isLong,
+        uint256 _nextPrice,
+        uint256 _sizeDelta,
+        uint256 _lastIncreasedTime
+    ) internal view returns (uint256) {
+        (bool hasProfit, uint256 delta) = getDelta(_indexToken, _size, _averagePrice, _isLong, _lastIncreasedTime);
+        uint256 nextSize = _size + _sizeDelta;
+        uint256 divisor;
++       uint256 priceImpactUsd;
++       uint256 rawPrice = _isLong ? GenericLogic.getMaxPrice(_indexToken) : GenericLogic.getMinPrice(_indexToken);
++       if (_nextPrice > rawPrice) {
++           priceImpactUsd = (_nextPrice - rawPrice) * (_sizeDelta / _nextPrice);
++       } else {
++           priceImpactUsd = (rawPrice - _nextPrice) * (_sizeDelta / _nextPrice);
++       }
++
+        if (_isLong) {
+            divisor = hasProfit ? nextSize + delta : nextSize - delta;
++           if(_nextPrice > rawPrice) { divisor - priceImpactUsd};
++           else {divisor + priceImpactUsd};
+        } else {
+            divisor = hasProfit ? nextSize - delta : nextSize + delta;
++           if(_nextPrice > rawPrice) { divisor + priceImpactUsd};
++           else {divisor - priceImpactUsd};
+        }
+-       return (_nextPrice * nextSize) / divisor;
++       return (rawPrice * nextSize) / divisor;
+    }
+    function getNextGlobalLongData(
+        address _account,
+        address _collateralToken,
+        address _indexToken,
+        uint256 _nextPrice,
+        uint256 _sizeDelta,
+        bool _isIncrease
+    ) internal view returns (uint256) {
+        DataTypes.PositionStorage storage ps = StorageSlot.getVaultPositionStorage();
+        int256 realisedPnl = getRealisedPnl(_account, _collateralToken, _indexToken, _sizeDelta, _isIncrease, true);
+        uint256 globalLongSize = ps.globalLongSizes[_indexToken];
+        uint256 averagePrice = ps.globalLongAveragePrices[_indexToken];
++       uint256 rawPrice = GenericLogic.getMinPrice(_indexToken);
++       uint256 priceDelta = averagePrice > rawPrice ? averagePrice - rawPrice : rawPrice - averagePrice;
+-       uint256 priceDelta = averagePrice > _nextPrice ? averagePrice - _nextPrice : _nextPrice - averagePrice;
+...
+         uint256 nextAveragePrice =
+-           getNextGlobalAveragePrice(averagePrice, _nextPrice, nextSize, delta, realisedPnl, true);
++           getNextGlobalAveragePrice(averagePrice, _nextPrice, nextSize, delta, realisedPnl, true, _isIncrease);
+    function getNextGlobalShortData(
+        address _account,
+        address _collateralToken,
+        address _indexToken,
+        uint256 _nextPrice,
+        uint256 _sizeDelta,
+        bool _isIncrease
+    ) internal view returns (uint256) {
+        DataTypes.PositionStorage storage ps = StorageSlot.getVaultPositionStorage();
+        int256 realisedPnl = getRealisedPnl(_account, _collateralToken, _indexToken, _sizeDelta, _isIncrease, false);
+        uint256 globalShortSize = ps.globalShortSizes[_indexToken];
+        uint256 averagePrice = ps.globalShortAveragePrices[_indexToken];
++       uint256 rawPrice = GenericLogic.getMaxPrice(_indexToken);
++       uint256 priceDelta = averagePrice > rawPrice ? averagePrice - rawPrice : rawPrice - averagePrice;
+-       uint256 priceDelta = averagePrice > _nextPrice ? averagePrice - _nextPrice : _nextPrice - averagePrice;
+...
+        uint256 nextAveragePrice =
+-           getNextGlobalAveragePrice(averagePrice, _nextPrice, nextSize, delta, realisedPnl, false);
++           getNextGlobalAveragePrice(averagePrice, _nextPrice, nextSize, delta, realisedPnl, false, _isIncrease);
+    function getNextGlobalAveragePrice(
+        uint256 _averagePrice,
+        uint256 _nextPrice,
+        uint256 _nextSize,
+        uint256 _delta,
+        int256 _realisedPnl,
+        bool _isLong,
++       bool _isIncrease
+    ) internal pure returns (uint256) {
++       uint256 rawPrice = _isIncrease ? ( _isLong? GenericLogic.getMaxPrice(_indexToken) : GenericLogic.getMinPrice(_indexToken))  : (_isLong ? GenericLogic.getMinPrice(_indexToken) : GenericLogic.getMaxPrice(_indexToken));
+-       (bool hasProfit, uint256 nextDelta) = getNextDelta(_delta, _averagePrice, _nextPrice, _realisedPnl, _isLong);
++       (bool hasProfit, uint256 nextDelta) = getNextDelta(_delta, _averagePrice, rawPrice, _realisedPnl, _isLong);
+        uint256 divisor;
++       uint256 priceImpactUsd;
++       if (_nextPrice > rawPrice) {
++           priceImpactUsd = (_nextPrice - rawPrice) * (_sizeDelta / _nextPrice);
++       } else {
++           priceImpactUsd = (rawPrice - _nextPrice) * (_sizeDelta / _nextPrice);
++       }
++
+        if (_isLong) {
+            divisor = hasProfit ? _nextSize + nextDelta : _nextSize - nextDelta;
++           if(_nextPrice > rawPrice) { divisor - priceImpactUsd};
++           else {divisor + priceImpactUsd};
+        } else {
+            divisor = hasProfit ? _nextSize - nextDelta : _nextSize + nextDelta;
++           if(_nextPrice > rawPrice) { divisor + priceImpactUsd};
++           else {divisor - priceImpactUsd};
+        }
+-       return (_nextPrice * _nextSize) / divisor;
++       return (rawPrice * _nextSize) / divisor;
+    }
+
+```
+
+</details>

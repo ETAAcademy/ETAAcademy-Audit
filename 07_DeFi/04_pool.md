@@ -791,3 +791,46 @@ function uniswapV3SwapCallback(int256 amount0, int256 amount1, bytes memory) ext
 ```
 
 </details>
+
+## 15.[Medium] ExecuteSellUSDG() should also apply validateBufferAmount()
+
+### Buffer of liquidity
+
+- Summary: `ExecuteSellUSDG()` does not apply the `validateBufferAmount()` check, which is essential for maintaining the buffer of liquidity reserved for leveraged positions. The protocol allows setting `bufferAmounts` to ensure a certain amount of liquidity is always available. However, because `ExecuteSellUSDG()` does not perform this check, users could potentially bypass the buffer restriction by executing a `buyUSDG()` followed by a `sellUSDG()`, leading to a situation where `poolAmounts` fall below `bufferAmounts`.
+
+- Impact & Recommendation: It is recommended to include the `validateBufferAmount()` check within `ExecuteSellUSDG()` to prevent this potential bypass and ensure that the buffer restrictions are consistently enforced.
+  <br> 🐬: [Source](<https://code4rena.com/reports/2024-jul-gemnify-proleague#m-07-ExecuteSellUSDG()-should-also-apply-validateBufferAmount()>)& [Report](https://code4rena.com/reports/2024-jul-gemnify-proleague)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    // bufferAmounts allows specification of an amount to exclude from swaps
+    // this can be used to ensure a certain amount of liquidity is available for leverage positions
+    mapping (address => uint256) public override bufferAmounts;
+
+```
+
+</details>
+
+## 16.[Medium] User could lose out on positive impact fee when decreasing position
+
+### Positive impact fee
+
+- Summary: In `PositionLogic.sol`, users could lose positive impact fees when decreasing a position if `cache.usdOut` was zero, even though `cache.usdOutAfterFee` was positive. This problem occurred because the token transfer only triggered when `cache.usdOut` was greater than zero, missing out on fees that were reflected in `cache.usdOutAfterFee`.
+
+- Impact & recommendation: Modify the condition to check `cache.usdOutAfterFee > 0` for the transfer.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-jul-gemnify-proleague#m-10-User-could-lose-out-on-positive-impact-fee-when-decreasing-position)& [Report](https://code4rena.com/reports/2024-jul-gemnify-proleague)
+
+<details><summary>POC</summary>
+
+```solidity
+        if (cache.usdOut > 0) {
+            cache.amountOutAfterFees = GenericLogic.usdToTokenMin(params.collateralToken, cache.usdOutAfterFee);
+            GenericLogic.transferOut(params.collateralToken, cache.amountOutAfterFees, params.receiver);
+            return cache.amountOutAfterFees;
+        }
+
+```
+
+</details>

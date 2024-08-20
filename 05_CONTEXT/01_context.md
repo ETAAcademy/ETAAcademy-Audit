@@ -356,3 +356,22 @@ it("successful path with logging plotId", async () => {
 ```
 
 </details>
+
+## 11. [Medium] MsgSwapOrder will never work for Canto nodes
+
+### Identify the signer
+
+- Summary: In the `MsgSwapOrder` for Canto nodes, the message lacks the required `cosmos.msg.v1.signer` to identify the signer, making the message ineffective. This issue prevents the `MsgSwapOrder` from functioning correctly.
+
+- Impact & Recommendation: Add a `DefineCustomGetSigners` call in `app.go`, similar to what was done for `MsgConvertERC20`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-05-canto#m-02-MsgSwapOrder-will-never-work-for-Canto-nodes) & [Report](https://code4rena.com/reports/2024-05-canto)
+
+<details><summary>POC</summary>
+
+```go
+
+signingOptions.DefineCustomGetSigners(protov2.MessageName(&erc20v1.MsgConvertERC20{}), erc20types.GetSignersFromMsgConvertERC20V2)
+
+```
+
+</details>
