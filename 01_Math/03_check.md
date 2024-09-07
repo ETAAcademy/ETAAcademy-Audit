@@ -1608,3 +1608,30 @@ it.only("Bypasses whitelisting", async function () {
 ```
 
 </details>
+
+## 28. [High] Fake ZetaReceived events cause the outbound cctx to remain pending resulting in a blocked outbound EVM transaction queue
+
+### Fake events
+
+- Summary: Fake `ZetaReceived` or `ZetaReverted` events can be emitted by a receiver contract instead of the intended connector contract on ZetaChain. This can cause a cross-chain context (cctx) to get stuck in the `PendingOutbound` state, blocking the outbound Ethereum Virtual Machine (EVM) transaction queue and preventing further transactions from being processed.
+
+- Impact & Recommendation: It is suggested to implement strict verification of the emitter address for critical events like `ZetaReceived`, `ZetaReverted`, and `Withdrawn` to prevent unauthorized contracts from faking these events.
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-11-zetachain#h-03-Fake-ZetaReceive-events-cause-the-outbound-cctx-to-remain-pending-resulting-in-a-blocked-outbound-EVM-transaction-queue) & [Report](https://code4rena.com/reports/2023-11-zetachain)
+
+<details><summary>POC</summary>
+
+```go
+386: 	receivedLog, err := connector.ZetaConnectorNonEthFilterer.ParseZetaReceived(*vLog)
+
+
+func (_ZetaConnectorNonEth *ZetaConnectorNonEthFilterer) ParseZetaReceived(log types.Log) (*ZetaConnectorNonEthZetaReceived, error) {
+	event := new(ZetaConnectorNonEthZetaReceived)
+	if err := _ZetaConnectorNonEth.contract.UnpackLog(event, "ZetaReceived", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+```
+
+</details>

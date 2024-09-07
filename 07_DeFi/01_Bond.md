@@ -2374,3 +2374,63 @@ function test_discount_drain() public {
 ```
 
 </details>
+
+## 25.[Medium] Incorrect accounting of utilization, supply/borrow rates due to vulnerable implementation in IsolateLogic::executeIsolateLiquidate
+
+### Incorrect accounting of utilization, supply/borrow rates
+
+- Summary: When the loan is auctioned and the bid amount does not fully cover the total debt, the liquidator has to pay an additional amount, called `extraAmount**.` The problem lies in how the interest rates and utilization rates are updated. Specifically, the function `InterestLogic::updateInterestRates` uses an incorrect value, `(vars.totalBorrowAmount + vars.totalExtraAmount)`, which inflates the added liquidity. This leads to an artificially high `availableLiquidityPlusDebt` value, causing the `utilization rate` to be lower than it should be. This incorrect calculation results in inaccurate borrow and supply rates.
+
+- Impact & Recommendation: Change the function call to `InterestLogic.updateInterestRates(poolData, debtAssetData, vars.totalBorrowAmount, 0)` to avoid including the `extraAmount` in the liquidity calculation.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-07-benddao#m-14-Incorrect-accounting-of-utilization,-supply/borrow-rates-due-to-vulnerable-implementation-in-IsolateLogic::executeIsolateLiquidate) & [Report](https://code4rena.com/reports/2024-07-dittoeth)
+
+<details><summary>POC</summary>
+
+```solidity
+
+//src/libraries/logic/IsolateLogic.sol
+  function executeIsolateLiquidate(InputTypes.ExecuteIsolateLiquidateParams memory params) internal {
+...
+    for (vars.nidx = 0; vars.nidx < params.nftTokenIds.length; vars.nidx++) {
+...
+      // Last bid can not cover borrow amount and liquidator need pay the extra amount
+      if (loanData.bidAmount < vars.borrowAmount) {
+|>      vars.extraBorrowAmounts[vars.nidx] = vars.borrowAmount - loanData.bidAmount;//@audit-info note: vars.borrowAmount = extraAmount + loanData.bidAmount
+      }
+...
+    // update interest rate according latest borrow amount (utilization)
+      //@audit (vars.totalBorrowAmount + vars.totalExtraAmount) is incorrect input, which inflates `liquidityAdded` in updateInterestRates.
+|>    InterestLogic.updateInterestRates(poolData, debtAssetData, (vars.totalBorrowAmount + vars.totalExtraAmount), 0);
+    // bid already in pool and now repay the borrow but need to increase liquidity
+      //@audit-info note: only total debt (vars.totalBorrowAmount) are added to liquidity.
+|>    VaultLogic.erc20TransferOutBidAmountToLiqudity(debtAssetData, vars.totalBorrowAmount);
+...
+
+  function updateInterestRates(
+    DataTypes.PoolData storage poolData,
+    DataTypes.AssetData storage assetData,
+    uint256 liquidityAdded,
+    uint256 liquidityTaken
+  ) internal {
+...
+    // calculate the total asset supply
+    vars.availableLiquidityPlusDebt =
+      assetData.availableLiquidity +
+|>    liquidityAdded -
+      liquidityTaken +
+      vars.totalAssetDebt;
+    if (vars.availableLiquidityPlusDebt > 0) {
+      vars.assetUtilizationRate = vars.totalAssetDebt.rayDiv(vars.availableLiquidityPlusDebt);
+    }
+...
+      vars.nextGroupBorrowRate = IInterestRateModel(loopGroupData.rateModel).calculateGroupBorrowRate(
+        vars.loopGroupId,
+        vars.assetUtilizationRate
+      );
+...
+
+
+
+```
+
+</details>

@@ -834,3 +834,33 @@ function uniswapV3SwapCallback(int256 amount0, int256 amount1, bytes memory) ext
 ```
 
 </details>
+
+## 17.[Medium] For extreme ratios, getRatiosFromPriceSwap will return data for which is impossible to converge into a reserve
+
+### lookup table to fetch pre-calculated values
+
+- Summary: `getRatiosFromPriceSwap` function in the Basin protocol uses a lookup table to fetch pre-calculated values for reserves calculations. The issue arises when dealing with extreme price ratios (e.g., 1:4.6), where the difference between the high and low prices returned by the function causes incorrect reserve calculations. This leads to the reserves moving away from the target price and eventually returning a zero value.
+
+- Impact & Recommendation: Improve the step size in the `getRatiosFromPriceSwap` function to ensure the calculations stay within a reasonable range and prevent the function from skipping over the correct reserves.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-07-basin#m-01-For-extreme-ratios,-getRatiosFromPriceSwap-will-return-data-for-which-is-impossible-to-converge-into-a-reserve)
+
+<details><summary>POC</summary>
+
+```solidity
+
+        function test_calcReserveAtRatioSwapSkipTarget() public view {
+            uint256[] memory reserves = new uint256[](2);
+            reserves[0] = 1e18;
+            reserves[1] = 1e18;
+            uint256[] memory ratios = new uint256[](2);
+            ratios[0] = 4202;
+            ratios[1] = 19811;
+            // 4202 * 1e6 / 19811  = 212104 = 0.212 / 1  = 1 : 4.6
+            //                                0.04  / 1  = 1 : 25
+            uint256 reserve1 = _f.calcReserveAtRatioSwap(reserves, 1, ratios, data);
+            //console.log("Reserves 1 :", reserve1);
+        }
+
+```
+
+</details>
