@@ -1635,3 +1635,60 @@ func (_ZetaConnectorNonEth *ZetaConnectorNonEthFilterer) ParseZetaReceived(log t
 ```
 
 </details>
+
+## 29. [High] withdrawCapital() can be called multiple times by the project to withdraw ExcessCapital
+
+### Withdraw ExcessCapital
+
+- Summary: In LegionBaseSale.sol, the withdrawCapital() function allows the project to withdraw raised capital. However, there is no mechanism to prevent the function from being called multiple times, allowing the project to maliciously withdraw excess capital beyond the total raised amount (totalCapitalRaised).
+
+- Impact & Recommendation: The deposited capital usually includes extra funds (ExcessCapital) that have not been withdrawn by investors. Without proper safeguards, the project could repeatedly call withdrawCapital() to withdraw both the raised capital and the unclaimed excess capital.Add a tokensWithdrawn flag to ensure the function can only be called once.
+  <br> 🐬: [Source](<https://code4rena.com/reports/2024-09-legion-evm-zenith#h-03-withdrawCapital()-can-be-called-multiple-times-by-the-project-to-withdraw-ExcessCapital>) & [Report](https://code4rena.com/reports/2024-09-legion-evm-zenith)
+
+<details><summary>POC</summary>
+```solidity
+    function withdrawCapital() external virtual onlyProject {
+        /// Verify that the refund period is over
+        _verifyRefundPeriodIsOver();
+        /// Verify that the sale is not canceled
+        _verifySaleNotCanceled();
+        /// Verify that sale results have been published
+        _verifySaleResultsArePublished();
+        /// Check if projects are withdrawing capital on the sale source chain
+        if (askToken != address(0)) {
+            /// Allow projects to withdraw capital only in case they've supplied tokens
+            _verifyTokensSupplied();
+        }
+        /// Cache value in memory
+        uint256 _totalCapitalRaised = totalCapitalRaised;
+        /// Calculate Legion Fee
+        uint256 _legionFee = (legionFeeOnCapitalRaisedBps * _totalCapitalRaised) / 10000;
+        /// Emit successfully CapitalWithdrawn
+        emit CapitalWithdrawn(_totalCapitalRaised, msg.sender);
+        /// Transfer the raised capital to the project owner
+        IERC20(bidToken).safeTransfer(msg.sender, (_totalCapitalRaised - _legionFee));
+        /// Transfer the Legion fee to the Legion fee receiver address
+        if (_legionFee != 0) IERC20(bidToken).safeTransfer(legionFeeReceiver, _legionFee);
+    }
+
+    abstract contract LegionBaseSale is ILegionBaseSale, Initializable {
+
+...
+/// @dev Whether tokens have been supplied by the project or not.
+bool internal tokensSupplied;
+
+- bool internal tokensWithdrawn;
+  function withdrawCapital() external virtual onlyProject {
+  /// Verify that the refund period is over
+  \_verifyRefundPeriodIsOver();
+  /// Verify that the sale is not canceled
+  \_verifySaleNotCanceled();
+  /// Verify that sale results have been published
+  \_verifySaleResultsArePublished();
+-       if (tokensWithdrawn) revert TokensAlreadyWithdrawn;
+-       tokensWithdrawn = true;
+
+```
+
+</details>
+```

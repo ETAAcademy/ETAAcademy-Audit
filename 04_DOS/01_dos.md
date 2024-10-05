@@ -399,3 +399,67 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 6. [Medium] The time available for a canceled withdrawal should not impact future unstaking processes
+
+### Canceled withdrawal affects future unstaking processes
+
+- Summary: When stakers attempt to unstake their StRSR, they cannot withdraw RSR immediately; instead, their withdrawal enters a queue and becomes available after an unstaking delay period. If a withdrawal is canceled, the RSR is restaked, but the canceled withdrawal still impacts future requests. For example, if a user cancels a withdrawal during a long unstaking delay, subsequent withdrawal requests might still be affected by the canceled request, making them available later than expected.
+
+- Impact & Recommendation: This situation could lead to funds being locked for longer than intended and create a denial-of-service (DoS) issue for users. The logic for determining the availability of withdrawals should not consider canceled withdrawals. Specifically, the code should ensure that if a user cancels a withdrawal, it does not impact the availableAt time for new withdrawals.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-07-reserve#m-06-The-time-available-for-a-canceled-withdrawal-should-not-impact-future-unstaking-processes) & [Report](https://code4rena.com/reports/2024-07-reserve)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+
+      describe('PushDraft Test', () => {
+      it('Should use current unstakingDelay', async () => {
+        // old unstakingDelay is 1 day
+        const oldUnstakingDelay = 3600 * 24
+        await stRSR.connect(owner).setUnstakingDelay(oldUnstakingDelay)
+        const amount: BigNumber = bn('100e18')
+        await rsr.connect(addr1).approve(stRSR.address, amount)
+        await stRSR.connect(addr1).stake(amount)
+
+        const draftEra = 1
+        const availableAtOfFirst = await getLatestBlockTimestamp() + oldUnstakingDelay + 1
+        /**
+         * Unstaking request enter a queue, and withdrawal become available 1 day later
+         */
+        await expect(stRSR.connect(addr1).unstake(amount))
+          .emit(stRSR, 'UnstakingStarted')
+          .withArgs(0, draftEra, addr1.address, amount, amount, availableAtOfFirst)
+
+        /**
+         * Cancel the unstaking to eliminate any pending withdrawals
+         */
+        await stRSR.connect(addr1).cancelUnstake(1)
+
+        // new unstakingDelay is 1 hour
+        const newUnstakingDelay = 3600
+        await stRSR.connect(owner).setUnstakingDelay(newUnstakingDelay)
+
+        await rsr.connect(addr2).approve(stRSR.address, amount)
+        await stRSR.connect(addr2).stake(amount)
+
+        const availableAtOfFirstOfUser2 = await getLatestBlockTimestamp() + newUnstakingDelay + 1
+        /**
+         * Unstaking request enter a queue, and withdrawal become available 1 hour later for a second user
+         */
+        await expect(stRSR.connect(addr2).unstake(amount))
+          .emit(stRSR, 'UnstakingStarted')
+          .withArgs(0, draftEra, addr2.address, amount, amount, availableAtOfFirstOfUser2)
+
+        /**
+         * Although the first unstaking was canceled, its available time still impacts subsequent unstaking requests
+         */
+        await expect(stRSR.connect(addr1).unstake(amount))
+          .emit(stRSR, 'UnstakingStarted')
+          .withArgs(1, draftEra, addr1.address, amount, amount, availableAtOfFirst)
+      })
+    })
+
+  ```
+
+  </details>

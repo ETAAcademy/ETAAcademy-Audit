@@ -864,3 +864,48 @@ function uniswapV3SwapCallback(int256 amount0, int256 amount1, bytes memory) ext
 ```
 
 </details>
+
+## 18.[Medium] The streak bonus is calculated incorrectly
+
+### Bonus Calculation
+
+- Summary: In ULTI.sol, the ULTI protocol rewards users with a streak bonus for depositing every cycle, which multiplies their minted ULTI when depositing ETH. This bonus is applicable when the amount of ULTI minted in the current cycle exceeds that of the previous cycle. The flaw arises because the variable ultiMintedPreviousCycle, used to compare the current cycle's minted ULTI against previous cycles, is not updated during the loop. This leads to incorrect comparisons, where the same amount is compared against prior cycles, resulting in inflated streakCount values.
+
+- Impact & Recommendation: The recommended fix involves updating ultiMintedPreviousCycle within the loop to ensure accurate comparisons, and this has been successfully implemented.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-09-ulti-zenith#m-06-The-streak-bonus-is-calculated-incorrectly) & [Report](https://code4rena.com/reports/2024-09-ulti-zenith)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function _calculateStreakBonus(address user, uint256 ultiMinted, uint256 currentCycle) internal view returns (uint256) {
+        if (currentCycle < 3) return 0;
+>>      uint256 ultiMintedPreviousCycle = ultiMintedForCycle[currentCycle - 1][user];
+        if(ultiMintedPreviousCycle == 0) return 0;
+        // Cap the streak count at 10 cycles
+        uint256 streakCount = 0;
+        for (uint256 i = 1; i <= STREAK_BONUS_CYCLE_CAP && currentCycle > i; i++) {
+            if (currentCycle <= i) break;
+            uint256 ultiMintedIMinus1CycleAgo = ultiMintedForCycle[currentCycle - i - 1][user];
+>>          if (ultiMintedPreviousCycle >= ultiMintedIMinus1CycleAgo) {
+                streakCount++;
+            } else {
+                break;
+            }
+        }
+
+
+        for (uint256 i = 1; i <= STREAK_BONUS_CYCLE_CAP && currentCycle > i; i++) {
+-           if (currentCycle <= i) break;
+            uint256 ultiMintedIMinus1CycleAgo = ultiMintedForCycle[currentCycle - i - 1][user];
++           if (ultiMintedPreviousCycle >= ultiMintedIMinus1CycleAgo && ultiMintedPreviousCycle !=0) {
+                streakCount++;
+            } else {
+                break;
+            }
++           ultiMintedPreviousCycle = ultiMintedForCycle[currentCycle - i - 1][user];
+        }
+
+```
+
+</details>
