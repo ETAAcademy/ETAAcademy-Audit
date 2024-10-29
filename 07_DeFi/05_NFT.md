@@ -161,7 +161,7 @@ function _checkValidators(LoanOffer calldata _loanOffer, uint256 _tokenId) priva
 
 ### Check tokenId
 
-- The `refinanceFromLoanExecutionData()` function in the contract allows borrowers to refinance their loans using new offers without transferring the NFT collateral out of the protocol. However, this function does not check if the `executionData.tokenId` matches the `loan.nftCollateralTokenId`, potentially leading to a situation where the new loan has a collateral NFT that does not match what the lender requested in their offers.
+- Summary: The `refinanceFromLoanExecutionData()` function in the contract allows borrowers to refinance their loans using new offers without transferring the NFT collateral out of the protocol. However, this function does not check if the `executionData.tokenId` matches the `loan.nftCollateralTokenId`, potentially leading to a situation where the new loan has a collateral NFT that does not match what the lender requested in their offers.
 
 - Impact & Recommendation: Add a check to ensure `executionData.tokenId` is equal to `loan.nftCollateralTokenId`.
   <br> 🐬: [Source](<https://code4rena.com/reports/2024-04-gondi#h-04-Function-refinanceFromLoanExecutionData()-does-not-check-executionData.tokenId-==-loan.nftCollateralTokenId>) & [Report](https://code4rena.com/reports/2024-04-gondi)
@@ -169,6 +169,139 @@ function _checkValidators(LoanOffer calldata _loanOffer, uint256 _tokenId) priva
 <details><summary>POC</summary>
 
 ```solidity
+function _processOffersFromExecutionData(
+    address _borrower,
+    address _principalReceiver,
+    address _principalAddress,
+    address _nftCollateralAddress,
+    uint256 _tokenId,
+    uint256 _duration,
+    OfferExecution[] calldata _offerExecution
+) private returns (uint256, uint256[] memory, Loan memory, uint256) {
+  ...
+  _validateOfferExecution(
+      thisOfferExecution,
+      _tokenId,
+      offer.lender,
+      offer.lender,
+      thisOfferExecution.lenderOfferSignature,
+      protocolFee.fraction,
+      totalAmount
+  );
+  ...
+}
+
+
+function _checkValidators(LoanOffer calldata _loanOffer, uint256 _tokenId) private {
+    uint256 offerTokenId = _loanOffer.nftCollateralTokenId;
+    if (_loanOffer.nftCollateralTokenId != 0) {
+        if (offerTokenId != _tokenId) {
+            revert InvalidCollateralIdError();
+        }
+    } else {
+        uint256 totalValidators = _loanOffer.validators.length;
+        if (totalValidators == 0 && _tokenId != 0) {
+            revert InvalidCollateralIdError();
+        } else if ((totalValidators == 1) && (_loanOffer.validators[0].validator == address(0))) {
+            return;
+        }
+        for (uint256 i = 0; i < totalValidators;) {
+            IBaseLoan.OfferValidator memory thisValidator = _loanOffer.validators[i];
+            IOfferValidator(thisValidator.validator).validateOffer(_loanOffer, _tokenId, thisValidator.arguments);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+}
+
+```
+
+</details>
+
+## 4.[High] update_emergency_council_7_D_0_C_1_C_58() updates nft manager instead of emergency council
+
+### Updates emergency council
+
+- Summary: The function `update_emergency_council_7_D_0_C_1_C_58()` in Seawater's `lib.rs` file, intended to update the emergency council responsible for managing protocol shutdowns, mistakenly updates the `nft_manager` instead. This error prevents the proper updating of the emergency council, which could hinder the protocol's ability to respond to emergency situations, compromising its security and stability.
+
+- Impact & Recommendation: The solution is to replace `self.nft_manager.set(manager)` with `self.emergency_council.set(manager)` to ensure the function performs its intended role.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-08-superposition#h-01-update_emergency_council_7_d_0_c_1_c_58-updates-nft-manager-instead-of-emergency-council) & [Report](https://code4rena.com/reports/2024-08-superposition)
+
+<details><summary>POC</summary>
+
+```rust
+
+  pub fn update_emergency_council_7_D_0_C_1_C_58(
+            &mut self,
+            manager: Address,
+        ) -> Result<(), Revert> {
+            assert_eq_or!(
+                msg::sender(),
+                self.seawater_admin.get(),
+                Error::SeawaterAdminOnly
+            );
+            self.nft_manager.set(manager);
+            Ok(())
+        }
+
+  pub fn update_nft_manager_9_B_D_F_41_F_6(&mut self, manager: Address) -> Result<(), Revert> {
+        assert_eq_or!(
+            msg::sender(),
+            self.seawater_admin.get(),
+            Error::SeawaterAdminOnly
+        );
+        self.nft_manager.set(manager);
+        Ok(())
+    }
+
+```
+
+</details>
+
+## 5.[Medium] Lack of data validation when users are claiming their art allows malicious user to bypass signature/merkle hash to provide unapproved ref*, artId* and imageURI
+
+### Bypass signature/merkle hash
+
+- Summary: The `merkleClaim` function lacks validation for user-submitted parameters, specifically the referrer address (`ref_`), art ID (`artId_`), and image URI (`imageURI`). This vulnerability allows malicious users to bypass signature and Merkle hash checks, leading to significant security risks. Attackers can illegitimately modify `ref_` to steal referral fees, use inappropriate `artId_` to claim unauthorized art, and set invalid `imageURI` that points to unrelated artworks.
+
+- Impact & Recommendation: It is recommended to implement checks on these parameters within the `merkleClaim` function to enhance contract security and user experience.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-08-phi#m-05-lack-of-data-validation-when-users-are-claiming-their-art-allows-malicious-user-to-bypass-signaturemerkle-hash-to-provide-unapproved-ref_-artid_-and-imageuri) & [Report](https://code4rena.com/reports/2024-08-phi)
+
+<details><summary>POC</summary>
+
+```solidity
+function test_claimHack() public {
+  bytes32 expectedRoot = 0xe70e719557c28ce2f2f3545d64c633728d70fbcfe6ae3db5fa01420573e0f34b;
+  bytes memory credData = abi.encode(1, owner, "MERKLE", 31_337, expectedRoot);
+  bytes memory signCreateData = abi.encode(expiresIn, ART_ID_URL_STRING, credData);
+  bytes32 createMsgHash = keccak256(signCreateData);
+  bytes32 createDigest = ECDSA.toEthSignedMessageHash(createMsgHash);
+  (uint8 cv, bytes32 cr, bytes32 cs) = vm.sign(claimSignerPrivateKey, createDigest);
+  if (cv != 27) cs = cs | bytes32(uint256(1) << 255);
+  phiFactory.createArt{ value: NFT_ART_CREATE_FEE }(
+      signCreateData,
+      abi.encodePacked(cr, cs),
+      IPhiFactory.CreateConfig(participant, receiver, END_TIME, START_TIME, MAX_SUPPLY, MINT_FEE, false)
+  );
+  address Alice = participant; //Original file setup already deals `participant` enough ether to pay for mint fees
+  address Alice_2 = address(0x123456); //Alice's account 2
+  vm.startPrank(Alice);
+  bytes32[] memory proof = new bytes32[](2);
+  proof[0] = 0x0927f012522ebd33191e00fe62c11db25288016345e12e6b63709bb618d777d4;
+  proof[1] = 0xdd05ddd79adc5569806124d3c5d8151b75bc81032a0ea21d4cd74fd964947bf5;
+  address to = 0x1111111111111111111111111111111111111111;
+  bytes32 value = 0x0000000000000000000000000000000003c2f7086aed236c807a1b5000000000;
+  uint256 artId = 1;
+  bytes memory data = abi.encode(artId, to, proof, Alice_2, uint256(1), value, IMAGE_URL2); // Within this line we have the freedom to decide artId, address of referral and the image URL
+  bytes memory dataCompressed = LibZip.cdCompress(data);
+  uint256 totalMintFee = phiFactory.getArtMintFee(artId, 1);
+  phiFactory.claim{ value: totalMintFee }(dataCompressed);
+  (, bytes memory response) = phiFactory.phiRewardsAddress().call(abi.encodeWithSignature("balanceOf(address)", Alice_2));
+  uint256 balance = abi.decode(response, (uint256));
+  console2.log("Alice_2: ", balance); //Alice successfully illegally receives referral fee through her second account
+  vm.stopPrank();
+}
 
 ```
 

