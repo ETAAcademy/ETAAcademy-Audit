@@ -1212,3 +1212,104 @@ contract Vultisig is ERC20, Ownable {
 ```
 
 </details>
+
+## 23. [High] Lack of `msg.sender` validation for `onERC1155Received()` and `onERC1155BatchReceived()`
+
+### `onERC1155Received()`
+
+- Summary: The vulnerability lies in the lack of msg.sender validation in the onERC1155Received() and onERC1155BatchReceived() functions of the Automator contract. This allows attackers to exploit the system by performing a share inflation attack, which manipulates share prices to their advantage.
+
+- Impact & Recommendation: Implement whitelisting in onERC1155Received() and onERC1155BatchReceived() to ensure that only valid product shares from authorized vaults are accepted. This can be enforced by verifying the msg.sender and allowing transfers only from pre-approved vault addresses.
+  <br> 🐬: [Source](<https://github.com/code-423n4/zenith-portfolio/blob/main/reports/2024-05-sofa-zenith.pdf#h-01-Lack-of-`msg.sender`-validation-for-`onERC1155Received()`-and-`onERC1155BatchReceived()`>) & [Report](https://github.com/code-423n4/zenith-portfolio/blob/main/reports/2024-05-sofa-zenith.pdf)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function initialize(
+        address collateral_,
+        address referral_,
+        address feeCollector_
+    ) external initializer {
+        collateral = IERC20(collateral_);
+        referral = referral_;
+        feeCollector = feeCollector_;
+        __Ownable_init();
+        __ERC1155Holder_init();
+        __ERC20_init(
+            string(abi.encodePacked("Automator ", IERC20Metadata(collateral_).name())),
+            string(abi.encodePacked("at", IERC20Metadata(collateral_).symbol()))
+        );
+    }
+
+```
+
+</details>
+
+## 24. [High] Incorrect token expiry extension may lead to subdomain loss
+
+### Expiry subdomain
+
+- Summary: The vulnerability lies in the lack of msg.sender validation in the onERC1155Received() and onERC1155BatchReceived() functions of the Automator contract. This allows attackers to exploit the system by performing a share inflation attack, which manipulates share prices to their advantage.
+
+- Impact & Recommendation: Implement whitelisting in onERC1155Received() and onERC1155BatchReceived() to ensure that only valid product shares from authorized vaults are accepted. This can be enforced by verifying the msg.sender and allowing transfers only from pre-approved vault addresses.
+  <br> 🐬: [Source](https://github.com/code-423n4/zenith-portfolio/blob/main/reports/2024-10-namespace-zenith.pdf#h-01-Incorrect-token-expiry-extension-may-lead-to-subdomain-loss`) & [Report](https://github.com/code-423n4/zenith-portfolio/blob/main/reports/2024-10-namespace-zenith.pdf)
+
+<details><summary>POC</summary>
+
+```solidity
+
+function _setExpiry(bytes32 node, uint256 expiry) internal {
+>> expiries[node] = block.timestamp + expiry;
+emitter.emitExpirySet(node, expiries[node]);
+}
+
++ if (_isExpired(node) || expiries[node] == 0) {
+expiries[node] = block.timestamp + expiry
++} else {
++ expiries[node] = expiries[node] + expiry;
+
+```
+
+</details>
+
+## 25. [Medium] DoS in functionality for ETH deposits by directly transferring to the contract
+
+### EIP173Proxy rejects direct ETH transfers
+
+- Summary: The issue identified was a **Denial of Service (DoS)** vulnerability in the **ETH deposit functionality** of the **StrategyVault** contracts, caused by the **EIP173Proxy** reverting all ETH transactions. The proxy contract, based on a custom implementation of **EIP-1967**, rejected direct ETH transfers by using a `revert("ETHER_REJECTED")` in its **receive()** function. This prevented users from depositing ETH directly into the contract, affecting the proper functioning of the **StrategyVault**'s deposit logic.
+
+- Impact & Recommendation: To resolve this issue, it is recommended to modify the **Proxy.sol** contract by removing the `revert("ETHER_REJECTED")` statement in the **receive()** function. This change will allow direct ETH transfers to be accepted, and the funds will be transferred to the designated creator address, thus enabling ETH deposits into the vaults as intended.
+  <br> 🐬: [Source](https://github.com/code-423n4/zenith-portfolio/blob/main/reports/2024-09-amplified-zenith.pdf#m-04-DoS-in-functionality-for-ETH-deposits-by-directly-transferring-to-the-contract) & [Report](https://github.com/code-423n4/zenith-portfolio/blob/main/reports/2024-09-amplified-zenith.pdf)
+
+<details><summary>POC</summary>
+
+```solidity
+
+// File: StrategyVaultFactory.sol
+function createStrategyVault(
+    address owner_,
+    address asset_,
+    string calldata name_,
+    string calldata symbol_,
+    IStrategyManager.Strategy[] memory strategies_
+) external onlyOwner returns (address newVault) {
+// Create a new EIP173Proxy instance
+    newVault = address(
+    new EIP173Proxy(strategyVaultImplementation, address(this),
+    "")
+);
+    // Cast the proxy to StrategyVault and initialize it
+    IVaultInitializer(newVault).initialize(
+        owner_,
+        asset_,
+        name_,
+        symbol_,
+        strategies_
+    );
+    ...
+}
+
+```
+
+</details>

