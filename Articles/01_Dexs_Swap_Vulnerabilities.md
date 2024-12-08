@@ -22,7 +22,7 @@
 
 [Github](https://github.com/ETAAcademy)｜[Twitter](https://twitter.com/ETAAcademy)｜[ETA-Audit](https://github.com/ETAAcademy/ETAAcademy-Audit)
 
-Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
+Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
 
 A Decentralized Crypto Exchange (DEX) allows users to trade cryptocurrencies directly without a central intermediary, using smart contracts for trustless operations and letting users retain control of their funds and private keys. Unlike centralized exchanges, which hold user funds and face higher security risks, DEXs distribute trading orders across the network, presenting unique security challenges and navigating a more complex regulatory landscape.
 

@@ -22,7 +22,7 @@
 
 [Github](https://github.com/ETAAcademy)｜[Twitter](https://twitter.com/ETAAcademy)｜[ETA-Audit](https://github.com/ETAAcademy/ETAAcademy-Audit)
 
-Authors: [Eta](https://twitter.com/pwhattie), looking forward to your joining
+Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
 
 ## 1.[Medium] Delegations cannot be removed in some cases due to vulnerable
 
