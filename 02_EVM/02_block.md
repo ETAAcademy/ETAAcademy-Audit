@@ -539,3 +539,38 @@ contract PreimageOracle_LargePreimageProposals_Test is Test {
 ```
 
 </details>
+
+## 11. [High] RIPEMD-160 precompile yields wrong hashes for large set of inputs due to off-by-one error
+
+### RIPEMD-160 precompile
+
+- Summary: The RIPEMD-160 precompile contains an off-by-one error that produces incorrect hash values for specific input lengths (55 + k\*64). This issue impacts all blockchain applications relying on the precompile for hash-based logic, such as access control and verification.
+
+- Impact & Recommendation: For input lengths 55 + k\*64 (e.g., 55, 119, 183, etc.), the Cairo implementation generates hash values that deviate from the correct RIPEMD-160 outputs. The fix aligns the boundary condition with the standard implementation, ensuring consistent and correct behavior.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-09-kakarot#h-05-ripemd-160-precompile-yields-wrong-hashes-for-large-set-of-inputs-due-to-off-by-one-error) & [Report](https://code4rena.com/reports/2024-09-kakarot)
+
+<details><summary>POC</summary>
+
+```cairo
+
+    async def test_ripemd160_on_55_length_input(self, cairo_run):
+
+        msg_bytes = bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmomnopnopq", "ascii")
+
+        precompile_hash = cairo_run("test__ripemd160", msg=list(msg_bytes))
+
+
+        # Hash with RIPEMD-160 to compare with precompile result
+
+        ripemd160_crypto = RIPEMD160.new()
+
+        ripemd160_crypto.update(msg_bytes)
+
+        expected_hash = ripemd160_crypto.hexdigest()
+
+
+        assert expected_hash.rjust(64, "0") == bytes(precompile_hash).hex()
+
+```
+
+</details>

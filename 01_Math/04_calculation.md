@@ -1228,3 +1228,105 @@ function _doCheckValueType(CheckValueAndType memory check, uint256 valueToCheck)
 ```
 
 </details>
+
+## 20.[Medium] Inflated GaugeV3 rewards when period is skipped
+
+### Inflated rewards
+
+- Summary: Reward calculations are inflated by calling `notifyRewardAmount()` before the cycle switch, effectively allocating rewards to themselves. The attacker can provide minimal liquidity (even as low as 2 wei) within the liquidity pool and set the reward before the cycle ends. This results in rewards being calculated for a period that shouldn't be included, allowing the attacker to unfairly receive rewards in subsequent cycles. While the likelihood of this attack is low, it could be intentionally exploited, particularly in liquidity pools that are deployed early and have no competition.
+
+- Impact & Recommendation: It is recommended to modify the `_advancePeriod()` and `newPeriod()` methods in the contract to calculate rewards based solely on the liquidity seconds at the end of the current period, rather than predicting the liquidity at the start of the next period. This would prevent reward inflation caused by skipping periods.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-10-ramses-exchange#m-01-inflated-gaugev3-rewards-when-period-is-skipped) & [Report](https://code4rena.com/reports/2024-10-ramses-exchange)
+
+<details><summary>POC</summary>
+
+```solidity
+
+function periodCumulativesInside(/* ... */) /* ... */ {
+
+    // ...
+
+    if (lastTick < tickLower) {
+
+        // ...
+
+    } else if (lastTick < tickUpper) {
+
+        // ...
+
+        if (currentPeriod <= period) {
+
+            // ...
+
+        } else {
+
+            cache.secondsPerLiquidityCumulativeX128 = $.periods[period].endSecondsPerLiquidityPeriodX128;
+
+        }
+
+        return
+
+            cache.secondsPerLiquidityCumulativeX128 -
+
+            snapshot.secondsPerLiquidityOutsideLowerX128 -
+
+            snapshot.secondsPerLiquidityOutsideUpperX128;
+
+    } else {
+
+        // ...
+
+    }
+
+}
+
+function _advancePeriod() /* ... */ {
+
+    // ...
+
+    if ((_blockTimestamp() / 1 weeks) != _lastPeriod) {
+
+        // ...
+
+        uint160 secondsPerLiquidityCumulativeX128 = Oracle.newPeriod(
+
+            $.observations,
+
+            _slot0.observationIndex,
+
+            period
+
+        );
+
+        // ...
+
+        $.periods[_lastPeriod].endSecondsPerLiquidityPeriodX128 = secondsPerLiquidityCumulativeX128;
+
+        // ...
+
+    }
+
+}
+
+
+function newPeriod(/* ... */) /* ... */ {
+
+    // ...
+
+    uint32 delta = uint32(period) * 1 weeks - 1 - last.blockTimestamp;
+
+    secondsPerLiquidityCumulativeX128 =
+
+        last.secondsPerLiquidityCumulativeX128 +
+
+        ((uint160(delta) << 128) / ($.liquidity > 0 ? $.liquidity : 1));
+
+    // ...
+
+}
+
+
+
+```
+
+</details>

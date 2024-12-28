@@ -1768,3 +1768,25 @@ bool internal tokensSupplied;
 ```
 
 </details>
+
+## 31. [Medium] Blacklisted user can burn tokens during WHITELIST_ENABLED state
+
+### mutual exclusivity between whitelist and blacklist
+
+- Summary: A blacklisted user can burn tokens during the WHITELIST_ENABLED state, violating the protocol's main invariant. This occurs because blacklisted users can also hold the whitelisted role, allowing them to pass the check and burn tokens. This issue could be problematic if the admin attempts to redistribute a blacklisted user's UStb balance, but the user front-runs it with a burn.
+
+- Impact & Recommendation: The proposed solution is to add checks to ensure that neither the sender nor the "from" address is blacklisted. However, Ethena Labs disputes the severity, arguing that the likelihood of this scenario is low and that burning tokens in this manner benefits the protocol by increasing collateral, with no negative impact. They also mention that this issue was addressed by ensuring mutual exclusivity between whitelist and blacklist roles in a separate fix.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-11-ethena-labs#m-01-blacklisted-user-can-burn-tokens-during-whitelist_enabled-state) & [Report](https://code4rena.com/reports/2024-11-ethena-labs)
+
+<details><summary>POC</summary>
+
+```solidity
+File: UStb.sol
+
+208:             } else if (hasRole(WHITELISTED_ROLE, msg.sender) && hasRole(WHITELISTED_ROLE, from) && to == address(0)) {
+
+209:                 // whitelisted user can burn
+
+```
+
+</details>

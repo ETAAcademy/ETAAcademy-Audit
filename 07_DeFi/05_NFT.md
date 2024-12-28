@@ -306,3 +306,77 @@ function test_claimHack() public {
 ```
 
 </details>
+
+## 6.[High] Attakers can steal the funds from long-term reservation
+
+### long-term reservation
+
+- Summary: Insufficient permission checks and rental fund management allows attackers to exploit setbidtobuy() and withdrawtolandlord() to steal funds from the protocol. Enhancing permission validation and restricting the auto-approve feature can effectively mitigate this issue and secure the protocol’s funds.
+
+- Impact & Recommendation: Attackers can steal funds from the long-term reservation pool without incurring any losses, posing a severe threat to the protocol’s financial security. It is recommended to update the validation logic to use check\*can_approve instead of check_can_send to ensure that only authorized users can withdraw funds and restrict auto-Approve functionality.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-10-coded-estate#h-01-attakers-can-steal-the-funds-from-long-term-reservation) & [Report](https://code4rena.com/reports/2024-10-coded-estate)
+
+<details><summary>POC</summary>
+
+```rust
+
+File: execute.rs#setbidtobuy()
+
+
+675:             if token.sell.auto_approve {
+
+676:                 // update the approval list (remove any for the same spender before adding)
+
+677:                 let expires = Expiration::Never {  };
+
+678:                 token.approvals.retain(|apr| apr.spender != info.sender);
+
+679:                 let approval = Approval {
+
+680:                     spender: info.sender.clone(),
+
+681:                     expires,
+
+682:                 };
+
+683:                 token.approvals.push(approval);
+
+684:
+
+685:             }
+
+File: execute.rs
+
+
+1787:     pub fn withdrawtolandlord(
+
+/**CODE**/
+
+1796:         address:String
+
+1797:     ) -> Result<Response<C>, ContractError> {
+
+/**CODE**/
+
+1848:             .add_message(BankMsg::Send {
+
+1849:                 to_address: address,
+
+1850:                 amount: vec![Coin {
+
+1851:                     denom: token.longterm_rental.denom,
+
+1852:                     amount: Uint128::from(amount) - Uint128::new((u128::from(amount) * u128::from(fee_percentage)) / 10000),
+
+File: execute.rs#withdrawtolandlord()
+
+
+1832:                 if item.deposit_amount - Uint128::from(token.longterm_rental.price_per_month) < Uint128::from(amount)  {
+
+1833:                     return Err(ContractError::UnavailableAmount {  });
+
+1834:                 }
+
+```
+
+</details>
