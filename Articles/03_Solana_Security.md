@@ -731,7 +731,7 @@ pub struct CloseAccount {
 
 ---
 
-[Sealevel-attacks-master](https://github.com/ETAAcademy/ETAAcademy-Audit/tree/main/Appendix/sealevel-attacks-master)
+[Sealevel-attacks-master](https://github.com/ETAAcademy/ETAAcademy-Audit/tree/main/Articles/Appendix/sealevel-attacks-master)
 
 <div  align="center"> 
 <img src="img/03_solana_security.gif" width="50%" />
