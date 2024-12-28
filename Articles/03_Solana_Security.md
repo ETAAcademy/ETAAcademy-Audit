@@ -275,6 +275,8 @@ In Solana programs, account initialization is crucial for allocating space and d
 
 By adding an `is_initialized` field in the account structure, you can check whether the account has already been initialized. If it has, reinitialization is prevented:
 
+<details><summary>POC</summary>
+
 ```rust
 pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
     let user = &mut ctx.accounts.user;
@@ -724,7 +726,6 @@ pub struct CloseAccount {
     #[account(mut)]
     pub receiver: SystemAccount<'info>
 }
-
 ```
 
 </details>
