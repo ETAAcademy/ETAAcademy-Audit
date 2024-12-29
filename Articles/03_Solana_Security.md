@@ -771,12 +771,6 @@ pub struct CloseAccount {
 
 </details>
 
-### Understanding PDA Sharing and Secure Account-Specific PDAs in Solana Programs
-
-In Solana programs, **Program Derived Addresses (PDA)** are commonly used to sign transactions and manage data. However, when the same PDA is used across multiple authority domains, it can open up the potential for unauthorized access to funds or data that do not belong to the user. This article explores the risks of **PDA sharing**, the concept of **secure account-specific PDAs**, and how to leverage Anchor's `seeds` and `bump` constraints to avoid these risks.
-
----
-
 ### 10. PDA Sharing
 
 **PDA Sharing** occurs when a single PDA is used as the signer or authority across multiple users or domains. While this may seem convenient in some cases, it introduces significant security vulnerabilities. Specifically, users may end up accessing funds or data that don't belong to them.
@@ -842,7 +836,7 @@ pub struct TokenPool {
 
 </details>
 
-### 1) Secure Account-Specific PDA Solution
+#### 1) Secure Account-Specific PDA Solution
 
 To avoid the vulnerabilities associated with **PDA sharing**, one solution is to **use account-specific PDAs** derived from unique seeds. This approach ties the PDA to specific accounts or domains, making it impossible for a PDA derived from one pool to sign transfers for another pool's vault or withdraw destination.
 
@@ -906,7 +900,7 @@ pub struct TokenPool {
 
 </details>
 
-### 2) Leveraging Anchor's `seeds` and `bump` Constraints
+#### 2) Leveraging Anchor's `seeds` and `bump` Constraints
 
 Anchor provides a powerful mechanism for ensuring that a PDA is derived correctly and securely. By using Anchor's `seeds` and `bump` constraints, you can ensure that the PDA is tied to specific seeds and that the account passed into the instruction handler matches the expected one.
 
