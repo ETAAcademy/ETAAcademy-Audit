@@ -88,7 +88,7 @@ Solana development involves various security considerations to ensure the integr
 
 In native Rust (without Anchor), developers need to manually check the `is_signer` attribute of an account. If the account hasn't signed the transaction, the program should return the `MissingRequiredSignature` error to prevent further action:
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 if !ctx.accounts.authority.is_signer {
@@ -104,7 +104,7 @@ if !ctx.accounts.authority.is_signer {
 
 In Anchor, you can define an account as a `Signer`, which automatically handles signature verification. For example:
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 pub struct UpdateAuthority<'info> {
@@ -120,7 +120,7 @@ When the account is of the `Signer` type, Anchor automatically checks whether th
 
 The `#[account(signer)]` constraint is a more flexible approach, allowing the signature check and access to the account’s data simultaneously. This is useful for both verifying signatures and securely interacting with account data. For example:
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 #[derive(Accounts)]
@@ -140,7 +140,7 @@ pub struct UpdateAuthority<'info> {
 
 A simple manual check can be implemented within the program to verify the account's owner matches the program's `program_id`:
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 if ctx.accounts.account.owner != ctx.program_id {
@@ -154,7 +154,7 @@ if ctx.accounts.account.owner != ctx.program_id {
 
 Anchor provides automatic owner validation using the `Account` type, ensuring that the account's owner matches the current program:
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 use anchor_lang::prelude::*;
@@ -177,7 +177,7 @@ pub struct Checked<'info> {
 
 Sometimes, an account’s owner may not be the current program but another program’s derived address (PDA). In such cases, the `owner` constraint can be used to validate ownership:
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 #[derive(Accounts)]
@@ -207,7 +207,7 @@ Account data matching ensures that malicious users cannot alter account data or 
 
 In Rust, you can explicitly verify account data by checking whether the caller is the current admin. For example:
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 if ctx.accounts.admin.key() != ctx.accounts.admin_config.admin {
@@ -225,7 +225,7 @@ Anchor simplifies account data verification using the `has_one` or `constraint` 
 
 The `has_one` constraint ensures that the field in `admin_config` (e.g., the `admin` field) matches the provided `admin` account’s public key:
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 #[derive(Accounts)]
@@ -248,7 +248,7 @@ pub struct UpdateAdmin<'info> {
 
 Anchor allows developers to use the `constraint` attribute for more complex validation logic. For example, verifying that the `admin` field in `admin_config` matches the public key of the provided `admin` account:
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 #[derive(Accounts)]
@@ -275,7 +275,7 @@ In Solana programs, account initialization is crucial for allocating space and d
 
 By adding an `is_initialized` field in the account structure, you can check whether the account has already been initialized. If it has, reinitialization is prevented:
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
@@ -297,7 +297,7 @@ pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
 
 In Anchor, the `#[account(init)]` constraint is used to initialize an account and allocate space for it. The discriminator ensures that the account can only be initialized once, thus avoiding overwriting existing data. The constraint requires both the **payer** and **space** to be specified:
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 const DISCRIMINATOR_SIZE: usize = 8;  // Size of the discriminator
@@ -329,7 +329,7 @@ pub struct Initialize<'info> {
 
 The `init_if_needed` constraint automatically initializes an account if it hasn’t been initialized yet. While useful for multiple scenarios, it can be risky if not handled carefully, as it may unintentionally reset account data. Always perform additional checks to prevent data overwriting:
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 #[derive(Accounts)]
@@ -364,7 +364,7 @@ To prevent attackers from passing the same mutable account twice, the program sh
 
 You can add a simple check in the program logic to compare the public keys of two accounts. If they match, return an error.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 if ctx.accounts.user_a.key() == ctx.accounts.user_b.key() {
@@ -378,7 +378,7 @@ if ctx.accounts.user_a.key() == ctx.accounts.user_b.key() {
 
 In Anchor, you can enforce account validation using the `#[account(...)]` attribute with a `constraint`. For example, you can ensure that two accounts are distinct by checking their keys:
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 #[derive(Accounts)]
@@ -411,7 +411,7 @@ This method performs the account validation at compile-time, automatically check
 
 - **Rust Enum Discriminant**: In Rust, an enum discriminant is used to represent the internal value that identifies the specific variant of an enum. You can add a `discriminant` field in the account structure to signify the account type. Every time account data is deserialized, the program can check the value of this field to ensure it matches the expected type.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 #[derive(BorshSerialize, BorshDeserialize)]
@@ -431,7 +431,7 @@ pub enum AccountDiscriminant {
 
 When the program reads and deserializes account data, it checks the `discriminant` field to verify that the account data matches the expected type. For example, if the `discriminant` is not the expected `User` variant, the program can return an error.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 if user.discriminant != AccountDiscriminant::User {
@@ -443,7 +443,7 @@ if user.discriminant != AccountDiscriminant::User {
 
 - **Anchor Account Discriminant**: In Anchor, when you declare an account as `Account<'info, T>`, Anchor automatically handles the discriminator for you. This simplifies the process, as you no longer need to manually manage or verify discriminators.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 #[derive(Accounts)]
@@ -472,7 +472,7 @@ pub struct UserConfig {
 
 **Cross-Program Invocation (CPI)** allows one program to call the instructions of another program, leveraging its functionality. However, **arbitrary CPI vulnerabilities** arise when the target program's ID is not properly validated, allowing an attacker to pass the ID of a malicious program, which may execute unsafe operations. This could lead to severe security issues, including unauthorized access and manipulation of funds.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 #[derive(Accounts)]
@@ -488,7 +488,7 @@ pub struct Cpi<'info> {
 
 To prevent this vulnerability, always verify that the target program ID is the expected one before performing the CPI. For example, ensure that the `token_program` matches the expected SPL Token program ID:
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 pub fn cpi_secure(ctx: Context<Cpi>, amount: u64) -> ProgramResult {
@@ -522,7 +522,7 @@ pub fn cpi_secure(ctx: Context<Cpi>, amount: u64) -> ProgramResult {
 
 Anchor's CPI module automatically handles program ID validation, reducing the risk of errors or omissions. With Anchor, you can easily perform CPI with built-in safety checks for the target program ID.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 use anchor_lang::prelude::*;
@@ -579,7 +579,7 @@ In Solana, **Program Derived Addresses (PDAs)** are deterministically generated 
 
 Using `create_program_address` allows users to specify their own bump value. An attacker could exploit this by passing different bump values to generate multiple PDAs, thus bypassing restrictions like reward limits.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 pub fn set_value(ctx: Context<BumpSeed>, key: u64, new_value: u64, bump: u8) -> Result<()> {
@@ -597,7 +597,7 @@ pub fn set_value(ctx: Context<BumpSeed>, key: u64, new_value: u64, bump: u8) -> 
 
 To ensure consistency and security, it’s recommended to use `find_program_address`. This method guarantees the use of a canonical bump and prevents the use of different bumps to generate multiple addresses. Additionally, it is advisable to store the bump value in the account to avoid recalculating it every time, improving efficiency.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 pub fn set_value_secure(ctx: Context<BumpSeed>, key: u64, new_value: u64) -> Result<()> {
@@ -617,7 +617,7 @@ pub fn set_value_secure(ctx: Context<BumpSeed>, key: u64, new_value: u64) -> Res
 
 In **Anchor**, you can manage PDAs using the `seeds` and `bump` attributes, which ensure the correct bump is used without introducing security vulnerabilities. By specifying `bump = <some_bump>`, you can control which bump value to use, but Anchor will always use `find_program_address` to ensure the use of a canonical bump.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 #[program]
@@ -686,7 +686,7 @@ In Solana, when an account is closed, if not handled properly, an attacker could
 
 - **Properly Closing Accounts**: This involves transferring the Lamports from the account, clearing the account’s data, and setting a close identifier to ensure the account is securely closed.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 #[program]
@@ -723,7 +723,7 @@ pub mod closing_accounts_secure {
 
 - **Additional Protection with `force_defund` Instruction**: This instruction ensures that if an account has been revived or tampered with, it is forcibly defunded, preventing further use.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 // Forcefully revoke funds, ensuring lamports from the closed account are transferred
@@ -754,7 +754,7 @@ pub fn force_defund(ctx: Context<ForceDefund>) -> ProgramResult {
 
 - **Using Anchor's `close` Constraint**: The Anchor framework simplifies the account closing process by automating the steps of transferring Lamports, clearing data, and setting the closed identifier. This reduces the chances of vulnerabilities due to improper account closure.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 #[derive(Accounts)]
@@ -781,7 +781,7 @@ For example, when multiple pool accounts share the same PDA derived from a globa
 
 In the example below, the PDA used for signing the transfer of tokens from a vault is derived from the mint address stored in the pool account. This creates a scenario where any pool account could be used to sign a token transfer, even if the destination doesn't belong to that pool.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 use anchor_lang::prelude::*;
@@ -842,7 +842,7 @@ To avoid the vulnerabilities associated with **PDA sharing**, one solution is to
 
 For instance, you can use the `withdraw_destination` address as a seed to derive the PDA for signing transfers. This ensures that the PDA used to authorize a transfer from a vault token account is unique to that specific pool and withdraw destination, preventing unauthorized access.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 use anchor_lang::prelude::*;
@@ -908,7 +908,7 @@ In the example below, the `seeds` constraint ties the pool account to the `withd
 
 Anchor automatically derives the correct PDA for the pool account using the specified `seeds` and `bump`. It also validates that the accounts passed into the instruction handler are correct, significantly reducing the risk of unauthorized access.
 
-<details><summary>POC</summary>
+<details><summary>Code</summary>
 
 ```rust
 use anchor_lang::prelude::*;
