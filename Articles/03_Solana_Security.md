@@ -84,7 +84,21 @@ Solana development involves various security considerations to ensure the integr
 
 **Signature checks** are critical in ensuring that only authorized accounts can perform certain actions in blockchain development. In Anchor, the `Signer` type or the `#[account(signer)]` constraint can be used to simplify signature verification logic. In more complex cases, developers can manually check the `is_signer` attribute within instruction handlers.
 
-#### 1) Signature Check in Anchor
+#### 1) Signature Check in Native Rust
+
+In native Rust (without Anchor), developers need to manually check the `is_signer` attribute of an account. If the account hasn't signed the transaction, the program should return the `MissingRequiredSignature` error to prevent further action:
+
+<details><summary>POC</summary>
+
+```rust
+if !ctx.accounts.authority.is_signer {
+    return Err(ProgramError::MissingRequiredSignature.into());
+}
+```
+
+</details>
+
+#### 2) Signature Check in Anchor
 
 ##### **Using the Signer Type**
 
@@ -118,25 +132,11 @@ pub struct UpdateAuthority<'info> {
 
 </details>
 
-#### 2) Signature Check in Native Rust
-
-In native Rust (without Anchor), developers need to manually check the `is_signer` attribute of an account. If the account hasn't signed the transaction, the program should return the `MissingRequiredSignature` error to prevent further action:
-
-<details><summary>POC</summary>
-
-```rust
-if !ctx.accounts.authority.is_signer {
-    return Err(ProgramError::MissingRequiredSignature.into());
-}
-```
-
-</details>
-
 ### 2. **Owner Checks**
 
 **Owner checks** are crucial to ensure that the `owner` field of an account matches the program’s `program_id`. Without proper owner validation, attackers could exploit accounts owned by other programs to forge or tamper with operations, leading to significant security vulnerabilities.
 
-#### **Manual Owner Check**
+#### 1) Manual Owner Check
 
 A simple manual check can be implemented within the program to verify the account's owner matches the program's `program_id`:
 
@@ -150,7 +150,7 @@ if ctx.accounts.account.owner != ctx.program_id {
 
 </details>
 
-#### **Anchor Automatic Owner Check**
+#### 2) Anchor Automatic Owner Check
 
 Anchor provides automatic owner validation using the `Account` type, ensuring that the account's owner matches the current program:
 
@@ -271,7 +271,7 @@ pub struct UpdateAdmin<'info> {
 
 In Solana programs, account initialization is crucial for allocating space and data for accounts. If proper checks are not performed, an attacker might be able to reinitialize an existing account, tampering with critical account fields (like `authority`).
 
-1. **Add Initialization Checks**
+#### 1) Add Initialization Checks
 
 By adding an `is_initialized` field in the account structure, you can check whether the account has already been initialized. If it has, reinitialization is prevented:
 
@@ -293,7 +293,7 @@ pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
 
 </details>
 
-2. **Using Anchor’s `init` Constraint**
+#### 2) Using Anchor’s `init` Constraint
 
 In Anchor, the `#[account(init)]` constraint is used to initialize an account and allocate space for it. The discriminator ensures that the account can only be initialized once, thus avoiding overwriting existing data. The constraint requires both the **payer** and **space** to be specified:
 
@@ -314,11 +314,18 @@ pub struct Initialize<'info> {
     pub authority: Signer<'info>,        // Signing account
     pub system_program: Program<'info, System>,  // System program
 }
+
+
+    #[account]
+    #[derive(InitSpace)]
+    pub struct User {
+        pub authority: Pubkey,
+    }
 ```
 
 </details>
 
-3. **Caution with `init_if_needed`**
+#### 3) Caution with `init_if_needed`
 
 The `init_if_needed` constraint automatically initializes an account if it hasn’t been initialized yet. While useful for multiple scenarios, it can be risky if not handled carefully, as it may unintentionally reset account data. Always perform additional checks to prevent data overwriting:
 
@@ -337,6 +344,12 @@ pub struct InitializeWithCheck<'info> {
     pub authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
+
+    #[account]
+    pub struct User {
+        pub is_initialized: bool,
+        pub authority: Pubkey,
+    }
 ```
 
 </details>
@@ -388,10 +401,11 @@ This method performs the account validation at compile-time, automatically check
 
 **Type Cosplay Vulnerability** occurs when a program mistakenly uses an account's data in an unintended manner due to the lack of proper type differentiation. In Solana, accounts store data as byte arrays, which are deserialized into custom account types. If these types are not properly verified, a program could mistakenly treat an ordinary user account as an administrator account, leading to security risks such as privilege escalation or data corruption.
 
-1. **Account Discriminant**: Anchor provides an 8-byte discriminator that uniquely identifies different account types. Anchor automatically checks this discriminator when deserializing account data to ensure it matches the expected type, improving security and reducing the chances of type errors.
-2. **Anchor's Automatic Handling**: Anchor automatically inserts and verifies account discriminators, reducing the developer's burden and increasing security by ensuring that the account type is always correct.
+- **Account Discriminant**: Anchor provides an 8-byte discriminator that uniquely identifies different account types. Anchor automatically checks this discriminator when deserializing account data to ensure it matches the expected type, improving security and reducing the chances of type errors.
 
-3. **Using `#[account]`**: This attribute automatically adds a discriminator to accounts and ensures that the correct account type is used, reducing the risk of type mismatches.
+- **Anchor's Automatic Handling**: Anchor automatically inserts and verifies account discriminators, reducing the developer's burden and increasing security by ensuring that the account type is always correct.
+
+- **Using `#[account]`**: This attribute automatically adds a discriminator to accounts and ensures that the correct account type is used, reducing the risk of type mismatches.
 
 #### Rust Enum Discriminant and Anchor Account Discriminant
 
@@ -606,7 +620,47 @@ In **Anchor**, you can manage PDAs using the `seeds` and `bump` attributes, whic
 <details><summary>POC</summary>
 
 ```rust
+#[program]
+pub mod bump_seed_canonicalization_recommended {
+    use super::*;
+
+    // Update the data value and store the canonical bump
+    pub fn set_value(ctx: Context<BumpSeed>, _key: u64, new_value: u64) -> Result<()> {
+        ctx.accounts.data.value = new_value;
+
+        // Store the canonical bump to the data account
+        ctx.accounts.data.bump = ctx.bumps.data;
+
+        Ok(())
+    }
+
+    // Verify that the PDA address uses the canonical bump derivation
+    pub fn verify_address(ctx: Context<VerifyAddress>, _key: u64) -> Result<()> {
+        msg!("PDA confirmed to use canonical bump derivation: {}", ctx.accounts.data.key());
+        Ok(())
+    }
+}
+
 #[derive(Accounts)]
+#[instruction(key: u64)]
+pub struct BumpSeed<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(
+        init,
+        seeds = [key.to_le_bytes().as_ref()],
+        bump,  // Anchor will automatically use the canonical bump
+        payer = payer,
+        space = DISCRIMINATOR_SIZE + Data::INIT_SPACE
+    )]
+    pub data: Account<'info, Data>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(key: u64)]
 pub struct VerifyAddress<'info> {
     #[account(
         seeds = [key.to_le_bytes().as_ref()],
@@ -614,31 +668,14 @@ pub struct VerifyAddress<'info> {
     )]
     pub data: Account<'info, Data>,
 }
-```
 
-</details>
-
-#### Security Vulnerability Example and Fix
-
-By addressing unsafe PDA derivation issues, programs can prevent attackers from using multiple bump values to derive different PDAs and claim rewards multiple times. By using `find_program_address` and storing the canonical bump, programs ensure that each user can claim rewards only once.
-
-<details><summary>POC</summary>
-
-```rust
-pub fn create_user_secure(ctx: Context<CreateUserSecure>) -> Result<()> {
-    ctx.accounts.user.set_inner(UserSecure {
-        auth: ctx.accounts.payer.key(),
-        bump: ctx.bumps.user,
-        rewards_claimed: false,
-    });
-    Ok(())
+#[account]
+#[derive(InitSpace)]
+pub struct Data {
+    pub value: u64,
+    pub bump: u8,  // Store the canonical bump
 }
 
-pub fn claim_secure(ctx: Context<SecureClaim>) -> Result<()> {
-    // Check if the canonical bump matches
-    ctx.accounts.user.rewards_claimed = true;
-    Ok(())
-}
 ```
 
 </details>
@@ -647,7 +684,7 @@ pub fn claim_secure(ctx: Context<SecureClaim>) -> Result<()> {
 
 In Solana, when an account is closed, if not handled properly, an attacker could prevent the account from being garbage collected by refunding the rent in Lamports, effectively "reviving" the account and using it again. To prevent such **rebirth attacks**, the program must ensure that the account is fully cleaned before being closed, and a special identifier (such as `CLOSED_ACCOUNT_DISCRIMINATOR`) is set to mark the account as closed.
 
-1. **Properly Closing Accounts**: This involves transferring the Lamports from the account, clearing the account’s data, and setting a close identifier to ensure the account is securely closed.
+- **Properly Closing Accounts**: This involves transferring the Lamports from the account, clearing the account’s data, and setting a close identifier to ensure the account is securely closed.
 
 <details><summary>POC</summary>
 
@@ -660,6 +697,7 @@ pub mod closing_accounts_secure {
         let account = ctx.accounts.account.to_account_info();
         let dest_starting_lamports = ctx.accounts.destination.lamports();
 
+        // Transfer the lamports from the account to the destination account
         **ctx.accounts.destination.lamports.borrow_mut() = dest_starting_lamports
             .checked_add(account.lamports())
             .unwrap();
@@ -667,14 +705,14 @@ pub mod closing_accounts_secure {
 
         let mut data = account.try_borrow_mut_data()?;
         for byte in data.deref_mut().iter_mut() {
-            *byte = 0; // Clear data
+            *byte = 0; // Clear the account data
         }
 
         let dst: &mut [u8] = &mut data;
         let mut cursor = std::io::Cursor::new(dst);
         cursor
             .write_all(&anchor_lang::__private::CLOSED_ACCOUNT_DISCRIMINATOR)
-            .unwrap(); // Set close identifier
+            .unwrap(); // Set the closed account discriminator
 
         Ok(())
     }
@@ -683,14 +721,16 @@ pub mod closing_accounts_secure {
 
 </details>
 
-2. **Additional Protection with `force_defund` Instruction**: This instruction ensures that if an account has been revived or tampered with, it is forcibly defunded, preventing further use.
+- **Additional Protection with `force_defund` Instruction**: This instruction ensures that if an account has been revived or tampered with, it is forcibly defunded, preventing further use.
 
 <details><summary>POC</summary>
 
 ```rust
+// Forcefully revoke funds, ensuring lamports from the closed account are transferred
 pub fn force_defund(ctx: Context<ForceDefund>) -> ProgramResult {
     let account = &ctx.accounts.account;
 
+    // Check if the account is closed
     let data = account.try_borrow_data()?;
     assert!(data.len() > 8);
 
@@ -712,19 +752,227 @@ pub fn force_defund(ctx: Context<ForceDefund>) -> ProgramResult {
 
 </details>
 
-3. **Using Anchor's `close` Constraint**: The Anchor framework simplifies the account closing process by automating the steps of transferring Lamports, clearing data, and setting the closed identifier. This reduces the chances of vulnerabilities due to improper account closure.
+- **Using Anchor's `close` Constraint**: The Anchor framework simplifies the account closing process by automating the steps of transferring Lamports, clearing data, and setting the closed identifier. This reduces the chances of vulnerabilities due to improper account closure.
 
 <details><summary>POC</summary>
 
 ```rust
 #[derive(Accounts)]
 pub struct CloseAccount {
-    #[account(mut, close = receiver)]
-    pub data_account: Account<'info, MyData>,
+    #[account(
+        mut,
+        close = receiver // Transfer the lamports from the closed account to the receiver account
+    )]
+    pub data_account: Account<'info, MyData>, // The account to be closed
     #[account(mut)]
-    pub receiver: SystemAccount<'info>
+    pub receiver: SystemAccount<'info> // The target account to receive the lamports from the closed account
+}
+```
+
+</details>
+
+### Understanding PDA Sharing and Secure Account-Specific PDAs in Solana Programs
+
+In Solana programs, **Program Derived Addresses (PDA)** are commonly used to sign transactions and manage data. However, when the same PDA is used across multiple authority domains, it can open up the potential for unauthorized access to funds or data that do not belong to the user. This article explores the risks of **PDA sharing**, the concept of **secure account-specific PDAs**, and how to leverage Anchor's `seeds` and `bump` constraints to avoid these risks.
+
+---
+
+### 10. PDA Sharing
+
+**PDA Sharing** occurs when a single PDA is used as the signer or authority across multiple users or domains. While this may seem convenient in some cases, it introduces significant security vulnerabilities. Specifically, users may end up accessing funds or data that don't belong to them.
+
+For example, when multiple pool accounts share the same PDA derived from a global seed (such as a mint address), any pool account could potentially sign transactions involving a vault token account, leading to unauthorized token transfers. This problem becomes more pronounced when different withdraw destinations are involved for different pools.
+
+**Insecure Global PDA Example:**
+
+In the example below, the PDA used for signing the transfer of tokens from a vault is derived from the mint address stored in the pool account. This creates a scenario where any pool account could be used to sign a token transfer, even if the destination doesn't belong to that pool.
+
+<details><summary>POC</summary>
+
+```rust
+use anchor_lang::prelude::*;
+use anchor_spl::token::{self, Token, TokenAccount};
+
+declare_id!("ABQaKhtpYQUUgZ9m2sAY7ZHxWv6KyNdhUJW8Dh8NQbkf");
+
+#[program]
+pub mod pda_sharing_insecure {
+    use super::*;
+
+    pub fn withdraw_tokens(ctx: Context<WithdrawTokens>) -> Result<()> {
+        let amount = ctx.accounts.vault.amount;
+        let seeds = &[ctx.accounts.pool.mint.as_ref(), &[ctx.accounts.pool.bump]];
+        token::transfer(get_transfer_ctx(&ctx.accounts).with_signer(&[seeds]), amount)
+    }
 }
 
+#[derive(Accounts)]
+pub struct WithdrawTokens<'info> {
+    #[account(has_one = vault, has_one = withdraw_destination)]
+    pool: Account<'info, TokenPool>,
+    vault: Account<'info, TokenAccount>,
+    withdraw_destination: Account<'info, TokenAccount>,
+    /// CHECK: This is the PDA that signs for the transfer
+    authority: UncheckedAccount<'info>,
+    token_program: Program<'info, Token>,
+}
+
+pub fn get_transfer_ctx<'accounts, 'remaining, 'cpi_code, 'info>(
+    accounts: &'accounts WithdrawTokens<'info>,
+) -> CpiContext<'accounts, 'remaining, 'cpi_code, 'info, token::Transfer<'info>> {
+    CpiContext::new(
+        accounts.token_program.to_account_info(),
+        token::Transfer {
+            from: accounts.vault.to_account_info(),
+            to: accounts.withdraw_destination.to_account_info(),
+            authority: accounts.authority.to_account_info(),
+        },
+    )
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct TokenPool {
+    pub vault: Pubkey,
+    pub mint: Pubkey,
+    pub withdraw_destination: Pubkey,
+    pub bump: u8,
+}
+```
+
+</details>
+
+### 1) Secure Account-Specific PDA Solution
+
+To avoid the vulnerabilities associated with **PDA sharing**, one solution is to **use account-specific PDAs** derived from unique seeds. This approach ties the PDA to specific accounts or domains, making it impossible for a PDA derived from one pool to sign transfers for another pool's vault or withdraw destination.
+
+For instance, you can use the `withdraw_destination` address as a seed to derive the PDA for signing transfers. This ensures that the PDA used to authorize a transfer from a vault token account is unique to that specific pool and withdraw destination, preventing unauthorized access.
+
+<details><summary>POC</summary>
+
+```rust
+use anchor_lang::prelude::*;
+use anchor_spl::token::{self, Token, TokenAccount};
+
+declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+
+#[program]
+pub mod pda_sharing_secure {
+    use super::*;
+
+    pub fn withdraw_tokens(ctx: Context<WithdrawTokens>) -> Result<()> {
+        let amount = ctx.accounts.vault.amount;
+        let seeds = &[
+            ctx.accounts.pool.withdraw_destination.as_ref(),
+            &[ctx.accounts.pool.bump],
+        ];
+        token::transfer(get_transfer_ctx(&ctx.accounts).with_signer(&[seeds]), amount)
+    }
+}
+
+#[derive(Accounts)]
+pub struct WithdrawTokens<'info> {
+    #[account(has_one = vault, has_one = withdraw_destination)]
+    pool: Account<'info, TokenPool>,
+    vault: Account<'info, TokenAccount>,
+    withdraw_destination: Account<'info, TokenAccount>,
+    /// CHECK: This is the PDA that signs for the transfer
+    authority: UncheckedAccount<'info>,
+    token_program: Program<'info, Token>,
+}
+
+pub fn get_transfer_ctx<'accounts, 'remaining, 'cpi_code, 'info>(
+    accounts: &'accounts WithdrawTokens<'info>,
+) -> CpiContext<'accounts, 'remaining, 'cpi_code, 'info, token::Transfer<'info>> {
+    CpiContext::new(
+        accounts.token_program.to_account_info(),
+        token::Transfer {
+            from: accounts.vault.to_account_info(),
+            to: accounts.withdraw_destination.to_account_info(),
+            authority: accounts.authority.to_account_info(),
+        },
+    )
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct TokenPool {
+    pub vault: Pubkey,
+    pub mint: Pubkey,
+    pub withdraw_destination: Pubkey,
+    pub bump: u8,
+}
+```
+
+</details>
+
+### 2) Leveraging Anchor's `seeds` and `bump` Constraints
+
+Anchor provides a powerful mechanism for ensuring that a PDA is derived correctly and securely. By using Anchor's `seeds` and `bump` constraints, you can ensure that the PDA is tied to specific seeds and that the account passed into the instruction handler matches the expected one.
+
+In the example below, the `seeds` constraint ties the pool account to the `withdraw_destination`, and the `bump` ensures that the correct PDA is used. The `has_one` constraint ensures that the vault and withdraw destination match the expected accounts for that pool.
+
+Anchor automatically derives the correct PDA for the pool account using the specified `seeds` and `bump`. It also validates that the accounts passed into the instruction handler are correct, significantly reducing the risk of unauthorized access.
+
+<details><summary>POC</summary>
+
+```rust
+use anchor_lang::prelude::*;
+use anchor_spl::token::{self, Token, TokenAccount};
+
+declare_id!("ABQaKhtpYQUUgZ9m2sAY7ZHxWv6KyNdhUJW8Dh8NQbkf");
+
+#[program]
+pub mod pda_sharing_recommended {
+    use super::*;
+
+    pub fn withdraw_tokens(ctx: Context<WithdrawTokens>) -> Result<()> {
+        let amount = ctx.accounts.vault.amount;
+        let seeds = &[
+            ctx.accounts.pool.withdraw_destination.as_ref(),
+            &[ctx.accounts.pool.bump],
+        ];
+        token::transfer(get_transfer_ctx(&ctx.accounts).with_signer(&[seeds]), amount)
+    }
+}
+
+#[derive(Accounts)]
+pub struct WithdrawTokens<'info> {
+    #[account(
+        seeds = [withdraw_destination.key().as_ref()],
+        bump = pool.bump,
+        has_one = vault,
+        has_one = withdraw_destination,
+    )]
+    pool: Account<'info, TokenPool>,
+    #[account(mut)]
+    vault: Account<'info, TokenAccount>,
+    #[account(mut)]
+    withdraw_destination: Account<'info, TokenAccount>,
+    token_program: Program<'info, Token>,
+}
+
+pub fn get_transfer_ctx<'accounts, 'remaining, 'cpi_code, 'info>(
+    accounts: &'accounts WithdrawTokens<'info>,
+) -> CpiContext<'accounts, 'remaining, 'cpi_code, 'info, token::Transfer<'info>> {
+    CpiContext::new(
+        accounts.token_program.to_account_info(),
+        token::Transfer {
+            from: accounts.vault.to_account_info(),
+            to: accounts.withdraw_destination.to_account_info(),
+            authority: accounts.pool.to_account_info(),
+        },
+    )
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct TokenPool {
+    pub vault: Pubkey,
+    pub mint: Pubkey,
+    pub withdraw_destination: Pubkey,
+    pub bump: u8,
+}
 ```
 
 </details>
@@ -733,6 +981,6 @@ pub struct CloseAccount {
 
 [Sealevel-attacks-master](https://github.com/ETAAcademy/ETAAcademy-Audit/tree/main/Articles/Appendix/sealevel-attacks-master)
 
-<div  align="center"> 
+<div  align="center">
 <img src="img/03_solana_security.gif" width="50%" />
 </div>

@@ -1771,7 +1771,7 @@ bool internal tokensSupplied;
 
 ## 31. [Medium] Blacklisted user can burn tokens during WHITELIST_ENABLED state
 
-### mutual exclusivity between whitelist and blacklist
+### Mutual exclusivity between whitelist and blacklist
 
 - Summary: A blacklisted user can burn tokens during the WHITELIST_ENABLED state, violating the protocol's main invariant. This occurs because blacklisted users can also hold the whitelisted role, allowing them to pass the check and burn tokens. This issue could be problematic if the admin attempts to redistribute a blacklisted user's UStb balance, but the user front-runs it with a burn.
 

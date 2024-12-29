@@ -309,7 +309,7 @@ function test_claimHack() public {
 
 ## 6.[High] Attakers can steal the funds from long-term reservation
 
-### long-term reservation
+### Long-term reservation
 
 - Summary: Insufficient permission checks and rental fund management allows attackers to exploit setbidtobuy() and withdrawtolandlord() to steal funds from the protocol. Enhancing permission validation and restricting the auto-approve feature can effectively mitigate this issue and secure the protocol’s funds.
 
