@@ -724,3 +724,68 @@ func TestTssHashCollision(t *testing.T) {
 ```
 
 </details>
+
+## 17. [High] Delegations cannot be removed in some cases due to vulnerable revokeDelegate() implementation
+
+### Hashed key
+
+- Summary: The `MultiSourceLoan::revokeDelegate` function always passes an empty `rights` value when calling `delegateERC721` to revoke delegations. Since `DelegateRegistry` uses `rights` as part of the hashed key for storing delegation data, this causes a mismatch and prevents the removal of delegations with custom `rights`.
+
+- Impact & Recommendation: Consequently, an old borrower could retain access to an NFT's delegation rights and exploit this to claim new benefits, such as event tickets, even after the NFT is transferred to a new borrower. To fix this, `revokeDelegate` should accept a `bytes32 _rights` parameter to ensure the correct delegation is revoked. Although the issue can be bypassed by using the `delegate` function with the correct payload, the current implementation is misleading and does not align with its intended functionality, warranting a medium-risk severity assessment.
+
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-06-gondi#m-01-delegations-cannot-be-removed-in-some-cases-due-to-vulnerable-revokedelegate-implementation) & [Report](https://code4rena.com/reports/2024-06-gondi)
+
+<details><summary>POC</summary>
+
+```solidity
+//src/lib/loans/MultiSourceLoan.sol
+
+    function delegate(uint256 _loanId, Loan calldata loan, address _delegate, bytes32 _rights, bool _value) external {
+
+        if (loan.hash() != _loans[_loanId]) {
+
+            revert InvalidLoanError(_loanId);
+
+        }
+
+        if (msg.sender != loan.borrower) {
+
+            revert InvalidCallerError();
+
+        }
+
+        //@audit-info a borrower can pass custom rights to delegateERC721
+
+|>      IDelegateRegistry(getDelegateRegistry).delegateERC721(
+
+            _delegate, loan.nftCollateralAddress, loan.nftCollateralTokenId, _rights, _value
+
+        );
+
+
+        emit Delegated(_loanId, _delegate, _value);
+
+    }
+
+    //src/lib/loans/MultiSourceLoan.sol
+
+    function revokeDelegate(address _delegate, address _collection, uint256 _tokenId) external {
+
+        if (ERC721(_collection).ownerOf(_tokenId) == address(this)) {
+
+            revert InvalidMethodError();
+
+        }
+
+        //@audit revokeDelegate will always pass empty rights.
+
+|>      IDelegateRegistry(getDelegateRegistry).delegateERC721(_delegate, _collection, _tokenId, "", false);
+
+
+        emit RevokeDelegate(_delegate, _collection, _tokenId);
+
+    }
+
+```
+
+</details>
