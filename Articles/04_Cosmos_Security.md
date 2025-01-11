@@ -30,13 +30,13 @@ Cosmos is a network of interoperable blockchains, often referred to as the "Inte
 
 Interchain is a decentralized network of independent blockchains supported by Byzantine Fault Tolerant (BFT) consensus algorithms. It enables interoperability through the IBC protocol, facilitating token transfers and cross-chain communication. This ecosystem includes protocols, SDKs, tokens, wallets, applications, and more. The key components are as follows:
 
-- **Cosmos SDK**: The Cosmos SDK is a modular and flexible framework for developers to build interoperable, application-specific blockchains. It prioritizes security through the **object-capability model**, which reduces the risk of attacks. Developers benefit from its modular design, allowing them to customize blockchains with various features while maintaining interoperability via IBC.
+- **Cosmos SDK**: The Cosmos SDK is a modular and flexible framework for developers to build interoperable, application-specific blockchains. It prioritizes security through the **object-capability model**, which reduces the risk of attacks.
 
-- **Tendermint and CometBFT**: **Tendermint** is a consensus and networking engine that abstracts away the complexities of consensus and network management, offering developers a high-performance consensus solution. Its evolution, **CometBFT**, integrates **Delegated Proof of Stake (DPoS)** and **Practical Byzantine Fault Tolerance (pBFT)** mechanisms to provide an efficient and reliable consensus layer. Up to 175 validators, ranked by token holdings,CometBFT secure the network and validate transactions, with block times averaging 7 seconds.
+- **Tendermint and CometBFT**: **Tendermint** is a consensus and networking engine that abstracts away the complexities of consensus and network management, offering developers a high-performance consensus solution. Its evolution, **CometBFT**, integrates **Delegated Proof of Stake (DPoS)** and **Practical Byzantine Fault Tolerance (pBFT)** mechanisms to provide an efficient and reliable consensus layer. Up to 175 validators, ranked by token holdings, CometBFT secure the network and validate transactions, with block times averaging 7 seconds.
 
 - **Inter-Blockchain Communication Protocol (IBC)**: The IBC protocol enables secure and efficient token and data transfers between blockchains. By leveraging Tendermint’s fast finality, blockchains with diverse architectures and applications can achieve interoperability. Use cases include value transfer, token swaps, and cross-chain data exchange.
 
-**Cosmos Hub**: Within the Interchain ecosystem, blockchains are categorized as **Hubs** and **Zones**. Zones connect to Hubs, enabling seamless data and value flow. **Cosmos Hub** is the first blockchain built using the Interchain technology stack. It operates as a **public Proof-of-Stake (PoS)** blockchain with ATOM as its native token, used for paying transaction fees and securing the network. As the “router” of the Interchain ecosystem, Cosmos Hub facilitates cross-chain transactions between Zones, acting as a central node for interoperability.
+- **Cosmos Hub**: Within the Interchain ecosystem, blockchains are categorized as **Hubs** and **Zones**. Zones connect to Hubs, enabling seamless data and value flow. **Cosmos Hub** is the first blockchain built using the Interchain technology stack. It operates as a **public Proof-of-Stake (PoS)** blockchain with ATOM as its native token, used for paying transaction fees and securing the network. As the “router” of the Interchain ecosystem, Cosmos Hub facilitates cross-chain transactions between Zones, acting as a central node for interoperability.
 
 - **Ignite CLI**: The Ignite CLI is a command-line tool that simplifies the creation of application-specific blockchains. Built on Tendermint/CometBFT and the Cosmos SDK, it provides an intuitive interface for developers to build, test, and deploy blockchains efficiently.
 
@@ -89,8 +89,6 @@ Key components of BaseApp include:
 - **State Caching**: Uses cached states (`checkState` and `deliverState`) during transaction processing to prevent premature state changes.
 
 ### **Transaction Lifecycle**
-
-**Transaction Lifecycle in Cosmos SDK**
 
 The transaction process within the Cosmos SDK is divided into several key stages, ensuring the validity, execution, and persistence of transactions. These stages are as follows:
 
@@ -180,13 +178,7 @@ func NewKeeper(
 
 ## 2. IBC: Interchain Security and Cross-Chain Communication
 
-In addressing blockchain scalability, different ecosystems propose varying approaches. Solana advocates for a monolithic chain capable of handling all transactions, including data availability and execution. Ethereum prefers a modular architecture, separating layers such as execution, data availability, and consensus, exemplified by Layer-2 rollups. Cosmos offers an alternative solution by implementing horizontal scalability through multiple independent application-specific chains (app-chains) connected via tools like Tendermint, Cosmos SDK, and the Inter-Blockchain Communication (IBC) protocol.
-
-Cosmos combines **horizontal scalability** (multiple parallel blockchains) with **vertical scalability** (consensus and application optimization), addressing blockchain's scalability challenges.
-
-- **Tendermint**: A foundational layer in the Cosmos ecosystem, Tendermint ensures fast transaction finality and robust consensus via a Byzantine Fault Tolerance (BFT) algorithm.
-- **Cosmos SDK**: A framework for building application-specific blockchains, enabling rapid development and interoperability via IBC.
-- **IBC Protocol**: The cornerstone of Cosmos' cross-chain ecosystem, facilitating secure data transfers and asset exchanges across blockchains.
+In addressing blockchain scalability, different ecosystems propose varying approaches. Solana advocates for a monolithic chain capable of handling all transactions, including data availability and execution. Ethereum prefers a modular architecture, separating layers such as execution, data availability, and consensus, exemplified by Layer-2 rollups. Cosmos addresses scalability by combining **horizontal scalability** through parallel app-specific blockchains with **vertical scalability** via optimized consensus and performance, using tools like Tendermint, Cosmos SDK, and IBC.
 
 ### IBC: Enabling Secure Cross-Chain Communication
 
@@ -467,48 +459,48 @@ service Msg {
 }
 
 message MsgCreatePost {
-string signer = 1;
-string author = 2;
-string title = 3;
-string body = 4;
+  string signer = 1;
+  string author = 2;
+  string title = 3;
+  string body = 4;
 }
 
 message MsgCreatePostResponse {
-uint64 id = 1;
+  uint64 id = 1;
 }
 
 message Post {
-string author = 1;
-uint64 id = 2;
-string title = 3;
-string body = 4;
+  string author = 1;
+  uint64 id = 2;
+  string title = 3;
+  string body = 4;
 }
 
 // The signer field is used for signature verification
 func (msg *MsgCreatePost) GetSigners() []sdk.AccAddress {
-signer, err := sdk.AccAddressFromBech32(msg.Signer)
-if err != nil {
-panic(err)
-}
-return []sdk.AccAddress{Signer}
+    signer, err := sdk.AccAddressFromBech32(msg.Signer)
+    if err != nil {
+        panic(err)
+    }
+    return []sdk.AccAddress{Signer}
 }
 
 func (msg *MsgCreatePost) GetSignBytes() []byte {
-bz := ModuleCdc.MustMarshalJSON(msg)
-return sdk.MustSortJSON(bz)
+    bz := ModuleCdc.MustMarshalJSON(msg)
+    return sdk.MustSortJSON(bz)
 }
 
 func (msg *MsgCreatePost) ValidateBasic() error {
-_, err := sdk.AccAddressFromBech32(msg.Signer)
-if err != nil {
-return sdkerrors.Wrapf(sdkerrors.ErrInvalidAddress, "invalid creator address (%s)", err)
-}
-return nil
+    _, err := sdk.AccAddressFromBech32(msg.Signer)
+    if err != nil {
+        return sdkerrors.Wrapf(sdkerrors.ErrInvalidAddress, "invalid creator address (%s)", err)
+    }
+    return nil
 }
 
 // The author field is saved along with the post's content
 func (k msgServer) CreatePost(goCtx context.Context, msg *types.MsgCreatePost) (*types.MsgCreatePostResponse, error) {
-ctx := sdk.UnwrapSDKContext(goCtx)
+    ctx := sdk.UnwrapSDKContext(goCtx)
 
     var post = types.Post{
         Author: msg.Author,
@@ -519,7 +511,6 @@ ctx := sdk.UnwrapSDKContext(goCtx)
     id := k.AppendPost(ctx, post)
 
     return &types.MsgCreatePostResponse{Id: id}, nil
-
 }
 
 ```
@@ -658,6 +649,7 @@ service Msg {
   rpc OracleCommitPrice(MsgOracleCommitPrice) returns (MsgOracleCommitPriceResponse);
   rpc OracleRevealPrice(MsgOracleRevealPrice) returns (MsgOracleRevealPriceResponse);
 }
+
 ```
 
 </details>
@@ -736,8 +728,6 @@ In the Cosmos SDK, the `x/bank` module is the standard token management module r
 
 - **Blacklist Checks**: When implementing new token transfer functionality, it is crucial to explicitly check against the blacklist to prevent unauthorized transfers. This check should be performed every time a transfer is initiated, ensuring that the system consistently enforces the rules and prevents malicious actors from bypassing restrictions.
 
-By integrating these safeguards into token transfer processes, developers can significantly reduce the risk of vulnerabilities arising from interactions between the `x/bank` module and custom modules, ensuring that their application remains secure and operates as intended.
-
 <details><summary>Code</summary>
 
 ```go
@@ -814,6 +804,16 @@ Over time, older versions of libraries and tools may contain known security vuln
 **Recommendation**: Always maintain dependencies at their latest versions and regularly check for updates to the Cosmos SDK and other related components. In particular, address any vulnerabilities by promptly applying patches and updates.
 
 ### 4.2 Fuzz Testing in Cosmos: Enhancing Code Reliability
+
+The Cosmos SDK divides testing into four levels, each with an increasing scope, to ensure the functionality and stability of both individual modules and the entire application. Here's an overview of each level:
+
+- **Unit Tests**: Unit tests focus on validating the functionality of a single module. Dependencies of the module are replaced with **mocks** to simulate their behavior. These tests ensure that the module's internal functions work as intended, verifying that they correctly interact with the mocked dependencies and handle responses as expected. Comprehensive unit testing involves covering all functions within the module.
+
+- **Integration Tests**: Integration tests expand the scope by testing the module along with all its necessary dependencies. Unlike unit tests, dependencies are no longer mocked. Instead, the tests use a minimum viable application that includes the module and its required dependencies, ensuring they function together correctly. This approach avoids unnecessary complexity by limiting the application to the essential components.
+
+- **Simulation Tests**: Building on integration tests, simulation tests introduce random parameters to evaluate how the module behaves under various conditions. This level of testing simulates more complex and unpredictable scenarios, providing insights into how the module performs in a real-world environment.
+
+- **End-to-End (E2E) Tests**: At the top of the testing hierarchy, end-to-end tests evaluate the entire application workflow, simulating user interactions. These tests verify that all system components and workflows operate seamlessly, ensuring a smooth and reliable user experience. Unlike other levels, E2E tests focus on the application's overall functionality rather than individual modules.
 
 Cosmos is a platform that supports the creation of blockchains using Go (or other languages), with its reference implementation, Cosmos SDK, leveraging fuzz testing extensively during the development process to identify potential issues in the code. The Cosmos SDK employs two main types of fuzz testing techniques:
 
@@ -904,16 +904,17 @@ type arraySource struct {
 }
 
 func (rng *arraySource) Uint64() uint64 {
-if rng.pos >= len(rng.arr) {
-return rng.src.Uint64() // Switch to standard random values once the array is exhausted
+    if rng.pos >= len(rng.arr) {
+        return rng.src.Uint64()  // Switch to standard random values once the array is exhausted
+    }
+    val := rng.arr[rng.pos]
+    rng.pos++
+    if val < 0 {
+        return uint64(-val)
+    }
+    return uint64(val)
 }
-val := rng.arr[rng.pos]
-rng.pos++
-if val < 0 {
-return uint64(-val)
-}
-return uint64(val)
-}
+
 
 ```
 
