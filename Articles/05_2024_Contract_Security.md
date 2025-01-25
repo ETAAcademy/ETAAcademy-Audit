@@ -926,7 +926,7 @@ function processExpiredLock(
 ### **13. Multiple Entrypoint Contracts for Underlying Assets**
 
 **Issue**: The failure to properly validate token addresses can result in multiple entrypoint contracts being exploited to bypass security checks, allowing manipulation of market exchange rates for profit.
-**Impact:** Attackers can exploit this issue to manipulate exchange rates, causing market price fluctuations. Additionally, they may drain all underlying assets from a contract, leading to significant economic losses.
+**Impact**: Attackers can exploit this issue to manipulate exchange rates, causing market price fluctuations. Additionally, they may drain all underlying assets from a contract, leading to significant economic losses.
 
 **Case Study: Compound Finance**
 
@@ -965,7 +965,7 @@ function processExpiredLock(
 ### **14. Cryptography Vulnerabilities**
 
 **Issue**: While zero-knowledge cryptography offers robust privacy protections for blockchain technology, its implementation can introduce various vulnerabilities and attack vectors.
-**Impact:** Common vulnerabilities include issues in proof system implementation, binding and hiding properties in commitment schemes, random number generation flaws, circuit design bugs, and key management weaknesses.
+**Impact**: Common vulnerabilities include issues in proof system implementation, binding and hiding properties in commitment schemes, random number generation flaws, circuit design bugs, and key management weaknesses.
 
 **Case Study: Groth16**
 
