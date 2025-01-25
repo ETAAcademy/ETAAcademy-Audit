@@ -182,7 +182,7 @@ The attackers employed sophisticated methods to launder the stolen funds:
     _finalBalanceTokenOut = address(socketGateway).balance;
 
     require(
-        (_finalBalanceTokenOut - _initialBalanceTokenOut) == amount.
+        (_finalBalanceTokenOut - _initialBalanceTokenOut) == amount,
         "Invalid wrapper contract"
 
 ```
@@ -346,9 +346,9 @@ function getPrice() public view returns (uint256) {
     uint256 usdtBalance = IERC20(usdtAddress).balanceOf(lpAddress);
     uint256 HFLHBalance = IERC20(HFLHAddress).baLanceOf(lpAddress);
 
-    require(usdtBalance > 0, “USDT balance is zero11);
+    require(usdtBalance > 0, "USDT balance is zero11");
 
-    uint256 price = lel8*usdtBalance/ HFLHBalance;
+    uint256 price = 1e18*usdtBalance/ HFLHBalance;
     return price;
 }
 
@@ -376,7 +376,7 @@ function _calcQuoteAmountSellBase(
     DecimalInfo memory decs = decimalInfo[baseToken]);
     // quoteAmount = baseAmount * oracle.price * (1 - oracle.k * baseAmount * oracle.price - oracle.spread)
     {
-        uint256 coef = uint256(lel8) - ((uint256(state.coeff) * baseAmount * state.price) / decs.baseDec / decs.priceDec) - state.spread;
+        uint256 coef = uint256(1e18) - ((uint256(state.coeff) * baseAmount * state.price) / decs.baseDec / decs.priceDec) - state.spread;
         quoteAmount = (((baseAmount * decs.quoteDec * state.price) / decs.priceDec) * coef) / 1e18 / decs.baseDec;
     }
 
@@ -709,7 +709,8 @@ function collectFees(
 
 **Vulnerability**: DeltaPrime, which utilized the **Diamond Beacon Proxy** design, separated its logic (Implementation Contract) from its storage (PrimeAccount Contract). To prevent storage conflicts, it relied on **custom storage slots** initialized via the `init()` and `initialize()` functions. However, the `DiamondBeacon` incorrectly checked its own storage slot for initialization status rather than the PrimeAccount’s. Attackers exploited this flaw to reinitialize the contract and gain control over the PrimeAccount.
 
-**Impact**: The attacker reinitialized the contract, bypassed safeguards like collateral repayment requirements, and ultimately stole $1 million.  
+**Impact**: The attacker reinitialized the contract, bypassed safeguards like collateral repayment requirements, and ultimately stole $1 million.
+
 **Funds Flow**: The funds were bridged to Ethereum via **Orbiter Finance** and processed further through **CoinsPaid** and **Revolut**.
 
 ---
@@ -745,7 +746,7 @@ function collectFees(
         // check liquidable
         require(checkLiquidable(marketId, liquidateVars.collateralAmount, liquidateVars.borrowing, borrowVars.collateralToken, borrowVars.borrowToken), "BIH");
         // check msg.sender xOLE
-        require(xOLE.balanceOf(msg.sender) >= liquidationConf.liquidatorXOLEHeId, "XNE") ;
+        require(xOLE.balanceOf(msg.sender) >= liquidationConf.liquidatorXOLEHeId, "XNE");
         // compute liquidation collateral
         MarketConf storage marketConf = marketsConf[marketld];
         liquidateVars.liquidationAmount = liquidateVars.collateralAmount;
@@ -970,7 +971,7 @@ function processExpiredLock(
 
 - **Vulnerability:** Groth16 is a zero-knowledge proof protocol often used to prove the correctness of certain statements without revealing details. A commitment scheme is used to bind proof variables and generate random challenges. In the gnark extension of Groth16, the commitment scheme is defined as:
 
-  $D*i = \sum*{j \in J_i} a_j \cdot L_j$,
+  $D_i = \sum_{j \in J_i} a_j \cdot L_j$,
 
   where $a_j$ are private witness variables and $L_j$ are elliptic curve points assumed to satisfy the discrete logarithm problem (DLP).
 
@@ -978,7 +979,7 @@ function processExpiredLock(
 
   - **Hiding Property:** The hiding property ensures that the commitment does not reveal private witness information. The gnark implementation lacks a blinding factor, which is common in schemes like Pedersen commitments. For example, Pedersen commitments use the form:
 
-    $D*i = \sum*{j \in J_i} a_j \cdot L_j + d \cdot h$,
+    $D_i = \sum_{j \in J_i} a_j \cdot L_j + d \cdot h$,
 
     where $d$ is a random blinding factor and $h$ is an independent base point. Without the blinding factor, attackers can guess $a_j$ values and verify their correctness through brute force.
 
