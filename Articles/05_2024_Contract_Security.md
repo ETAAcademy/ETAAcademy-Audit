@@ -926,6 +926,7 @@ function processExpiredLock(
 ### **13. Multiple Entrypoint Contracts for Underlying Assets**
 
 **Issue**: The failure to properly validate token addresses can result in multiple entrypoint contracts being exploited to bypass security checks, allowing manipulation of market exchange rates for profit.
+
 **Impact**: Attackers can exploit this issue to manipulate exchange rates, causing market price fluctuations. Additionally, they may drain all underlying assets from a contract, leading to significant economic losses.
 
 **Case Study: Compound Finance**
