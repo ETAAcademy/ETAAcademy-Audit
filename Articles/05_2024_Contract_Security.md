@@ -965,6 +965,7 @@ function processExpiredLock(
 ### **14. Cryptography Vulnerabilities**
 
 **Issue**: While zero-knowledge cryptography offers robust privacy protections for blockchain technology, its implementation can introduce various vulnerabilities and attack vectors.
+
 **Impact**: Common vulnerabilities include issues in proof system implementation, binding and hiding properties in commitment schemes, random number generation flaws, circuit design bugs, and key management weaknesses.
 
 **Case Study: Groth16**
