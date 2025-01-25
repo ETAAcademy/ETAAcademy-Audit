@@ -839,13 +839,13 @@ function processExpiredLock(
 **Case Study: Groth16**
 
 - **Vulnerability:** Groth16 is a zero-knowledge proof protocol often used to prove the correctness of certain statements without revealing details. A commitment scheme is used to bind proof variables and generate random challenges. In the gnark extension of Groth16, the commitment scheme is defined as:  
-  $D*i = \sum*{j \in J_i} a_j \cdot L_j$,
+  $D_i = \sum_{j \in J_i} a_j \cdot L_j$,
   where $a_j$ are private witness variables and $L_j$ are elliptic curve points assumed to satisfy the discrete logarithm problem (DLP).
 
   - **Binding Property:** The binding property ensures that a commitment cannot be re-bound to a different value once generated. Whether the commitment is binding depends on whether $L_j$ are independent and uniformly random elements of the elliptic curve. If linear dependencies exist between $L_j$ coefficients due to specific constraints, this dependency could compromise the binding property.
 
   - **Hiding Property:** The hiding property ensures that the commitment does not reveal private witness information. The gnark implementation lacks a blinding factor, which is common in schemes like Pedersen commitments. For example, Pedersen commitments use the form:  
-    $D*i = \sum*{j \in J_i} a_j \cdot L_j + d \cdot h$,
+    $D_i = \sum_{j \in J_i} a_j \cdot L_j + d \cdot h$,
     where $d$ is a random blinding factor and $h$ is an independent base point. Without the blinding factor, attackers can guess $a_j$ values and verify their correctness through brute force.
 
 - **Impact:** In early versions of gnark (e.g., prior to 0.11.0), the lack of hiding property could potentially lead to the leakage of private witness variables. While the practical risk is mitigated by the difficulty of the discrete logarithm problem, the theoretical weakness could compromise the protocol's integrity in certain scenarios.
