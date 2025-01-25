@@ -2555,3 +2555,90 @@ library Multicall {
 ```
 
 </details>
+
+## 28.[Medium] YieldStakingBase.stake() cannot append borrowAmount
+
+### Locker & Loan
+
+- Summary: The issue involves the **YieldStakingBase.stake()** function, which prevents users from borrowing additional funds due to the strict logic of **yieldSetERC721TokenData()**. The function requires the NFT's locker address to be either empty or exactly match the expected address. When attempting to increase borrowing, the system blocks further borrowing if the NFT is already locked, forcing users to repay their loan first.
+
+- Impact & Recommendation: To fix this, the code can be modified to allow the current locker address to continue operating, or avoid updating the locker address when increasing the loan. The second option is recommended.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-12-benddao-invitational#m-04-yieldstakingbasestake-cannot-append-borrowamount) & [Report](ttps://code4rena.com/reports/2024-12-benddao-invitational)
+
+<details><summary>POC</summary>
+
+```solidity
+    function executeYieldSetERC721TokenData(InputTypes.ExecuteYieldSetERC721TokenDataParams memory params) internal {
+
+...
+
+        if (params.isLock) {
+
+            require(ymData.yieldCap > 0, Errors.YIELD_EXCEED_STAKER_CAP_LIMIT);
+
+
+@>          require(tokenData.lockerAddr == address(0), Errors.ASSET_ALREADY_LOCKED_IN_USE);
+
+
+            VaultLogic.erc721SetTokenLockerAddr(nftAssetData, params.tokenId, lockerAddr);
+
+        } else {
+
+            require(tokenData.lockerAddr == lockerAddr, Errors.YIELD_TOKEN_LOCKED_BY_OTHER);
+
+
+            VaultLogic.erc721SetTokenLockerAddr(nftAssetData, params.tokenId, address(0));
+
+        }
+
+            function _stake(uint32 poolId, address nft, uint256 tokenId, uint256 borrowAmount) internal virtual {
+
+...
+
+        YieldStakeData storage sd = stakeDatas[nft][tokenId];
+
+        if (sd.yieldAccount == address(0)) {
+
+            require(vars.nftLockerAddr == address(0), Errors.YIELD_ETH_NFT_ALREADY_USED);
+
+
+            vars.totalDebtAmount = borrowAmount;
+
+
+            sd.yieldAccount = address(vars.yieldAccout);
+
+            sd.poolId = poolId;
+
+            sd.state = Constants.YIELD_STATUS_ACTIVE;
+
+        } else {
+
+            require(vars.nftLockerAddr == address(this), Errors.YIELD_ETH_NFT_NOT_USED_BY_ME);
+
+            require(sd.state == Constants.YIELD_STATUS_ACTIVE, Errors.YIELD_ETH_STATUS_NOT_ACTIVE);
+
+            require(sd.poolId == poolId, Errors.YIELD_ETH_POOL_NOT_SAME);
+
+
+            vars.totalDebtAmount = convertToDebtAssets(poolId, sd.debtShare) + borrowAmount;
+
+        }
+
+....
+
+@>      poolYield.yieldSetERC721TokenData(poolId, nft, tokenId, true, address(underlyingAsset));
+
+
+        // check hf
+
+        uint256 hf = calculateHealthFactor(nft, nc, sd);
+
+        require(hf >= nc.unstakeHeathFactor, Errors.YIELD_ETH_HEATH_FACTOR_TOO_LOW);
+
+
+        emit Stake(msg.sender, nft, tokenId, borrowAmount);
+
+
+```
+
+</details>
