@@ -149,14 +149,11 @@ The attackers employed sophisticated methods to launder the stolen funds:
 
 ### **1) Socket.Tech – Exploiting an Unreviewed Module**
 
-**Vulnerability**:  
-A new, unreviewed `WrappedTokenSwapperImpl` contract was deployed and integrated into the system. The flawed contract allowed attackers to execute arbitrary calls using previously approved tokens.
+**Vulnerability**: A new, unreviewed `WrappedTokenSwapperImpl` contract was deployed and integrated into the system. The flawed contract allowed attackers to execute arbitrary calls using previously approved tokens.
 
-**Impact**:  
-Roughly 200 users who interacted with Socket API and Bungee Exchange were affected, resulting in a loss of $1 million.
+**Impact**: Roughly 200 users who interacted with Socket API and Bungee Exchange were affected, resulting in a loss of $1 million.
 
-**Funds Flow**:  
-The attackers returned 80% of the stolen funds, and 1,027 ETH was recovered by the team after negotiations.
+**Funds Flow**: The attackers returned 80% of the stolen funds, and 1,027 ETH was recovered by the team after negotiations.
 
 <details><summary>Code</summary>
 
@@ -194,14 +191,11 @@ The attackers returned 80% of the stolen funds, and 1,027 ETH was recovered by t
 
 ### **2) LI.FI – Vulnerable `swap` Function**
 
-**Vulnerability**:  
-The `swap` function failed to properly validate the target address and calldata. This flaw enabled attackers to drain assets from users who had approved the contract to spend their tokens.
+**Vulnerability**: The `swap` function failed to properly validate the target address and calldata. This flaw enabled attackers to drain assets from users who had approved the contract to spend their tokens.
 
-**Impact**:  
-Over $10 million worth of assets was stolen during the attack.
+**Impact**: Over $10 million worth of assets was stolen during the attack.
 
-**Funds Flow**:  
-The stolen funds were laundered through Tornado Cash over 69 days. The attacker dispersed assets across multiple addresses and further concealed them through centralized exchanges.
+**Funds Flow**: The stolen funds were laundered through Tornado Cash over 69 days. The attacker dispersed assets across multiple addresses and further concealed them through centralized exchanges.
 
 <details><summary>Code</summary>
 
@@ -239,14 +233,11 @@ function depositToGasZipERC20(
 
 ### **1) Bedrock – Mint Function Inflation Bug**
 
-**Vulnerability**:  
-The `mint` function for Bedrock's `uniBTC` token allowed other assets to be minted at a 1:1 ratio, bypassing its intended restrictions.
+**Vulnerability**: The `mint` function for Bedrock's `uniBTC` token allowed other assets to be minted at a 1:1 ratio, bypassing its intended restrictions.
 
-**Impact**:  
-Attackers exploited this flaw to inflate the token supply by 30x, causing a financial loss of $1.7 million.
+**Impact**: Attackers exploited this flaw to inflate the token supply by 30x, causing a financial loss of $1.7 million.
 
-**Funds Flow**:  
-The attackers laundered 650.1 ETH through Tornado Cash and dispersed the funds to multiple addresses.
+**Funds Flow**: The attackers laundered 650.1 ETH through Tornado Cash and dispersed the funds to multiple addresses.
 
 <details><summary>Code</summary>
 
@@ -280,14 +271,11 @@ function _mint(address .sender, address .token, uint256 _amount) internal {
 
 ### **2) Spectral – Price Manipulation via AgentBalances**
 
-**Vulnerability**:  
-The `AgentBalances` contract mishandled the maximum approval for `AgentToken`, allowing attackers to manipulate its price.
+**Vulnerability**: The `AgentBalances` contract mishandled the maximum approval for `AgentToken`, allowing attackers to manipulate its price.
 
-**Impact**:  
-By artificially inflating the token's price, attackers drained $250,000 worth of `SPEC` tokens from the bonding curve.
+**Impact**: By artificially inflating the token's price, attackers drained $250,000 worth of `SPEC` tokens from the bonding curve.
 
-**Funds Flow**:  
-The stolen funds were bridged to Ethereum through Orbiter Finance and laundered using Railgun, involving 41.74 ETH.
+**Funds Flow**: The stolen funds were bridged to Ethereum through Orbiter Finance and laundered using Railgun, involving 41.74 ETH.
 
 <details><summary>Code</summary>
 
@@ -358,11 +346,11 @@ function _calcQuoteAmountSe\lBase(
     address baseTokent, uint256 baseAmountt, IWooracleV2.State memory statet) private view returns (uint256 quoteAmount, uint256 newPrice
     require(statet.woFeasible, "WooPPV2: !ORACLE_FEASIBLE");
     Decimalinfo memory decs = decimalinfo*baseTokcnt);
-    // quoteAmount ■ baseAmount * oracle.price * (1 - oracle.k * baseAmount * oracle.price - oracle.spread)
-        uint256 coef = uint256(lel8) - ((uint256(statet.coeff) ♦ baseAmountt * statet.price) / decs.baseDec / decs.priceDec) - statet.spread;
+    // quoteAmount = baseAmount * oracle.price * (1 - oracle.k * baseAmount * oracle.price - oracle.spread)
+        uint256 coef = uint256(lel8) - ((uint256(statet.coeff) * baseAmountt * statet.price) / decs.baseDec / decs.priceDec) - statet.spread;
         quoteAmount = (((baseAmountt * decs.quoteDec * statet.price) / decs.priceDec) * coef) / lel8 / decs.baseDec;
     }
-    // newPrice ■ (1 - 2 * k * oracle.price * baseAmount) * oracle.price
+    // newPrice = (1 - 2 * k * oracle.price * baseAmount) * oracle.price
     newPrice = ((uint256(lel8) - (uint256(2) * state .coeff * state? .price * baseAmountt) / decs.priceDec / decs.baseDec) * state .price) / le!8;
 
 ```
@@ -543,8 +531,8 @@ function _burn(bytes32 key, address user, uint256 burnA«ount)
     uint256 reserveA = pool.reserveA;
     uint256 reserves = pool.reserveB;
 
-    withdrawal = (reserveA ♦ claimedAmountA) * burnAmount / supply ♦ canceledAmountA;
-    withdrawals = (reserveB ♦ claimedAmountB) ♦ burnAmount / supply ♦ canceledAmountB;
+    withdrawal = (reserveA * claimedAmountA) * burnAmount / supply * canceledAmountA;
+    withdrawals = (reserveB * claimedAmountB) * burnAmount / supply * canceledAmountB;
 
     _burn(user, uint256(key), burnAmount); —
     pool.strategy.burnHook(msg.sender, key, burnAmount, supply);
@@ -799,6 +787,7 @@ function processExpiredLock(
 
 **Issue**: The failure to properly validate token addresses can result in multiple entrypoint contracts being exploited to bypass security checks, allowing manipulation of market exchange rates for profit.
 **Impact:** Attackers can exploit this issue to manipulate exchange rates, causing market price fluctuations. Additionally, they may drain all underlying assets from a contract, leading to significant economic losses.
+
 **Case Study: Compound Finance**
 
 - **Vulnerability:** In Compound's implementation, the `sweepToken` function allows users to withdraw tokens accidentally sent to the contract. The function includes a check to ensure that the token being withdrawn is not the underlying asset (`underlying`). However, if the underlying asset has multiple entrypoint contracts (as in early proxy-based implementations), this check can be bypassed.
@@ -836,6 +825,7 @@ function processExpiredLock(
 
 **Issue**: While zero-knowledge cryptography offers robust privacy protections for blockchain technology, its implementation can introduce various vulnerabilities and attack vectors.
 **Impact:** Common vulnerabilities include issues in proof system implementation, binding and hiding properties in commitment schemes, random number generation flaws, circuit design bugs, and key management weaknesses.
+
 **Case Study: Groth16**
 
 - **Vulnerability:** Groth16 is a zero-knowledge proof protocol often used to prove the correctness of certain statements without revealing details. A commitment scheme is used to bind proof variables and generate random challenges. In the gnark extension of Groth16, the commitment scheme is defined as:  
