@@ -26,15 +26,15 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
 
 # ZK Security: 10 Vulnerabilities and Mitigation Approaches
 
-Zero-Knowledge (ZK) systems are designed to provide privacy and security by enabling a prover to convince a verifier that they know a secret without revealing the secret itself. However, vulnerabilities can arise at various layers of a ZK system, which can compromise its integrity, soundness, and zero-knowledge properties. These layers include the **circuit arithmetization layer**, **compilation transformation layer**, **proof and verification layer**, and **system integration layer**.
+Zero-Knowledge (ZK) systems are designed to provide privacy and security by enabling a prover to convince a verifier that they know a secret without revealing the secret itself. However, vulnerabilities can arise at various layers of a ZK system, which can compromise its integrity, soundness, and zero-knowledge properties. These layers include the **circuit arithmetization**, **compilation transformation**, **proof and verification**, and **system integration**.
 
-Vulnerabilities at the circuit arithmetization layer are typically caused by programming errors or insufficient constraints, which can affect the system's reliability and integrity. Vulnerabilities at the compilation transformation layer arise from errors during the compilation process, leading to incorrect constraint representations. Vulnerabilities at the proof and verification layer may involve the prover falsifying a proof, which undermines the verification process. Finally, vulnerabilities at the system integration layer occur in the external components interacting with the zero-knowledge proof system, especially when implicit constraints are not properly checked. Each layer's vulnerabilities can jeopardize the normal operation of the system and introduce significant security risks.
+Vulnerabilities in the circuit arithmetization layer usually come from coding mistakes or weak constraints, which can impact system reliability and security. At the compilation layer, issues arise when errors during compilation lead to incorrect constraints. In the proof and verification layer, attackers might forge proofs, compromising the verification process. System integration vulnerabilities often come from external components interacting with the ZK proof system, especially when implicit constraints aren't properly enforced. Weaknesses in any of these layers can put the entire system at risk.
 
-The impact of these vulnerabilities primarily manifests in three areas: compromising **soundness**, which allows incorrect proofs to be mistakenly accepted; compromising **completeness**, causing valid proofs to fail verification; and compromising **zero-knowledge**, potentially leaking sensitive information such as private keys or secret inputs. Therefore, the security of a ZK system depends on the precise implementation of each layer, as any vulnerability at any layer can affect the overall system's privacy and security.
+These vulnerabilities mainly impact three key areas: **soundness**, where false proofs get wrongly accepted; **completeness**, where valid proofs fail verification; and **zero-knowledge**, where sensitive data like private keys or secret inputs might leak. Keeping a ZK system secure depends on getting every layer right—any weakness at any point can put the whole system’s privacy and security at risk.
 
 ---
 
-## 1. **Range Validation Issues in Zero-Knowledge Circuits**
+## 1. **Range Validation**
 
 One common vulnerability in ZK systems is **range validation**. From low-level field arithmetic to high-level protocol design, a lack of proper range checks can lead to errors in computation or security flaws.
 
@@ -54,7 +54,7 @@ $$
 
 This means the same number can be split in different combinations, leading to incorrect calculations or vulnerabilities.
 
-In the **o1js** implementation, a custom type uses 3 chunks of size $2^{88}$ (limbs)to represent a value. However, the code does not check whether these chunks are within the range of $[0, 2^88 - 1]$.
+In the **o1js** implementation, a custom type uses 3 chunks of size $2^{88}$ (limbs)to represent a value. However, the code does not check whether these chunks are within the range of $[0, 2^{88} - 1]$.
 
 ### Impact
 
@@ -68,7 +68,7 @@ Due to the lack of proper range checks, attackers can craft specific input value
 
 The core issue is the **missing range check**, so the solution is to **strictly validate the range of data**:
 
-1. **Check each limb's range** to ensure it falls within $[0, 2^88-1]$.
+1. **Check each limb's range** to ensure it falls within $[0, 2^{88}-1]$.
 2. **Add constraints** wherever data decomposition occurs to prevent overflow-based attacks.
 3. **Perform additional verification** at the circuit level to ensure that computed values do not exceed the valid range.
 
@@ -129,7 +129,7 @@ Ecdsa.check(sig); // assertion passed
 
 For example, a vulnerability in **ZK Email** was caused by **non-deterministic circuits**, allowing an attacker to forge an email address. By injecting invalid characters (like `\xff`) into the email header, an attacker could bypass the ZK regular expression circuit's verification and spoof the sender's email address. The **ZK Email team** addressed this by implementing proper **input range checks**, ensuring the validity of input characters.
 
-##### The Problem: ZK Email Circuit Vulnerability
+### Issue
 
 **ZK Email** is a technology that enables on-chain transactions to be initiated via email, combining **DKIM signatures** with **zero-knowledge proofs**. The key components of the system include:
 
@@ -250,7 +250,7 @@ for (var i = 0; i < num_bytes; i++) {
 
 ## 3. Memory Operations
 
-For the security of ZK technology, it is crucial to ensure that the constraints at each stage are correctly applied to prevent attackers from bypassing the verification system by manipulating data. When using ZK circuits, especially when handling complex memory operations and verifications, it is vital to ensure that the circuit’s constraints are fully accurate and consistent. If the constraints on certain memory operations are incomplete or inconsistent, malicious users could exploit these vulnerabilities to generate invalid proofs, bypassing the verification mechanism.
+To keep ZK systems secure, you need to make sure constraints are properly applied at every step. Otherwise, attackers could tweak the data and sneak past verification. This is especially important in circuits that handle complex memory operations—if the constraints aren’t solid and consistent, bad actors might find a way to generate fake proofs and bypass the checks.
 
 ### Issue
 
@@ -589,8 +589,8 @@ Two key vulnerabilities, **unconstrained `committed_value_digest`** and the **mi
 
 These two vulnerabilities enable an attacker to forge a proof as follows:
 
-1. **Exploiting SP1-2.1**: By aborting the program execution before the `COMMIT` system call is triggered, the `committed_value_digest` remains unconstrained. The attacker can replace it with any arbitrary value during proof generation.
-2. **Exploiting SP1-2.2**: By marking the `is_complete` flag as `true`, the attacker can cause the proof to pass validation, even if the `next_pc` value is inconsistent.
+1. **SP1-2.1**: By aborting the program execution before the `COMMIT` system call is triggered, the `committed_value_digest` remains unconstrained. The attacker can replace it with any arbitrary value during proof generation.
+2. **SP1-2.2**: By marking the `is_complete` flag as `true`, the attacker can cause the proof to pass validation, even if the `next_pc` value is inconsistent.
 
 As a result, the attacker can generate a fake proof for an invalid execution and submit it through the validation program, which will erroneously accept the proof, even though it is not valid.
 
@@ -601,9 +601,9 @@ As a result, the attacker can generate a fake proof for an invalid execution and
 
 ### Solution
 
-1. **SP1-2.1 Mitigation**: Ensure that the `committed_value_digest` remains constrained, even if the `COMMIT` system call is not triggered. This may require redesigning the current implementation to ensure that the `committed_value_digest` cannot be arbitrarily modified when the program does not finish normally.
+1. **SP1-2.1**: Ensure that the `committed_value_digest` remains constrained, even if the `COMMIT` system call is not triggered. This may require redesigning the current implementation to ensure that the `committed_value_digest` cannot be arbitrarily modified when the program does not finish normally.
 
-2. **SP1-2.2 Mitigation**: Fix the recursive program to apply the `next_pc == 0` constraint in the first layer of the recursive tree as well. As a temporary fix, the validation program should also check if `next_pc` equals 0, even if it is not constrained in the proof system.
+2. **SP1-2.2**: Fix the recursive program to apply the `next_pc == 0` constraint in the first layer of the recursive tree as well. As a temporary fix, the validation program should also check if `next_pc` equals 0, even if it is not constrained in the proof system.
 
 <details><summary>Code</summary>
 
@@ -774,7 +774,7 @@ The FreeLunch attack is an algebraic attack strategy, outlined in Algorithm 1. T
 
 The overall complexity of the FreeLunch attack primarily depends on the **matGen** and **polyDet** steps. Experimental results show that in larger instances, **matGen** is typically the dominant step.
 
-Regarding the **matGen** step, while no explicit complexity estimation is provided, it can be loosely bounded by the complexity of the **FGLM algorithm** ($O(nD^3)$) as an upper bound. This upper bound is sufficient to break instances of Griffin and α-Arion. For example, for Griffin, the FGLM complexity is $2^{108}$ and $2^{122}$ (for $t \geq 12$ and $\alpha = 3, 5$, respectively). For α-Arion (with $\alpha = 121$ and $e = 3$), the complexity is $2^{117}$ and $2^{127}$ (for $t = 4, 5$). For $e = 5$, the complexity is $2^{114}$ and $2^{124}$ (for $t = 3, 4$).
+Regarding the **matGen** step, while no explicit complexity estimation is provided, it can be loosely bounded by the complexity of the **FGLM algorithm** ( $O(nD^3)$ ) as an upper bound. This upper bound is sufficient to break instances of Griffin and α-Arion. For example, for Griffin, the FGLM complexity is $2^{108}$ and $2^{122}$ (for $t \geq 12$ and $\alpha = 3, 5$, respectively). For α-Arion (with $\alpha = 121$ and $e = 3$), the complexity is $2^{117}$ and $2^{127}$ (for $t = 4, 5$). For $e = 5$, the complexity is $2^{114}$ and $2^{124}$ (for $t = 3, 4$).
 
 For complete-round algorithms, the time complexity of the **polyDet** step (in base-2 logarithmic units) typically targets 128-bit security.
 
@@ -892,9 +892,9 @@ Cryptographic protocol-level vulnerabilities fall under the category of reliabil
 
 ### Issue
 
-The **Fiat-Shamir (FS) transformation** is a critical cryptographic tool used to convert interactive protocols into non-interactive ones. While the FS transformation is secure in the Random Oracle Model (ROM), it may present security risks when implemented in practice. Previous research has demonstrated the insecurity of the FS transformation, but only in the context of specifically constructed protocols, rather than those used in real-world systems. This article highlights a cryptographic protocol vulnerability related to the application of the Fiat-Shamir transformation in the **Generalized Knowledge Replication (GKR) protocol**.
+The **Fiat-Shamir (FS) transformation** is a key cryptographic technique that turns interactive protocols into non-interactive ones. While it’s secure in theory under the Random Oracle Model (ROM), real-world implementations can have security risks. Previous research has shown weaknesses in FS, but mostly in artificial scenarios rather than real-world protocols.
 
-Attackers can construct a special circuit, $C^*$, that predicts the verifier’s randomness, allowing them to generate valid proofs for arbitrary false statements. This enables attackers to modify any circuit $C$ to create a functionally identical circuit $C^*$ that contains a backdoor. This issue is present regardless of the choice of hash function.
+There's a vulnerability in how the **Fiat-Shamir (FS) transformation** is used in the **Generalized Knowledge Replication (GKR) protocol**. An attacker can tweak a circuit, $C$, to create a modified version, $C'$, that can predict the verifier’s randomness. This allows them to generate valid proofs for false statements. Essentially, they can adjust the circuit to make it function the same but with a backdoor built in. This issue happens no matter what hash function is used.
 
 In this protocol, the verifier checks whether there exists a witness $w$ such that:
 
@@ -907,7 +907,7 @@ where $C$ is the circuit, $x$ is the public input, and $y$ is the claimed output
 **Preprocessing Phase**:
 
 1. The verifier selects parameters for the polynomial commitment scheme (i.e., generates a key/salt).
-2. The prover and verifier agree to use a depth $d$ arithmetic circuit. The verifier only stores a **short summary $\langle C \rangle$** (typically the hash of $C$).
+2. The prover and verifier agree to use a depth $d$ arithmetic circuit. The verifier only stores a short summary $\langle C \rangle$ (typically the hash of $C$).
 
 **Online Phase**:
 
