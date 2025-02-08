@@ -473,3 +473,30 @@ function _lock(
 ```
 
 </details>
+
+## 9.[Medium] Most of the FTC rewards can be taken by single entity
+
+### Order farming
+
+- Summary: Malicious users can quickly earn FTC rewards by opening and immediately closing positions, without actually taking on market risk. This is possible because the current implementation of the onDecreasePosition function does nothing, allowing users to collect rewards without any real position change. The protocol has a configuration (getStepMinProfitDuration) that sets a minimum duration for positions to stay open before rewards are disbursed. However, this mechanism only applies to profitable positions and doesn’t prevent users from exploiting zero-profit or small-loss positions.
+
+- Impact & Recommendation: The team argues that the risk is low because the esFDX token, which is used for rewards, is non-transferable and under the control of the protocol. Therefore, even if users exploit this issue, they cannot immediately extract rewards. However, the document mentions "other incentives" that might be distributed alongside esFDX, which could increase the risk of manipulation. While the specifics of these incentives are unclear, their potential introduction could lead to further exploits. In conclusion, while the Flex Perpetuals team has some safeguards in place, the current design allows for possible manipulation of the reward system, and changes are recommended to mitigate this risk. The onDecreasePosition function should be modified to enforce a time window, requiring users to hold positions for a certain period before they can close them and collect rewards. If they close the position too soon, the reward should be revoked.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-12-flex-perpetuals#m-02-most-of-the-ftc-rewards-can-be-taken-by-single-entity) & [Report](https://code4rena.com/reports/2024-12-flex-perpetuals)
+
+<details><summary>POC</summary>
+
+```solidity
+//FTCHook::onDecreasePosition
+    function onDecreasePosition(
+        address _primaryAccount,
+        uint256,
+        uint256,
+        uint256 _sizeDelta,
+        bytes32
+    ) external onlyWhitelistedCaller {
+        // Do nothing
+    }
+
+```
+
+</details>

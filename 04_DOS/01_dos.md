@@ -400,7 +400,7 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
 
   </details>
 
-## 6. [Medium] The time available for a canceled withdrawal should not impact future unstaking processes
+## 7. [Medium] The time available for a canceled withdrawal should not impact future unstaking processes
 
 ### Canceled withdrawal affects future unstaking processes
 
@@ -463,3 +463,70 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 8. [High] Can block bridge or limit the bridgeable amount by initializing the ITSHub balance of the original chain
+
+### Stop token bridging
+
+- Summary: Attackers can block token bridging or limit the amount that can be bridged by manipulating the ITSHub balance on the original chain. The ITSHub tracks the token balances only on destination chains, not the original chain. This is because minting permissions are often registered on the original chain, making balance tracking complicated. However, attackers can initialize the original chain's balance to 0, which triggers an underflow error during token transfer, preventing tokens from being bridged out. In the InterchainTokenFactory,deployRemoteInterchainToken function, there is no check to prevent a token from being deployed back to the original chain, allowing attackers to deploy tokens from a remote chain to the original chain, causing the original chain's ITSHub balance to be initialized as zero. The ability to initialize the original chain’s balance to zero can stop token bridging or limit the amount that can be bridged. The issue is especially critical for canonical tokens, as attackers can prevent these tokens from being bridged out of the original chain, effectively locking the token in the original chain.
+
+- Impact & Recommendation: While this issue does not involve stealing funds, it results in a DoS scenario, especially impacting canonical tokens. To prevent remote deployment requests to the original chain, `InterchainTokenFactory.deployRemoteInterchainToken` and `InterchainTokenFactory.deployRemoteCanonicalInterchainToken` should include checks to ensure that the destination chain is not the same as the original chain. When deploying directly through `InterchainTokenService.deployInterchainToken`, it's not possible to perform this check, so the original chain’s information should be stored for each tokenId in ITSHub. This will ensure that the balance of the original chain is not initialized, preventing issues related to balance manipulation and denial of service.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-08-axelar-network#h-02-can-block-bridge-or-limit-the-bridgeable-amount-by-initializing-the-itshub-balance-of-the-original-chain) & [Report](https://code4rena.com/reports/2024-08-axelar-network)
+
+<details><summary>POC</summary>
+
+```rust
+
+  fn apply_balance_tracking(
+    storage: &mut dyn Storage,
+    source_chain: ChainName,
+    destination_chain: ChainName,
+    message: &ItsMessage,
+  ) -> Result<(), Error> {
+
+    match message {
+        ItsMessage::InterchainTransfer {
+            token_id, amount, ..
+        } => {
+
+                // Update the balance on the source chain
+                update_token_balance(
+                                storage,
+                                token_id.clone(),
+                                source_chain.clone(),
+                                *amount,
+                                false,
+                            )
+                .change_context_lazy(|| Error::BalanceUpdateFailed(source_chain, token_id.clone()))?;
+                            // Update the balance on the destination chain
+
+                update_token_balance(
+                                storage,
+                                token_id.clone(),
+                                destination_chain.clone(),
+                                *amount,
+                                true,
+                            )
+                .change_context_lazy(|| {
+                                Error::BalanceUpdateFailed(destination_chain, token_id.clone())
+                            })?
+            }
+
+            // Start balance tracking for the token on the destination chain when a token deployment is seen
+            // No invariants can be assumed on the source since the token might pre-exist on the source chain
+            ItsMessage::DeployInterchainToken { token_id, .. } => {
+
+                start_token_balance(storage, token_id.clone(), destination_chain.clone(), true)
+                                .change_context(Error::InvalidStoreAccess)?
+            }
+            ...
+
+        };
+
+    Ok(())
+
+}
+
+```
+
+</details>
