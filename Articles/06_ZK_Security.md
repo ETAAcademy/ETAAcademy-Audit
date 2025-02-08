@@ -756,7 +756,7 @@ Key innovations of the **FreeLunch method** include:
 1. **Free Gröbner Basis**: Through clever monomial ordering and equation generation methods, the computation cost of calculating the Gröbner basis when solving the CICO problem is almost zero.
 2. **Efficient Algorithm**: A new, more efficient algorithm has been designed to improve the **FGLM** algorithm (a commonly used reordering algorithm), making the FreeLunch attack significantly more practical compared to existing methods.
 
-In experimental verification, the FreeLunch method has been successfully applied to multiple encryption primitives with reduced rounds. The results show that the complexity of the attack can be reduced to levels as low as 264 (for Griffin), 298 (for Arion), and 2118 (for Anemoi), despite these primitives claiming to offer 128-bit security.
+In experimental verification, the FreeLunch method has been successfully applied to multiple encryption primitives with reduced rounds. The results show that the complexity of the attack can be reduced to levels as low as $2^{64}$ (for Griffin), $2^{98}$ (for Arion), and $2^{118}$ (for Anemoi), despite these primitives claiming to offer 128-bit security.
 
 ### Impact
 
