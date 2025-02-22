@@ -375,3 +375,35 @@ signingOptions.DefineCustomGetSigners(protov2.MessageName(&erc20v1.MsgConvertERC
 ```
 
 </details>
+
+## 12. [Medium] Tokens that have already been vested can be transferred from a user
+
+### Vested tokens
+
+- Summary: In the `StepVesting` contract, the `transferVesting()` function allows token issuers to transfer tokens that have already been vested but remain unclaimed by the user. Although vested tokens are considered the user's property once the conditions for release are met, the function fails to account for these tokens, allowing the issuer to transfer them instead of reallocating part of the vesting schedule. This exposes users to the risk of losing control over their vested tokens.
+
+- Impact & Recommendation: To mitigate this, the `transferVesting()` function should be updated to consider and protect tokens that have already vested but remain unclaimed.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-12-secondswap#m-10-tokens-that-have-already-been-vested-can-be-transferred-from-a-user) & [Report](https://code4rena.com/reports/2024-12-secondswap)
+
+<details><summary>POC</summary>
+
+```solidity
+
+require(
+    grantorVesting.totalAmount - grantorVesting.amountClaimed >=
+        _amount,
+    "SS_StepVesting: insufficient balance"
+
+);
+grantorVesting.totalAmount -= _amount;
+grantorVesting.releaseRate = grantorVesting.totalAmount / numOfSteps;
+_createVesting(
+    _beneficiary,
+    _amount,
+    grantorVesting.stepsClaimed,
+    true
+);
+
+```
+
+</details>

@@ -2563,7 +2563,7 @@ library Multicall {
 - Summary: The issue involves the **YieldStakingBase.stake()** function, which prevents users from borrowing additional funds due to the strict logic of **yieldSetERC721TokenData()**. The function requires the NFT's locker address to be either empty or exactly match the expected address. When attempting to increase borrowing, the system blocks further borrowing if the NFT is already locked, forcing users to repay their loan first.
 
 - Impact & Recommendation: To fix this, the code can be modified to allow the current locker address to continue operating, or avoid updating the locker address when increasing the loan. The second option is recommended.
-  <br> 🐬: [Source](https://code4rena.com/reports/2024-12-benddao-invitational#m-04-yieldstakingbasestake-cannot-append-borrowamount) & [Report](ttps://code4rena.com/reports/2024-12-benddao-invitational)
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-12-benddao-invitational#m-04-yieldstakingbasestake-cannot-append-borrowamount) & [Report](https://code4rena.com/reports/2024-12-benddao-invitational)
 
 <details><summary>POC</summary>
 
@@ -2637,6 +2637,72 @@ library Multicall {
 
 
         emit Stake(msg.sender, nft, tokenId, borrowAmount);
+
+
+```
+
+</details>
+
+## 29.[High] CDPVault.sol#liquidatePositionBadDebt() doesn’t correctly handle profit and loss
+
+### liquidationPenalty penalty
+
+- Summary: This vulnerability in the CDPVault contract’s liquidation mechanism allows an attacker to profit by self-liquidating their position. The issue arises because the penalty (`liquidationPenalty`) is not factored in when calculating the amount of collateral to be given to the liquidator, despite it being deducted from the repayable amount. As a result, the liquidator receives the full collateral, allowing the attacker to exploit the system by borrowing, making their position unsafe, and liquidating it at a discounted price without accounting for the penalty. This enables the attacker to obtain the entire collateral and profit, potentially gaining assets unfairly.
+
+- Impact & Recommendation: To fix this, the penalty should be included in the calculation of collateral to ensure that self-liquidation attacks are prevented.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-10-loopfi#h-02-cdpvaultsolliquidatepositionbaddebt-doesnt-correctly-handle-profit-and-loss) & [Report](https://code4rena.com/reports/2024-10-loopfi)
+
+<details><summary>POC</summary>
+
+```solidity
+
+// CDPVault.sol
+        takeCollateral = position.collateral;
+        repayAmount = wmul(takeCollateral, discountedPrice);
+        uint256 loss = calcTotalDebt(debtData) - repayAmount;
+        uint256 profit;
+        if (repayAmount > debtData.debt) {
+@>          profit = repayAmount - debtData.debt;
+        }
+        ...
+@>      pool.repayCreditAccount(debtData.debt, profit, loss); // U:[CM-11]
+        // transfer the collateral amount from the vault to the liquidator
+        token.safeTransfer(msg.sender, takeCollateral);
+
+// PoolV3.sol
+    function repayCreditAccount(
+        uint256 repaidAmount,
+        uint256 profit,
+        uint256 loss
+
+    )
+        external
+        override
+        creditManagerOnly // U:[LP-2C]
+        whenNotPaused // U:[LP-2A]
+        nonReentrant // U:[LP-2B]
+    {
+        ...
+        if (profit > 0) {
+            _mint(treasury, _convertToShares(profit)); // U:[LP-14B]
+@>      } else if (loss > 0) {
+            address treasury_ = treasury;
+            uint256 sharesInTreasury = balanceOf(treasury_);
+            uint256 sharesToBurn = _convertToShares(loss);
+            if (sharesToBurn > sharesInTreasury) {
+                unchecked {
+                    emit IncurUncoveredLoss({
+                        creditManager: msg.sender,
+                        loss: _convertToAssets(sharesToBurn - sharesInTreasury)
+                    }); // U:[LP-14D]
+                }
+                sharesToBurn = sharesInTreasury;
+            }
+            _burn(treasury_, sharesToBurn); // U:[LP-14C,14D]
+
+        }
+
+        ...
 
 
 ```

@@ -741,48 +741,95 @@ func TestTssHashCollision(t *testing.T) {
 //src/lib/loans/MultiSourceLoan.sol
 
     function delegate(uint256 _loanId, Loan calldata loan, address _delegate, bytes32 _rights, bool _value) external {
-
         if (loan.hash() != _loans[_loanId]) {
-
             revert InvalidLoanError(_loanId);
-
         }
-
         if (msg.sender != loan.borrower) {
-
             revert InvalidCallerError();
-
         }
-
         //@audit-info a borrower can pass custom rights to delegateERC721
-
 |>      IDelegateRegistry(getDelegateRegistry).delegateERC721(
-
             _delegate, loan.nftCollateralAddress, loan.nftCollateralTokenId, _rights, _value
-
         );
-
-
         emit Delegated(_loanId, _delegate, _value);
-
     }
 
     //src/lib/loans/MultiSourceLoan.sol
-
     function revokeDelegate(address _delegate, address _collection, uint256 _tokenId) external {
-
         if (ERC721(_collection).ownerOf(_tokenId) == address(this)) {
-
             revert InvalidMethodError();
-
         }
-
         //@audit revokeDelegate will always pass empty rights.
-
 |>      IDelegateRegistry(getDelegateRegistry).delegateERC721(_delegate, _collection, _tokenId, "", false);
-
-
         emit RevokeDelegate(_delegate, _collection, _tokenId);
+    }
+
+```
+
+</details>
+
+## 18. [High] Malicious actors can manipulate the cross_chain_callback callback
+
+### Signature message
+
+- Summary: In the `receive_cross_chain_callback` function, a malicious actor can exploit the lack of the `from_chain` field in the signature message to front-run a transaction with an incorrect `from_chain` field. This can cause the `create_cross_txs[txid]` status to be set to "Failed," preventing the transaction from being executed again. Specifically, during the signature verification process, the `from_chain` field is not included in the message, allowing the attacker to preemptively execute the transaction with the correct signatures and other parameters, but with a wrong `from_chain` value. In the `processCrossChainCallback` function, if the `from_chain` does not match, it returns `false`, causing the transaction status to be set to "Failed."
+
+- Impact & Recommendation: To mitigate this, it is recommended to include the `from_chain` field in the signature verification process to ensure that each transaction's signature is unique and cannot be easily manipulated.
+
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-08-chakra#h-14-malicious-actors-can-manipulate-the-cross_chain_callback-callback) & [Report](https://code4rena.com/reports/2024-08-chakra)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function receive_cross_chain_callback(
+        uint256 txid,
+        string memory from_chain,
+        uint256 from_handler,
+        address to_handler,
+        CrossChainMsgStatus status,
+        uint8 sign_type,
+        bytes calldata signatures
+    ) external {
+        verifySignature(
+            txid,
+            from_handler,
+            to_handler,
+            status,
+            sign_type,
+            signatures
+        );
+
+        processCrossChainCallback(
+            txid,
+            from_chain,
+            from_handler,
+            to_handler,
+            status,
+            sign_type,
+            signatures
+        );
+
+        emitCrossChainResult(txid);
+
+    }
+
+        function verifySignature(
+        uint256 txid,
+        uint256 from_handler,
+        address to_handler,
+        CrossChainMsgStatus status,
+        uint8 sign_type,
+        bytes calldata signatures
+    ) internal view {
+        bytes32 message_hash = keccak256(
+            abi.encodePacked(txid, from_handler, to_handler, status)
+        );
+
+        require(
+            signature_verifier.verify(message_hash, signatures, sign_type),
+            "Invalid signature"
+        );
 
     }
 

