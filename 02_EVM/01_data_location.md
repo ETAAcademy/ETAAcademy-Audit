@@ -449,3 +449,63 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 9. [Medium] zkTrie maximum depth limit is not enforced in Scroll
+
+### zkTrie maximum depth limit
+
+- Summary: The `walkTree` function in `ScrollVerifierHooks.sol` lacked a maximum depth limit of 248 bits, as required by Scroll’s zkTrie specification. This omission could have led to the acceptance of invalid proofs, potentially causing soundness issues in the zk circuit. The issue was identified as a deviation from Scroll's intended behavior since the secure key space is constrained by the Poseidon hash function.
+
+- Impact & Recommendation: The recommended fix was to enforce a depth check (`if (i >= 248) revert InvalidProof();`). Unruggable acknowledged the issue and implemented a mitigation by adding a `MAX_TRIE_DEPTH` check, ensuring that proofs exceeding 248 levels are rejected. The issue is now resolved.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-12-unruggable-invitational#m-01-zktrie-maximum-depth-limit-is-not-enforced-in-scroll) & [Report](https://code4rena.com/reports/2024-12-unruggable-invitational)
+
+<details><summary>POC</summary>
+
+```solidity
+
+function walkTree(
+    bytes32 key,
+    bytes memory encodedProof,
+    bytes32 rootHash,
+    uint256 leafSize
+) internal view returns (bytes32 keyHash, bytes32 h, bytes memory v, bool exists) {
+    bytes[] memory proof = abi.decode(encodedProof, (bytes[]));
+    keyHash = poseidonHash1(key);
+    h = rootHash;
+    for (uint256 i; ; i++) {
+        // Missing depth limit check: if (i >= 248) revert InvalidProof();
+
+        if (i == proof.length) revert InvalidProof();
+        v = proof[i];
+
+        if (v.length == 0) revert InvalidProof();
+        uint256 nodeType = uint8(v[0]);
+
+        if (nodeType == NODE_LEAF) {
+            bytes32 temp;
+            assembly {
+                temp := mload(add(v, 33))
+            }
+            if (temp == keyHash) {
+                assembly {
+                    temp := mload(add(v, leafSize))
+                }
+                if (temp != key) revert InvalidProof();
+                exists = true;
+            } else {
+                bytes32 p = bytes32((1 << i) - 1); // prefix mask
+                if ((temp & p) != (keyHash & p)) revert InvalidProof();
+                keyHash = temp;
+            }
+            break;
+        }
+
+        // ... rest of the code
+
+    }
+
+}
+
+```
+
+</details>

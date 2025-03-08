@@ -2645,7 +2645,7 @@ library Multicall {
 
 ## 29.[High] CDPVault.sol#liquidatePositionBadDebt() doesn’t correctly handle profit and loss
 
-### liquidationPenalty penalty
+### liquidation penalty
 
 - Summary: This vulnerability in the CDPVault contract’s liquidation mechanism allows an attacker to profit by self-liquidating their position. The issue arises because the penalty (`liquidationPenalty`) is not factored in when calculating the amount of collateral to be given to the liquidator, despite it being deducted from the repayable amount. As a result, the liquidator receives the full collateral, allowing the attacker to exploit the system by borrowing, making their position unsafe, and liquidating it at a discounted price without accounting for the penalty. This enables the attacker to obtain the entire collateral and profit, potentially gaining assets unfairly.
 

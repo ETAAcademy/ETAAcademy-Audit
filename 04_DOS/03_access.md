@@ -792,3 +792,74 @@ tranche[_minTranche] = IMultiSourceLoan.Tranche(
 ```
 
 </details>
+
+## 13.[High] Anyone can call StrategySupplyBase.harvest, allowing users to avoid paying performance fees on interest
+
+### Pay performance fees on interest
+
+- Summary: In the **BakerFi** protocol, the **StrategySupplyBase.harvest** function can be called by anyone, allowing users to front-run the rebalance process or frequently trigger harvests to avoid paying performance fees on interest. Since the **harvest** function updates the deployed asset amount before fees are deducted, malicious users can exploit this to receive more interest than they should.
+
+- Impact & Recommendation: To prevent this, the protocol should restrict access to **harvest** by adding an **onlyOwner** modifier, ensuring only authorized entities can execute it. The issue was confirmed and has been mitigated by BakerFi.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-12-bakerfi-invitational#h-02-anyone-can-call-strategysupplybaseharvest-allowing-users-to-avoid-paying-performance-fees-on-interest) & [Report](https://code4rena.com/reports/2024-12-bakerfi-invitational)
+
+<details><summary>POC</summary>
+
+```solidity
+
+function _harvestAndMintFees() internal {
+    uint256 currentPosition = _totalAssets();
+    if (currentPosition == 0) {
+        return;
+    }
+@>  int256 balanceChange = _harvest();
+    if (balanceChange > 0) {
+        address feeReceiver = getFeeReceiver();
+        uint256 performanceFee = getPerformanceFee();
+        if (feeReceiver != address(this) && feeReceiver != address(0) && performanceFee > 0) {
+            uint256 feeInEth = uint256(balanceChange) * performanceFee;
+            uint256 sharesToMint = feeInEth.mulDivUp(totalSupply(), currentPosition * PERCENTAGE_PRECISION);
+@>          _mint(feeReceiver, sharesToMint);
+        }
+    }
+}
+
+function _harvest() internal virtual override returns (int256 balanceChange) {
+@>  return _strategy.harvest(); // Calls the harvest function of the strategy
+}
+
+@>  function harvest() external returns (int256 balanceChange) {
+        // Get Balance
+        uint256 newBalance = getBalance();
+@>      balanceChange = int256(newBalance) - int256(_deployedAmount);
+        if (balanceChange > 0) {
+            emit StrategyProfit(uint256(balanceChange));
+        } else if (balanceChange < 0) {
+            emit StrategyLoss(uint256(-balanceChange));
+        }
+
+        if (balanceChange != 0) {
+            emit StrategyAmountUpdate(newBalance);
+        }
+
+@>      _deployedAmount = newBalance;
+    }
+
+    it('PoC - anyone can call harvest', async () => {
+  const { owner, strategySupply, stETH, aave3Pool, otherAccount } = await loadFixture(
+    deployStrategySupplyFixture,
+  );
+
+  const deployAmount = ethers.parseEther('10');
+  await stETH.approve(await strategySupply.getAddress(), deployAmount);
+  await strategySupply.deploy(deployAmount);
+
+  //artificial profit
+  await aave3Pool.mintAtokensArbitrarily(await strategySupply.getAddress(), deployAmount);
+  await expect(strategySupply.connect(otherAccount).harvest())
+    .to.emit(strategySupply, 'StrategyProfit')
+    .to.emit(strategySupply, 'StrategyAmountUpdate');
+});
+
+```
+
+</details>

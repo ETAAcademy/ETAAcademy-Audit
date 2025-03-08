@@ -1243,89 +1243,106 @@ function _doCheckValueType(CheckValueAndType memory check, uint256 valueToCheck)
 ```solidity
 
 function periodCumulativesInside(/* ... */) /* ... */ {
-
     // ...
-
     if (lastTick < tickLower) {
-
         // ...
-
     } else if (lastTick < tickUpper) {
-
         // ...
-
         if (currentPeriod <= period) {
-
             // ...
-
         } else {
-
             cache.secondsPerLiquidityCumulativeX128 = $.periods[period].endSecondsPerLiquidityPeriodX128;
-
         }
-
         return
-
             cache.secondsPerLiquidityCumulativeX128 -
-
             snapshot.secondsPerLiquidityOutsideLowerX128 -
-
             snapshot.secondsPerLiquidityOutsideUpperX128;
-
     } else {
-
         // ...
-
     }
-
 }
 
 function _advancePeriod() /* ... */ {
-
     // ...
-
     if ((_blockTimestamp() / 1 weeks) != _lastPeriod) {
-
         // ...
-
         uint160 secondsPerLiquidityCumulativeX128 = Oracle.newPeriod(
-
             $.observations,
-
             _slot0.observationIndex,
-
             period
-
         );
-
         // ...
-
         $.periods[_lastPeriod].endSecondsPerLiquidityPeriodX128 = secondsPerLiquidityCumulativeX128;
-
         // ...
-
     }
-
 }
-
 
 function newPeriod(/* ... */) /* ... */ {
-
     // ...
-
     uint32 delta = uint32(period) * 1 weeks - 1 - last.blockTimestamp;
-
     secondsPerLiquidityCumulativeX128 =
-
         last.secondsPerLiquidityCumulativeX128 +
-
         ((uint160(delta) << 128) / ($.liquidity > 0 ? $.liquidity : 1));
-
     // ...
-
 }
 
+```
 
+</details>
+
+## 21.[Medium] Last buy might charge the wrong fee
+
+### Wrong fee
+
+- Summary: In the **Pump Science** protocol's **last buy process**, the system adjusts the SOL amount to fit the bonding curve, but the swap fee is calculated beforehand based on the initially expected input. This can lead to incorrect fee calculations if the actual SOL amount changes during the final buy. If the required SOL increases, the user’s balance may become insufficient, potentially causing transaction failures or unintended account closures.
+
+- Impact & Recommendation: To mitigate this, the protocol should recalculate the fee after the final adjustment, ensure the user has enough balance post-transaction, and introduce a slippage parameter to cap the maximum SOL input.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-01-pump-science#m-01-last-buy-might-charge-the-wrong-fee) & [Report](https://code4rena.com/reports/2025-01-pump-science)
+
+<details><summary>POC</summary>
+
+```rust
+
+            // Check if slot is start slot and buyer is bonding_curve creator
+            if clock.slot == bonding_curve.start_slot
+                && ctx.accounts.user.key() == bonding_curve.creator
+            {
+                msg!("Dev buy");
+                fee_lamports = 0;
+                buy_amount_applied = exact_in_amount;
+            } else {
+                fee_lamports = bonding_curve.calculate_fee(exact_in_amount, clock.slot)?;
+                msg!("Fee: {} SOL", fee_lamports);
+                buy_amount_applied = exact_in_amount - fee_lamports;
+            }
+
+            let buy_result = ctx
+                .accounts
+                .bonding_curve
+                .apply_buy(buy_amount_applied)
+                .ok_or(ContractError::BuyFailed)?;
+                    if token_amount >= self.real_token_reserves {
+            // Last Buy
+            token_amount = self.real_token_reserves;
+            // Temporarily store the current state
+            let current_virtual_token_reserves = self.virtual_token_reserves;
+            let current_virtual_sol_reserves = self.virtual_sol_reserves;
+            // Update self with the new token amount
+            self.virtual_token_reserves = (current_virtual_token_reserves as u128)
+                .checked_sub(token_amount as u128)?
+                .try_into()
+                .ok()?;
+            self.virtual_sol_reserves = 115_005_359_056; // Total raise amount at end
+            let recomputed_sol_amount = self.get_sol_for_sell_tokens(token_amount)?;
+            msg!("ApplyBuy: recomputed_sol_amount: {}", recomputed_sol_amount);
+            sol_amount = recomputed_sol_amount;
+            // Restore the state with the recomputed sol_amount
+            self.virtual_token_reserves = current_virtual_token_reserves;
+            self.virtual_sol_reserves = current_virtual_sol_reserves;
+            // Set complete to true
+            self.complete = true;
+
+        }
 
 ```
 
