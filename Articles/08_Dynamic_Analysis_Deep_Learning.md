@@ -26,7 +26,7 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
 
 # Dynamic Analysis and Deep Learning
 
-Dynamic Analysis provides powerful runtime insights but comes with computational overhead, The combination of **Static Analysis, Dynamic Analysis, and Deep Learning** offers automation and pattern recognition advantages. Leveraging deep learning, especially the Transformer architecture, LLMs have demonstrated capabilities in identifying vulnerabilities across various programming languages, including Solidity-based contracts. Techniques like RAG and fine-tuning have notably improved detection accuracy, although challenges persist, such as issues with cross-file detection, identifying zero-day vulnerabilities, and reducing false positives.
+Dynamic Analysis provides powerful runtime insights but comes with computational overhead, the combination of **Static Analysis, Dynamic Analysis, and Deep Learning** offers automation and pattern recognition advantages. Leveraging deep learning, especially the Transformer architecture, LLMs have demonstrated capabilities in identifying vulnerabilities across various programming languages, including Solidity-based contracts. Techniques like RAG and fine-tuning have notably improved detection accuracy, although challenges persist, such as issues with cross-file detection, identifying zero-day vulnerabilities, and reducing false positives.
 
 ---
 
@@ -218,5 +218,5 @@ While fine-tuning and code preprocessing have enhanced LLM-based vulnerability d
 ---
 
 <div  align="center">
-<img src="img/07_static_analysis.gif" width="50%" />
+<img src="https://github.com/ETAAcademy/ETAAcademy-Images/blob/main/ETAAcademy-Audit/08_DA_DL.gif" width="50%" />
 </div>
