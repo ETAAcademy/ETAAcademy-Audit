@@ -218,5 +218,5 @@ While fine-tuning and code preprocessing have enhanced LLM-based vulnerability d
 ---
 
 <div  align="center">
-<img src="https://github.com/ETAAcademy/ETAAcademy-Images/blob/main/ETAAcademy-Audit/08_DA_DL.gif" width="50%" />
+<img src="https://github.com/ETAAcademy/ETAAcademy-Images/blob/main/ETAAcademy-Audit/08_DA_DL.gif?raw=true" width="50%" />
 </div>
