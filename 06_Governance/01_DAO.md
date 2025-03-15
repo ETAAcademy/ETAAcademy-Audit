@@ -435,7 +435,7 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: Users can exploit the "change_gauge_weight" function by monitoring the mempool for calls and front-running them to remove their voting power before the change occurs. This allows them to manipulate the gauge's weight, increasing it beyond the intended value set by governance.
 
 - Impact & Recommendation: Remove `change_gauge_weight` function.
-  <br> 🐬: [Source](hhttps://code4rena.com/reports/2024-03-neobase#m-03-issue-from-previous-audit-still-present-gauge-can-have-bigger-weight-than-was-intended-by-protocol) & [Report](https://code4rena.com/reports/2024-03-neobase)
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-03-neobase#m-03-issue-from-previous-audit-still-present-gauge-can-have-bigger-weight-than-was-intended-by-protocol) & [Report](https://code4rena.com/reports/2024-03-neobase)
 
   <details><summary>POC</summary>
 

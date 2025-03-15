@@ -302,7 +302,7 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
             ibt.approve(address(principalToken), 9e18);
             principalToken.depositIBT(9e18, TEST_USER_2);
             vm.stopPrank();
-            // Simulate vault interest accrual by manualy inflating the share price
+            // Simulate vault interest accrual by manually inflating the share price
             vm.startPrank(TEST_USER_3);
             uint256 generatedYield = 10e18;
             underlying.mint(TEST_USER_3, generatedYield);
@@ -775,7 +775,7 @@ index 6c5a1d7..196e3a0 100644
         assertEq(sfpm.balanceOf(Alice, tokenIdforLongPut), positionSize * 9 / 10);
         // -------------------------- TRANSFER ONLY 10% TO BOB -----------------------------------------------
         /* During the transfer only the right slot is checked.
-           If the sender account's right slot liquidity is equal to transferred liquidity, transfer is succesfully made regardless of the left slot (as the whole net liquidity is transferred)
+           If the sender account's right slot liquidity is equal to transferred liquidity, transfer is successfully made regardless of the left slot (as the whole net liquidity is transferred)
         */
 
         // The right side of the Alice's position key is only 10% of liquidity. She can transfer 1/10 of the short put tokens.

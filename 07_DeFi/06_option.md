@@ -299,7 +299,7 @@ index 5f09101..e9eef27 100644
 +        // _cacheWorldState(pools[bound(seed, 0, pools.length - 1)]);
 +        _cacheWorldState(PEPE_WETH_30);
 
-         // Fund some of the the generic actor accounts
+         // Fund some of the generic actor accounts
          vm.startPrank(Bob);
 @@ -241,6 +243,93 @@ contract SemiFungiblePositionManagerTest is PositionUtils {
          sfpm = new SemiFungiblePositionManagerHarness(V3FACTORY);
