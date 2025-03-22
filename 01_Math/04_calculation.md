@@ -1347,3 +1347,74 @@ function newPeriod(/* ... */) /* ... */ {
 ```
 
 </details>
+
+## 22.[High] The calculation of totalAssets() could be wrong if operatorFeeAmount > 0, this can cause potential loss for the new depositors
+
+### Incorrect calculation of `totalAssets()`
+
+- Summary: The issue in the `LiquidRon` contract involves an incorrect calculation of `totalAssets()` when the `operatorFeeAmount` is greater than zero, leading to potential losses for new depositors. Since the operator's fee is stored as a WRON token balance within the vault, it is mistakenly included in the total asset calculation. This results in inflated asset values during deposits and subsequent losses when the operator withdraws the fee. Affected users who withdraw funds after the fee withdrawal may receive fewer assets than expected.
+
+- Impact & Recommendation: The recommended fix was to adjust the `totalAssets()` function to exclude the `operatorFeeAmount` from the calculation, which Liquid Ron has implemented and confirmed as a mitigation.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-01-liquid-ron#h-01-the-calculation-of-totalassets-could-be-wrong-if-operatorfeeamount--0-this-can-cause-potential-loss-for-the-new-depositors) & [Report](https://code4rena.com/reports/2025-01-liquid-ron)
+
+<details><summary>POC</summary>
+
+```solidity
+
+function test_withdraw_new_user() public {
+        address user1 = address(0xf1);
+        address user2 = address(0xf2);
+
+        uint256 amount = 100000 ether;
+        vm.deal(user1, amount);
+        vm.deal(user2, amount);
+
+        vm.prank(user1);
+        liquidRon.deposit{value: amount}();
+
+        uint256 delegateAmount = amount / 7;
+        uint256[] memory amounts = new uint256[](5);
+        for (uint256 i = 0; i < 5; i++) {
+            amounts[i] = delegateAmount;
+        }
+        liquidRon.delegateAmount(0, amounts, consensusAddrs);
+
+        skip(86400 * 365 + 2 + 1);
+        // operator fee before harvest
+        assertTrue(liquidRon.operatorFeeAmount() == 0);
+        liquidRon.harvest(0, consensusAddrs);
+        // operator fee after harvest
+        assertTrue(liquidRon.operatorFeeAmount() > 0);
+
+        // new user deposit
+        vm.prank(user2);
+        liquidRon.deposit{value: amount}();
+        uint256 user2Shares = liquidRon.balanceOf(user2);
+        uint256 expectedRedeemAmount = liquidRon.previewRedeem(user2Shares);
+
+        // fee withdrawal by operator
+        liquidRon.fetchOperatorFee();
+        assertTrue(liquidRon.operatorFeeAmount() == 0);
+
+        // user2 redeem all his shares
+        vm.prank(user2);
+        liquidRon.redeem(user2Shares, user2, user2);
+
+        console.log(user2.balance);
+        console.log(expectedRedeemAmount);
+        assertTrue(user2.balance == expectedRedeemAmount);
+
+    }
+
+```
+
+```solidity
+
+function totalAssets() public view override returns (uint256) {
+-        return super.totalAssets() + getTotalStaked() + getTotalRewards();
++        return super.totalAssets() + getTotalStaked() + getTotalRewards() - operatorFeeAmount;
+    }
+
+```
+
+</details>

