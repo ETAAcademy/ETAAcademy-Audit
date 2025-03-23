@@ -930,8 +930,8 @@ Cosmos, known as the "Internet of Blockchains," enables interoperability through
 
 ---
 
-[interchain-security](https://github.com/ETAAcademy/ETAAcademy-Audit/tree/main/Articles/Appendix/interchain-security)
+[interchain-security](https://github.com/cosmos/interchain-security)
 
 <div  align="center">
-<img src="img/04_cosmos_security.gif" width="50%" />
+<img src="https://github.com/ETAAcademy/ETAAcademy-Images/blob/main/ETAAcademy-Audit/04_cosmos_security.gif?raw=true" width="50%" />
 </div>

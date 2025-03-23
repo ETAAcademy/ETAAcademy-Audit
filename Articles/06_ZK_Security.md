@@ -1052,5 +1052,5 @@ fn append_commitment_and_check_digest<R: Read>(
 ---
 
 <div  align="center">
-<img src="img/06_zk_security.gif" width="50%" />
+<img src="https://github.com/ETAAcademy/ETAAcademy-Images/blob/main/ETAAcademy-Audit/06_zk_security.gif?raw=true" width="50%" />
 </div>

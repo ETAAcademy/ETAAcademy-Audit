@@ -152,7 +152,7 @@ function safeAdd(uint256 a, uint256 b) internal pure returns (uint256) {
 </details>
 
 <div  align="center">
-<img src="img/07_CFG.png" width="20%" />
+<img src="https://github.com/ETAAcademy/ETAAcademy-Images/blob/main/ETAAcademy-Audit/07_CFG.png?raw=true" width="50%" />
 </div>
 
 ---
@@ -224,7 +224,7 @@ def example_of_bottom():
 </details>
 
 <div  align="center">
-<img src="img/07_DFA.png" width="50%" />
+<img src="https://github.com/ETAAcademy/ETAAcademy-Images/blob/main/ETAAcademy-Audit/07_DFA.png?raw=true" width="50%" />
 </div>
 
 ---
@@ -522,5 +522,5 @@ fn pop_level(&mut self, Tracked(model): Tracked<&ConcreteCursor>)
 ---
 
 <div  align="center">
-<img src="img/07_static_analysis.gif" width="50%" />
+<img src="https://github.com/ETAAcademy/ETAAcademy-Images/blob/main/ETAAcademy-Audit/07_static_analysis.gif?raw=true" width="50%" />
 </div>

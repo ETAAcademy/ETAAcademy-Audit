@@ -973,8 +973,8 @@ pub struct TokenPool {
 
 ---
 
-[Sealevel-attacks-master](https://github.com/ETAAcademy/ETAAcademy-Audit/tree/main/Articles/Appendix/sealevel-attacks-master)
+[Sealevel-attacks-master](https://github.com/coral-xyz/sealevel-attacks)
 
 <div  align="center">
-<img src="img/03_solana_security.gif" width="50%" />
+<img src="https://github.com/ETAAcademy/ETAAcademy-Images/blob/main/ETAAcademy-Audit/03_solana_security.gif?raw=true" width="50%" />
 </div>

@@ -415,6 +415,6 @@ Vulnerabilities such as improper data storage, domain validation flaws, EIP-4337
 
 To address these issues, implementing stronger encryption and hashing algorithms, ensuring secure private key generation, improving signature protocols, using private platforms for wallet creation, and conducting regular security audits are essential steps toward enhancing wallet security and safeguarding digital assets.
 
-<div  align="center"> 
-<img src="img/02_audit_wallet.gif" width="50%" />
+<div  align="center">
+<img src="https://github.com/ETAAcademy/ETAAcademy-Images/blob/main/ETAAcademy-Audit/02_audit_wallet.gif?raw=true" width="50%" />
 </div>

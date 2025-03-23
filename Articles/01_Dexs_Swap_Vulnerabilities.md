@@ -311,7 +311,9 @@ modifier ensure(uint deadline) {
 
 **KyberSwap:** The attack on KyberSwap, where the attacker stole funds mostly in Ether, wrapped ether (wETH), and USDC from multiple cross-chain deployments of KyberSwap. This suggests that the theft targeted the liquidity provider pools themselves, indicating a directed attack against the core infrastructure of the DEX. Due to the Reinvestment Curve feature of KyberSwap Elastic pool, when both base liquidity and reinvestment liquidity are considered as actual liquidity, it calculates the amount of tokens needed for exchange at the scale boundary using the calcReachAmount function. This calculation resulted in a higher than expected amount, causing the next price sqrtP to exceed the boundary scale’s sqrtP. The pool, using an inequality to check sqrtP, led to the protocol not updating liquidity and crossing the tick as expected through \_updateLiquidityAndCrossTick.
 
-![01_swap.webp](./img/01_swap.webp)
+<div  align="center">
+<img src="https://github.com/ETAAcademy/ETAAcademy-Images/blob/main/ETAAcademy-Audit/01_swap.webp?raw=true" width="50%" />
+</div>
 
 ```solidity
     // fee reinvestment => the next price sqrtP to exceed the boundary scale’s sqrtP. The pool, but not updating liquidity and crossing the tick as expected by Invalid validation
