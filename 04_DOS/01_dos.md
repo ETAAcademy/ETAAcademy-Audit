@@ -332,7 +332,7 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
         skip(86400 * 7);
         vault.addToContractWhitelist(address(rdpxV2Core));
         vault.updateFundingPaymentPointer();
-        // test funding succesfully
+        // test funding successfully
         uint256[] memory strikes = new uint256[](1);
         strikes[0] = 15e6;
         // calculate funding is done properly

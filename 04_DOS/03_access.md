@@ -63,7 +63,7 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
 
   </details>
 
-## 2. [Medium] ASDRouter didn’t call ASDUSDC.approve() to to grant permission for crocSwapAddress to spend their ASDUSDC
+## 2. [Medium] ASDRouter didn’t call ASDUSDC.approve() to grant permission for crocSwapAddress to spend their ASDUSDC
 
 ### Lack of allowance
 
