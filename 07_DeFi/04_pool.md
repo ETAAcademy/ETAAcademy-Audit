@@ -6,7 +6,7 @@
     <th>tags</th>
   </tr>
   <tr>
-    <td>04. Pool</td>s
+    <td>04. Pool</td>
     <td>
       <table>
         <tr>
@@ -1013,6 +1013,82 @@ function test_any_caller() public {
         "Rebalance Profit comes from pool's rebalance"
     );
 
+}
+
+```
+
+</details>
+
+## 20.[High] Protocol allows creating broken tri-crypto CPMM pools
+
+### Tri-crypto CPMM pools
+
+- Summary: The protocol allows the creation of constant product market maker (CPMM) pools with more than two tokens, even though the implemented Uniswap-style formula is only valid for two-token pools. This flaw enables the creation of broken tri-crypto pools where liquidity can be added, and swaps can be performed, but the invariant does not hold correctly, leading to potential arbitrage opportunities and financial losses.
+
+- Impact & Recommendation: The issue arises due to a missing check during pool creation, and it can be bypassed by not specifying a slippage tolerance. To fix this, an explicit validation should be added to prevent CPMM pools from having more than two tokens.
+  <br> 🐬: [Source](https://code4rena.com/reports/2024-11-mantra-dex#h-01-protocol-allows-creating-broken-tri-crypto-cpmm-pools) & [Report](https://code4rena.com/reports/2024-11-mantra-dex)
+
+<details><summary>POC</summary>
+
+```rust
+
+fn print_diff(init_bal: [Uint128; 4], final_bal: [Uint128; 4]) -> [i128; 4] {
+    let diffs = [
+        final_bal[0].u128() as i128 - init_bal[0].u128() as i128,
+        final_bal[1].u128() as i128 - init_bal[1].u128() as i128,
+        final_bal[2].u128() as i128 - init_bal[2].u128() as i128,
+        final_bal[3].u128() as i128 - init_bal[3].u128() as i128,
+    ];
+
+    println!("==Balance deltas==");
+    if diffs[0] != 0 {
+        println!("uwhale delta: {}", diffs[0]);
+    }
+    if diffs[1] != 0 {
+        println!("uluna delta : {}", diffs[1]);
+    }
+    if diffs[2] != 0 {
+        println!("uusd delta  : {}", diffs[2]);
+    }
+    if diffs[3] != 0 {
+        println!("lp delta    : {}", diffs[3]);
+    }
+    println!("==Balance deltas==\n");
+
+    diffs
+}
+
+fn calc_state(suite: &mut TestingSuite, creator: &str) -> [Uint128; 4] {
+    let uwhale_balance = RefCell::new(Uint128::zero());
+    let uluna_balance = RefCell::new(Uint128::zero());
+    let uusd_balance = RefCell::new(Uint128::zero());
+    let lp_shares = RefCell::new(Uint128::zero());
+
+    suite.query_balance(&creator.to_string(), "uwhale".to_string(), |result| {
+        *uwhale_balance.borrow_mut() = result.unwrap().amount;
+    });
+
+    suite.query_balance(&creator.to_string(), "uluna".to_string(), |result| {
+        *uluna_balance.borrow_mut() = result.unwrap().amount;
+    });
+
+    suite.query_balance(&creator.to_string(), "uusd".to_string(), |result| {
+        *uusd_balance.borrow_mut() = result.unwrap().amount;
+    });
+
+    suite.query_all_balances(&creator.to_string(), |balances| {
+        for coin in balances.unwrap().iter() {
+            if coin.denom.contains("o.whale.uluna") {
+                *lp_shares.borrow_mut() = coin.amount;
+            }
+        }
+    });
+
+    let uwhale = *uwhale_balance.borrow();
+    let uluna = *uluna_balance.borrow();
+    let uusd = *uusd_balance.borrow();
+    let lp = *lp_shares.borrow();
+    [uwhale, uluna, uusd, lp]
 }
 
 ```
