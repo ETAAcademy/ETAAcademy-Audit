@@ -500,3 +500,41 @@ function _lock(
 ```
 
 </details>
+
+## 10.[High] Extending a domain’s expiration even after the grace period impacts domain buyers
+
+### Extend domain expiration
+
+- Summary: The `extend_expiration()` function in Initia’s name service allowed domains to be extended even after the grace period ended, enabling users to frontrun legitimate buyers.
+
+- Impact & Recommendation: This has been fixed by adding a time check to prevent such extensions.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-01-initia-move#h-04-extending-a-domains-expiration-even-after-the-grace-period-impacts-domain-buyers) & [Report](https://code4rena.com/reports/2025-01-initia-move)
+
+<details><summary>POC</summary>
+
+```move
+
+public entry fun extend_expiration(
+        account: &signer,
+        domain_name: String,
+        duration: u64,
+    ) acquires ModuleStore {
+        ....
+        assert!(
+            duration >= module_store.config.min_duration,
+            error::invalid_argument(EMIN_DURATION),
+        );
+
+        let (_height, timestamp) = block::get_block_info();
+        let expiration_date = metadata::get_expiration_date(token);
+        // @audit Only allow extend_expiration before the grace period
++       assert!(
++           timestamp <= expiration_date + module_store.config.grace_period ,
++           error::invalid_argument(ECANT_EXTEND_EXPIRATION),
++       );
+        ....
+    }
+
+```
+
+</details>

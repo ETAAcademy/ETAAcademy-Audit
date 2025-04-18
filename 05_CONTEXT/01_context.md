@@ -407,3 +407,43 @@ _createVesting(
 ```
 
 </details>
+
+## 13. [High] Challenger misses discrepancy events, allowing executors to perform malicious actions
+
+### Challenges
+
+- Summary: In Initia's rollup system, the `endBlockHandler` function collects challenge events from both `CheckValue` (for mismatched deposit events) and `CheckTimeout` (for unprocessed events). However, due to variable overwriting, the first set of challenges from `CheckValue` is silently discarded when `challenges` is reassigned by `CheckTimeout`. As a result, real event discrepancies caused by a malicious Executor go unnoticed, allowing them to bypass state validation.
+
+- Impact & Recommendation: The fix is simple—accumulate both challenge sets before sending—but the impact is severe, making it a high-severity vulnerability.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-01-initia-rollup-modules#h-01-challenger-misses-discrepancy-events-allowing-executors-to-perform-malicious-actions) & [Report](https://code4rena.com/reports/2025-01-initia-rollup-modules)
+
+<details><summary>POC</summary>
+
+```go
+
+func (ch *Child) endBlockHandler(ctx types.Context, args nodetypes.EndBlockArgs) error {
+	// ...
+
+	// check value for pending events
+1@>	challenges, processedEvents, err := ch.eventHandler.CheckValue(ctx, ch.eventQueue)
+	if err != nil {
+		return err
+	}
+	pendingChallenges = append(pendingChallenges, challenges...)
+
+	// check timeout for unprocessed pending events
+  	unprocessedEvents := ch.eventHandler.GetUnprocessedPendingEvents(processedEvents)
+2@>	challenges, timeoutEvents := ch.eventHandler.CheckTimeout(args.Block.Header.Time, unprocessedEvents)
+3@>	pendingChallenges = append(pendingChallenges, challenges...)
+
+	// ...
+
+	ch.eventHandler.DeletePendingEvents(processedEvents)
+	ch.eventHandler.SetPendingEvents(timeoutEvents)
+4@>	ch.challenger.SendPendingChallenges(challenges)
+	return nil
+}
+
+```
+
+</details>
