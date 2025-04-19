@@ -39,7 +39,7 @@ The article also introduces other static analysis tools, including SARIF Explore
 - **AST (Abstract Syntax Tree)**: Extracted from the Solidity compiler (`solc`), this tree-based structure represents the nested syntactic structure of the code. While essential for basic syntactic analysis, its deeply nested form can be challenging for more complex tasks. Slither offers an `ExpressionVisitor` class for recursive AST traversal.
 - **CFG (Control Flow Graph)**: This graph representation illustrates all possible execution paths within a function, making it the backbone of most advanced analyses in Slither. CFGs are essential for control-flow-based vulnerability detection.
 
-<div style="text-align: center;">
+<div align=center>
     <img src="https://github.com/ETAAcademy/ETAAcademy-Images/blob/main/ETAAcademy-Audit/11_Slither_AST.gif?raw=true" alt="Image 1" width="30%" style="display: inline-block;">
     <img src="https://github.com/ETAAcademy/ETAAcademy-Images/blob/main/ETAAcademy-Audit/11_Slither_CFG.gif?raw=true" alt="Image 2" width="30%" style="display: inline-block;">
 </div>
