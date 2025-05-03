@@ -318,3 +318,52 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
   ```
 
   </details>
+
+## 4. [Medium] All reallocate cross-chain token and rewards will be lost for the users using the account abstraction wallet
+
+### Different addresses across chains
+
+- Summary: The Nudge protocol's cross-chain reallocation flow affects users with account abstraction (AA) wallets. Since AA wallets have different addresses across chains, tokens reallocated cross-chain are sent to the wrong address on the destination chain, causing permanent loss of funds. Furthermore, users are unable to claim rewards because the participation records store the sender’s address from the source chain, which doesn’t match their address on the destination chain. This issue impacts both NudgeCampaign and NudgePointsCampaign, with no current UI or documentation support to prevent it, posing a high risk given Nudge’s large user base.
+- Impact & Recommendation: A fix is recommended to allow users to specify the recipient address and warn AA wallet users explicitly.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-03-nudgexyz#m-03-all-reallocate-cross-chain-token-and-rewards-will-be-lost-for-the-users-using-the-account-abstraction-wallet) & [Report](https://code4rena.com/reports/2025-03-nudgexyz)
+
+  <details><summary>POC</summary>
+
+  ```solidity
+    function handleReallocation(
+        uint256 campaignId_,
+        address userAddress,
+        address toToken,
+        uint256 toAmount,
+        bytes memory data
+    ) external payable whenNotPaused {
+    ...
+
+    _transfer(toToken, userAddress, amountReceived);
+
+    function _transfer(address token, address to, uint256 amount) internal {
+        if (token == NATIVE_TOKEN) {
+            (bool sent, ) = to.call{value: amount}("");
+            if (!sent) revert NativeTokenTransferFailed();
+        } else {
+            SafeERC20.safeTransfer(IERC20(token), to, amount);
+        }
+    }
+    ...
+
+    participations[pID] = Participation({
+            status: ParticipationStatus.PARTICIPATING,
+            userAddress: userAddress,
+            toAmount: amountReceived,
+            rewardAmount: userRewards,
+            startTimestamp: block.timestamp,
+            startBlockNumber: block.number
+        });
+    // Verify that caller is the participation address
+            if (participation.userAddress != msg.sender) {
+                revert UnauthorizedCaller(pIDs[i]);
+            }
+
+  ```
+
+  </details>

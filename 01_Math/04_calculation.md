@@ -1418,3 +1418,68 @@ function totalAssets() public view override returns (uint256) {
 ```
 
 </details>
+
+## 23.[Medium] Inconsistent mantissa size auto-scaling between packedFloat encoding and calculations will lead to unacceptable rounding errors
+
+### Inconsistency between rules and operations
+
+- Summary: There is an inconsistency between the mantissa auto-scaling rules used in `toPackedFloat` encoding and those used in arithmetic operations (`add`, `sub`, `mul`, `div`) within the `Float128` library. While encoding may assign a 72-digit L-mantissa even when the exponent is very small (e.g., < -52), arithmetic operations apply stricter conditions and downgrade the result to a 38-digit M-mantissa in such cases. This mismatch leads to precision loss and rounding errors — as shown in the proof of concept, operations like `a.add(b).sub(b)` and `a.sub(b).add(b)` yield results differing by 9 ULPs, which exceeds the stated accuracy guarantees.
+
+- Impact & Recommendation: The suggested fix is to unify the auto-scaling rules used in both encoding and arithmetic to ensure consistent behavior.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-04-forte-float128-solidity-library#m-01-inconsistent-mantissa-size-auto-scaling-between-packedfloat-encoding-and-calculations-will-lead-to-unacceptable-rounding-errors) & [Report](https://code4rena.com/reports/2025-04-forte-float128-solidity-library)
+
+<details><summary>POC</summary>
+
+```solidity
+
+pragma solidity ^0.8.24;
+
+import "forge-std/Test.sol";
+import "src/Float128.sol";
+import {Ln} from "src/Ln.sol";
+import {Math} from "src/Math.sol";
+import {packedFloat} from "src/Types.sol";
+
+contract ForteTest is Test {
+    using Float128 for packedFloat;
+
+    function testM03POC() external {
+        int256 aMan = 100000000000000000000000000000000000000000000000000000000000000000000000;
+        int256 aExp = -53;
+
+        int256 bMan = 999999999999999999999999999999999999999999999999999999999999999999999999;
+        int256 bExp = -56;
+
+        packedFloat a = Float128.toPackedFloat(aMan, aExp);
+        packedFloat b = Float128.toPackedFloat(bMan, bExp);
+        packedFloat left = a.add(b).sub(b);
+        packedFloat right = a.sub(b).add(b);
+        _debug("a", a);
+        _debug("b", b);
+        _debug("left", left);
+        _debug("right", right);
+        (int256 lMan, int256 lExp) = left.decode();
+        (int256 rMan, int256 rExp) = right.decode();
+        assertEq(lExp, rExp, "exp mismatch");
+        assertEq(rMan - lMan, 9, "ULP != 9");
+    }
+
+    function _debug(string memory message, packedFloat float) internal {
+        console.log(message);
+        _debug(float);
+    }
+
+    function _debug(packedFloat float) internal {
+        (int256 mantissa, int256 exponent) = float.decode();
+        emit log_named_uint("\tunwrapped", packedFloat.unwrap(float));
+        emit log_named_int("\tmantissa", mantissa);
+        emit log_named_uint(
+            "\tmantissa digits", Float128.findNumberOfDigits(packedFloat.unwrap(float) & Float128.MANTISSA_MASK)
+        );
+        emit log_named_int("\texponent", exponent);
+    }
+}
+
+```
+
+</details>
