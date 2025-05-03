@@ -28,7 +28,7 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
 
 Formal verification, a mathematically rigorous approach to smart contract analysis, leverages propositional logic, predicate functions, and quantifiers (existential ∃ and universal ∀) to enable developers to precisely specify and systematically verify contract properties.
 
-Certora has built a comprehensive verification ecosystem around this methodology, centered on the Certora Prover, which follows a four-step workflow: specification authoring, condition generation, SMT solving, and counterexample analysis. Its domain-specific language, CVL, provides a full suite of tools—from basic syntax to advanced features like ghost variables, hook systems, and invariant mechanisms—while integrating seamlessly with Solidity. Additionally, Certora has extended its framework with specialized tools for other blockchain platforms, such as Sunbeam for Stellar, a customized Prover for Solana, and a general-purpose equivalence checker.
+Certora has built a comprehensive verification ecosystem around this methodology, centered on the Certora Prover, which follows a four-step workflow: specification authoring, condition generation, SMT solving, and counterexample analysis. Its domain-specific language, CVL, provides a full suite of tools—from basic syntax to advanced features like ghost variables, hook systems, and invariant mechanisms—while integrating seamlessly with Solidity. Additionally, Certora has extended its framework with specialized tools for other blockchain platforms, such as Sunbeam for WebAssembly, a customized Prover for Solana, and a general-purpose equivalence checker.
 
 To address the inherent complexity of formal verification, Certora incorporates advanced strategies including over-approximation to avoid missed bugs, vacuity checks to ensure rule validity, performance optimizations to overcome bottlenecks, loop unrolling to bridge code-spec mismatches, and spec soundness validation to maintain reliability.
 
@@ -38,8 +38,6 @@ Formal verification is a powerful method for analyzing smart contracts. At its c
 
 In propositional logic, we reason with Boolean variables and logical operations. Among these, the **implication operator** $(P \rightarrow Q)$ plays a critical role: it is only false when the premise $P$ is true and the conclusion $Q$ is false. **Predicates**, which are functions that return Boolean values, allow us to express conditions or properties over inputs. These can be extended using **quantifiers**: the **existential quantifier** $(\exists)$ asserts that at least one element satisfies a condition, while the **universal quantifier** $(\forall)$ requires all elements to satisfy it.
 
-**Certora Prover**
-
 **Certora Prover** is a formal verification tool designed to prove that a smart contract adheres to a given set of rules or properties using rigorous mathematics. It follows a four-step workflow:
 
 - **Writing specifications** that define contract rules and expected behaviors.
@@ -47,11 +45,7 @@ In propositional logic, we reason with Boolean variables and logical operations.
 - **Using SMT solvers** (Satisfiability Modulo Theories) to automatically prove or refute those conditions.
 - **Providing counterexamples** when verification fails, helping developers fix bugs early.
 
-Certora Prover is accompanied by a robust configuration system, specification language, and property design tools to ensure high-quality verification results.
-
-**Cross-Platform Formal Verification**
-
-Certora provides specialized tools for different blockchain platforms to address unique smart contract security challenges:
+Certora also provides specialized tools for different blockchain platforms to address unique smart contract security challenges:
 
 - **Certora Sunbeam** targets **WebAssembly-based smart contracts** written in **Rust**, especially on the **Stellar** platform. It requires installing the core Certora toolset along with the Rust/Stellar toolchain and the **WABT toolkit**, which converts WASM bytecode into an intermediate form suitable for verification.
 
@@ -59,19 +53,13 @@ Certora provides specialized tools for different blockchain platforms to address
 
 - **The Certora Equivalence Checker** is a general-purpose component that **verifies the semantic equivalence** between two smart contract functions (currently supporting only pure functions). It checks whether two functions return the same result and revert condition on the same inputs. This is particularly useful for **contract optimization, refactoring**, or **upgrade assurance**.
 
-**Certora Verification Language (CVL)**
-
-**CVL (Certora Verification Language)** is a domain-specific language built to express and verify smart contract behavior precisely. It offers:
+**Certora Verification Language (CVL)** is a domain-specific language built to express and verify smart contract behavior precisely. It offers:
 
 - A structured syntax covering **file organization, identifiers, comments, types, and expressions**
 - Core constructs like **method blocks, rules, invariants, and ghost variables**
 - Advanced features including **uninterpreted types, hooks**, and **transient storage**
 
-One of CVL’s key strengths is its **invariant and rule-based system**, allowing developers to define essential properties that must always hold. **Ghost variables** and **hooks** enable tracking and intercepting contract state changes—especially useful for verifying dynamic behavior.
-
-CVL integrates seamlessly with Solidity concepts, making it intuitive for Ethereum developers to use.
-
-**Handling Complexity in Formal Verification**
+One of CVL’s key strengths is its **invariant and rule-based system**, allowing developers to formally state the properties that must hold under various conditions. **Ghost variables** and **hooks** provide powerful mechanisms for tracking and intercepting state changes, making them especially suited for verifying complex dynamic behaviors. The design of method blocks and the type system ensures seamless integration with Solidity, allowing developers to express domain-specific smart contract concepts naturally and intuitively.
 
 Certora’s framework incorporates several strategies for managing verification complexity:
 
@@ -132,7 +120,7 @@ These quantifiers enable us to express complex properties like “for all possib
 This is used to say: "There exists an `x` such that `P(x)` is true", written as $\exists x \in S, P(x)$. It is equivalent to applying logical OR across all values in a set:
 `P(1) ∨ P(2) ∨ P(3) ∨ ...`
 
-In CVL (Certora Verification Language), this can be expressed as:
+In Certora Verification Language (CVL), this concept is implemented using the keyword `exists`:
 
 ```cvl
 require (exists uint n. (n % 3) == 0);
@@ -142,7 +130,7 @@ This quantifier expresses that a predicate holds for **every** possible value in
 $\forall x \in S, P(x)$, equivalent to
 `P(1) ∧ P(2) ∧ P(3) ∧ ...`
 
-For example, the statement "for every natural number `n`, either `n` is even or `n + 1` is even" can be written in CVL as:
+For example, the statement "for every natural number `n`, either `n` is even or `n + 1` is even" can be written in CVL using the keyword `forall`:
 
 ```cvl
 require (forall uint n. (n % 2 == 0) || ((n + 1) % 2 == 0));
@@ -156,13 +144,13 @@ The **negation of a universal quantifier** is an existential quantifier:
 
 | Name                    | Math Symbol | CVL Syntax    | Description                            |
 | ----------------------- | ----------- | ------------- | -------------------------------------- |
-| And                     | ∧           | `&&`          | Logical AND                            |
-| Or                      | ∨           | \`            | Logical OR                             |
-| Implication             | →           | `=>`          | Logical implication (if P then Q)      |
-| Not                     | ¬           | `!`           | Logical negation                       |
-| If and only if (equiv.) | ↔           | `<=>` or `==` | Logical equivalence (boolean equality) |
-| Universal Quantifier    | ∀           | `forall`      | Statement must hold for all values     |
-| Existential Quantifier  | ∃           | `exists`      | Statement holds for at least one value |
+| and                     | ∧           | `&&`          | AND                                    |
+| or                      | ∨           | \`            | OR                                     |
+| implies                 | →           | `=>`          | if P then Q                            |
+| not                     | ¬           | `!`           | negation                               |
+| if and only if (equiv.) | ↔           | `<=>` or `==` | equivalence                            |
+| forall                  | ∀           | `forall`      | Statement must hold for all values     |
+| exist                   | ∃           | `exists`      | Statement holds for at least one value |
 
 ---
 
@@ -185,8 +173,6 @@ On the technical side, Certora relies on an advanced compilation architecture th
 - **"Verify what you execute"** – ensuring that the exact bytecode logic is verified
 - **"Trust but verify"** – independently validating assumptions for maximal assurance
 
-**Certora Prover: Core Verification Engine**
-
 At the heart of Certora lies the **Certora Prover**, a formal verification engine based on rigorous mathematical foundations. It follows a structured **four-step workflow** to verify smart contracts:
 
 - **Specification Writing**
@@ -200,8 +186,6 @@ At the heart of Certora lies the **Certora Prover**, a formal verification engin
 
 - **Counterexample Generation and Debugging**
   If a rule fails, the solver not only reports the failure but also provides a **concrete counterexample**—a specific scenario in which the rule does not hold. This greatly aids debugging and refinement.
-
-**Workflow Components and Best Practices**
 
 The Certora verification process also involves setting up a structured environment and following disciplined workflows to maximize analysis quality:
 
@@ -318,14 +302,7 @@ Mutation testing workflow:
 - Run verification against these versions
 - Evaluate whether the rules correctly fail when logic is violated
 
-This process helps:
-
-- Ensure rule **soundness and relevance**
-- Identify **false positives or false negatives**
-- Improve **specification coverage**
-- Build **confidence in verification results**
-
-Developers are encouraged to write and test corresponding mutations immediately after writing each new rule. This proactive practice provides rapid feedback, detects flawed or vacuous rules early, and ensures that formal verification captures the intended logic of the contract.
+This approach offers several benefits: validating rule correctness, reducing false positives, improving rule quality, providing coverage metrics, and increasing the overall reliability of verification outcomes. It is recommended to create and test corresponding mutations immediately after implementing each rule. This proactive strategy provides early feedback, helping developers quickly identify and fix specification flaws, ensuring that formal verification is not only theoretically sound but also practically effective in detecting vulnerabilities in smart contracts.
 
 <details><summary>Code</summary>
 
@@ -362,17 +339,12 @@ Certora is extending its formal verification capabilities beyond Ethereum to sup
 
   - **Create a Certora account** and retrieve your access key.
   - Install **Python** and **Java runtime** (required for the prover).
-  - Use `pip` to install the Certora CLI:
-
-  ```bash
-  pip install certora-cli-beta
-  ```
-
+  - Use `pip` to install `certora-cli-beta`.
   - Configure your Certora credentials via environment variables or a configuration file.
 
 - **Rust & Stellar Toolchain Configuration**
 
-  - Install the **Rust programming language** and the WASM compilation target (`wasm32-unknown-unknown`).
+  - Install the **Rust programming language** and the WASM compilation target.
   - Set up the **Stellar CLI**.
   - Install **WABT** (WebAssembly Binary Toolkit), especially `wasm2wat` for readable WASM output.
   - Use `just` as a command runner and `rustfilt` to demangle Rust symbols for cleaner output.
@@ -416,18 +388,8 @@ For smart contracts written in Rust and compiled for the **Solana blockchain**, 
 - **Solana-Specific Environment**
 
   - Install **Rust** and multiple toolchains (to match Solana’s requirements).
-  - Install the `certora-sbf` plugin:
-
-    ```bash
-    cargo install --path . --force --bin certora-sbf
-    ```
-
-  - Test the setup using:
-
-    ```bash
-    cargo certora-sbf --no-build
-    ```
-
+  - Install the `certora-sbf` Cargo subcommand via Rust, and verifying the installation by running `cargo certora-sbf --no-build`, which also downloads necessary platform tools.
+  - The Solana Certora Prover is optimized for Rust-based smart contracts and supports Solana-specific features, including `BPF-format` programs, enabling powerful formal verification capabilities.
   - Use **VSCode** with **rust-analyzer** to improve development workflow.
 
 Here’s an example set of rules used to verify the behavior of a Solana function that computes transaction fees:
@@ -484,22 +446,10 @@ Another important tool in the Certora ecosystem is the **Certora Equivalence Che
   - Produce the same output for the same inputs.
   - Revert under the same conditions.
 
-**Usage Modes:**
+- Usage Modes:
 
-- **CLI mode**: Directly specify contract paths, function names, and Solidity versions.
-- **Config mode**: Use prewritten configuration files for repeated equivalence checks.
-
-Here’s a simplified example illustrating how the tool detects a difference between an addition and multiplication function:
-
-```solidity
-function add(uint x, uint y) public pure returns (uint) {
-    return x + y;
-}
-
-function mul(uint x, uint y) public pure returns (uint) {
-    return x * y;
-}
-```
+  - **CLI mode**: Directly specify contract paths, function names, and Solidity versions.
+  - **Config mode**: Use prewritten configuration files for repeated equivalence checks.
 
 The generated CVL will include two essential rules:
 
@@ -508,10 +458,12 @@ The generated CVL will include two essential rules:
 
 For functions involving bitwise operations, the `precise_bitwise_ops` flag can be enabled to ensure precise and accurate results.
 
+Here’s a simplified example illustrating how the tool detects a difference between an addition and multiplication function:
+
 <details><summary>Code</summary>
 
 ```solidity
-  using BasicMathBad as B;
+using BasicMathBad as B;
 
 // sets everything but the callee the same in two environments
 function e_equivalence(env e1, env e2) {
@@ -577,11 +529,11 @@ rule equivalence_of_return_value()
 
 </details>
 
-### 2.2 Rules and Common Pitfalls in Certora Prover
+### 2.2 Rules and Common Pitfalls
 
 Certora Prover offers a powerful framework for formal verification of smart contracts, and mastering its rule system is key to ensuring correctness, security, and robustness. This article explores parameterized rules, over-approximation, and vacuity—three fundamental concepts that shape the accuracy and effectiveness of Certora-based verification workflows.
 
-\*\*Parameterized Rules: Reusable Logic for All Functions
+**Parameterized Rules: Reusable Logic for All Functions**
 
 Parameterized rules define general properties or invariants that apply across all functions in a contract. They utilize the `method f` parameter along with the `calldataarg` type to simulate the invocation of _any_ contract method, regardless of argument type or arity. This makes parameterized rules especially well-suited for expressing cross-cutting behaviors, such as “only the owner can change an allowance.”
 
@@ -592,20 +544,49 @@ In practice, these rules are ideal for CI/CD integration, where every commit or 
 <details><summary>Code</summary>
 
 ```solidity
+/**
+ * # ERC20 Parametric Example
+ *
+ * Another example specification for an ERC20 contract. This one using a parametric rule,
+ * which is a rule that encompasses all the methods in the current contract. It is called
+ * parametric since one of the rule's parameters is the current contract method.
+ * To run enter:
+ *
+ * certoraRun ERC20.sol --verify ERC20:Parametric.spec --solc solc8.0 --msg "Parametric rule"
+ *
+ * The `onlyHolderCanChangeAllowance` fails for one of the methods. Look at the Prover
+ * results and understand the counter example - which discovers a weakness in the
+ * current contract.
+ */
+
+// The methods block below gives various declarations regarding solidity methods.
+methods
+{
+    // When a function is not using the environment (e.g., `msg.sender`), it can be
+    // declared as `envfree`
+    function balanceOf(address) external returns (uint) envfree;
+    function allowance(address,address) external returns(uint) envfree;
+    function totalSupply() external returns (uint) envfree;
+}
+
+
 /// @title If `approve` changes a holder's allowance, then it was called by the holder
 rule onlyHolderCanChangeAllowance(address holder, address spender, method f) {
-    mathint allowance_before = allowance(holder, spender);
-    env e;
-    calldataarg args;
-    f(e, args);  // Execute method f with args
 
+    // The allowance before the method was called
+    mathint allowance_before = allowance(holder, spender);
+
+    env e;
+    calldataarg args;  // Arguments for the method f
+    f(e, args);
+
+    // The allowance after the method was called
     mathint allowance_after = allowance(holder, spender);
 
-    // Ensure only the holder can increase their own allowance
     assert allowance_after > allowance_before => e.msg.sender == holder,
         "only the sender can change its own allowance";
 
-    // Ensure that only specific methods are allowed to change allowances
+    // Assert that if the allowance changed then `approve` or `increaseAllowance` was called.
     assert (
         allowance_after > allowance_before =>
         (
@@ -811,6 +792,34 @@ Certora detects tautologies by stripping away the rule’s preconditions and act
 
 By identifying and addressing vacuous and tautological rules, developers can ensure their specifications are meaningful, test relevant behaviors, and contribute to the overall soundness of the verification process.
 
+<details><summary>Code</summary>
+
+```solidity
+rule held_token_should_exist{
+    address user;
+    uint256 token;
+    require balanceOf(0, token) == 0;
+
+    require balanceOf(user, token) <= totalSupplyOf(token);
+    assert balanceOf(user, token) > 0 => token_exists(token);
+}
+
+rule something_is_always_transferred{
+    address receiver;
+    uint256 balance_before_transfer = balanceOf(receiver);
+    require balanceOf(receiver) == 0;
+
+    uint256 amount;
+    require amount > 0;
+
+    transfer(receiver, amount);
+    uint256 balance_after_transfer = balanceOf(receiver);
+    assert balanceOf(receiver) <= balance_after_transfer;
+}
+```
+
+/details>
+
 ---
 
 ### 2.3 Invariants and Ghost Variables in Formal Verification
@@ -835,7 +844,6 @@ A correctly translated rule requires the invariant to hold before the function c
 <details><summary>Code</summary>
 
 ```solidity
-// Voting.spec
 
 /**
  * # Simple voting invariant example
@@ -888,14 +896,14 @@ rule sumResultsEqualsTotalVotesWrong() {
 
 To verify invariants under more complex interactions, _preserved blocks_ provide necessary context and assumptions. They define additional requirements that must be met in specific functions in order for the invariant to hold.
 
-Consider a **debt token** contract where the invariant states that _an account’s collateral must never be less than its balance_. A naive approach might fail during the `transferDebt` function, which allows debt to be transferred from one account (`another`) to another (`account`). If the sender doesn't satisfy the invariant before the transfer, the recipient may end up violating the invariant afterward.
+Their importance is clearly illustrated in the debt token example: when verifying the seemingly simple invariant that "collateral value must always be greater than or equal to the debt balance," the `transferDebt` function causes a failure. Further analysis reveals the root cause—this function allows a debt to be transferred from an address that violates the invariant (`another`) to one that satisfies it (`account`), ultimately causing the receiving address to violate the invariant post-transfer.
 
-To ensure correctness, the `preserved` block enforces the invariant on the sender before the function call:
+The solution involves using a `preserved` block along with a `requireInvariant` statement to enforce that the sender (`e.msg.sender`) must also satisfy the same invariant before the transfer. This reflects the principle of inductive reasoning in formal verification. Preserved blocks not only offer a clear syntax (including default and function-specific preserved blocks, as well as environment access) but also maintain reliability in verification—unlike regular `require` statements that may lead to unsound proofs, `requireInvariant` guarantees correctness under already-proven invariants. This mechanism is particularly valuable in complex systems like fund managers, where critical properties—such as "no two funds share the same manager"—must be rigorously enforced.
 
 <details><summary>Code</summary>
 
 ```solidity
-// DebtToken.spec
+
 /**
  * Debt token invariant
  *
@@ -920,14 +928,6 @@ invariant collateralCoversBalance(address account)
 ```
 
 </details>
-
-This construct guarantees that the invariant for `e.msg.sender` was valid before the operation, reinforcing the inductive reasoning Certora employs for invariants.
-
-Preserved blocks are more than just syntactic sugar:
-
-- They provide a structured way to add preconditions for specific transitions.
-- They offer reliability not afforded by generic `require` statements.
-- They enable safe reasoning about interdependent states—particularly critical in financial systems or cross-address interactions.
 
 #### Ghost Variables, Storage Hooks, and Opcode Hooks in CVL: Building Deep Formal Verification Models
 
