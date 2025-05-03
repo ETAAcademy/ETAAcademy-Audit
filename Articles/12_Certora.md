@@ -160,14 +160,6 @@ The **negation of a universal quantifier** is an existential quantifier:
 
 Certora's tool suite has been used by leading DeFi protocols such as **Uniswap**, **Compound**, **AAVE**, and **Lido** to discover high-impact vulnerabilities—including issues with data consistency, delegation logic flaws, solvency risks, transfer manipulation attacks, and errors in staking reward calculations.
 
-Certora ensures strong security guarantees through:
-
-- **Automated, exhaustive analysis**
-- **Counterexample generation** when properties fail
-- **Rich specification language**
-- **Interactive developer tooling**
-- **Comprehensive validation coverage**
-
 On the technical side, Certora relies on an advanced compilation architecture that includes bytecode decompilation, static analysis, verification condition generation, and **SMT solving** (Satisfiability Modulo Theories). Its design is grounded in two key principles:
 
 - **"Verify what you execute"** – ensuring that the exact bytecode logic is verified
@@ -187,32 +179,7 @@ At the heart of Certora lies the **Certora Prover**, a formal verification engin
 - **Counterexample Generation and Debugging**
   If a rule fails, the solver not only reports the failure but also provides a **concrete counterexample**—a specific scenario in which the rule does not hold. This greatly aids debugging and refinement.
 
-The Certora verification process also involves setting up a structured environment and following disciplined workflows to maximize analysis quality:
-
-- **Project Configuration**
-
-  - _Harness contracts_: Wrapper contracts to expose internal logic for verification
-  - _Specification files_: Define the rules and invariants to be proven
-  - _Configuration files_: Guide how verification is run
-  - _Mutation tests_: Variations used to test rule coverage and resilience
-
-- **Pre-Specification Preparation**
-
-  - Isolate core functionality
-  - Declare methods to be verified
-  - Handle unresolved calls
-  - Create _shadow variables_ to track changes across function calls
-
-- **Property Design and Development**
-
-  - Write **invariants** (conditions that must always hold)
-  - Write **rules** (pre/post conditions, frame conditions, and assertions)
-
-- **Quality Assurance and Iteration**
-
-  - Conduct **manual mutation testing**
-  - Analyze **rule coverage**
-  - Leverage automated tooling to catch edge cases
+The overall workflow also includes setting up the configuration file structure—comprising the harness contract, specification files, configuration files, and mutation tests—as well as preparation steps before property development, such as modularizing functionality, declaring methods, handling unresolved calls, and creating shadow copies of variables. It further involves the design and development of properties, including invariants and rules, followed by a quality assurance phase that incorporates manual mutations, coverage analysis, and automated tooling.
 
 ---
 
@@ -818,7 +785,7 @@ rule something_is_always_transferred{
 }
 ```
 
-/details>
+</details>
 
 ---
 
