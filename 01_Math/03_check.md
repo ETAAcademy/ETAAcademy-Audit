@@ -1790,3 +1790,88 @@ File: UStb.sol
 ```
 
 </details>
+
+## 32. [Medium] Non-whitelisted owner can also hold/own a troveNFT
+
+### Bypass whitelist restrictions
+
+- Summary: The BitVault protocol allows non-whitelisted addresses to bypass access restrictions by receiving `troveNFT` tokens through transfers, despite the system enforcing whitelist checks during the initial trove opening and NFT minting. Since `troveNFT` is a transferable ERC721 token, a whitelisted user can mint the NFT and then transfer it to a non-whitelisted user, who would then illegitimately hold the NFT. This undermines the whitelist mechanism intended to restrict ownership.
+
+- Impact & Recommendation: The recommended fix is to override the `transferFrom()` and related functions in `troveNFT.sol` to enforce whitelist checks on the recipient address during token transfers.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-04-bitvault#m-02-non-whitelisted-owner-can-also-holdown-a-trovenft) & [Report](https://code4rena.com/reports/2025-04-bitvault)
+
+<details><summary>POC</summary>
+
+```solidity
+function openTrove(
+        address _owner,
+        uint256 _ownerIndex,
+        uint256 _collAmount,
+        uint256 _boldAmount,
+        uint256 _upperHint,
+        uint256 _lowerHint,
+        uint256 _annualInterestRate,
+        uint256 _maxUpfrontFee,
+        address _addManager,
+        address _removeManager,
+        address _receiver
+    ) external override returns (uint256) {
+        _requireValidAnnualInterestRate(_annualInterestRate);
+
+        IWhitelist _whitelist = whitelist;
+        if (address(_whitelist) != address(0)) {
+@>          _requireWhitelisted(_whitelist, _owner);
+            _requireWhitelisted(_whitelist, msg.sender);
+            if (_receiver != address(0)) {
+                _requireWhitelisted(whitelist, _receiver);
+            }
+        }
+
+....
+
+    }
+    function onOpenTrove(
+        address _owner,
+        uint256 _troveId,
+        TroveChange memory _troveChange,
+        uint256 _annualInterestRate
+    ) external {
+
+....
+
+        // mint ERC721
+@>      troveNFT.mint(_owner, _troveId);
+
+....
+    }
+
+```
+
+</details>
+
+## 33. [Medium] Approve operation is not overridden to call transferSanity, thus its allowed to approve blacklisted accounts, which breaks protocol invariant
+
+### Bypass blacklist checks
+
+- Summary: The `approve()` function in the BitVault protocol does not enforce blacklist checks, despite the protocol's documented invariant that both the owner and the spender must not be blacklisted. While other token operations use a `transferSanity()` function to enforce this, `approve()` is not overridden to include it, allowing users to approve blacklisted addresses and enabling those addresses to transfer tokens via `transferFrom()`. This breaks the intended access control and creates a security gap.
+
+- Impact & Recommendation: The recommended fix is to override `approve()` and add a call to `transferSanity()` to ensure both parties are not blacklisted before approval is granted.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-01-next-generation#m-02-approve-operation-is-not-overridden-to-call-transfersanity-thus-its-allowed-to-approve-blacklisted-accounts-which-breaks-protocol-invariant) & [Report](https://code4rena.com/reports/2025-01-next-generation)
+
+<details><summary>POC</summary>
+
+```solidity
+contract EURFToken is
+    ERC20MetaTxUpgradeable,
+    ERC20AdminUpgradeable,
+    ERC20ControlerMinterUpgradeable,
+    FeesHandlerUpgradeable,
+    UUPSUpgradeable
+{
++    function approve(address spender, uint256 value) public override returns (bool) {
++        transferSanity(_msgSender(), spender, value);
++        return super.approve(spender, value);
++    }
+```
+
+</details>
