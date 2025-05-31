@@ -1313,3 +1313,90 @@ function createStrategyVault(
 ```
 
 </details>
+
+## 26. [Medium] SiloVault.sol :: Markets with assets that revert on zero approvals cannot be removed
+
+### Revert on approve(0)
+
+- Summary: SiloVault contract pertains to the inability to remove certain markets due to the behavior of some ERC20 tokens that revert transactions when an approval of zero is attempted. Specifically, when attempting to set a market's supply cap to zero—a prerequisite for its removal—the contract also tries to set the token allowance to zero. However, tokens like BNB revert on such zero-approval calls, leading to a denial of service in the market removal process.
+
+- Impact & Recommendation: To address this, it implemented a mitigation strategy by adjusting the approval value from zero to one wei during the cap-setting process.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2025-03-silo-finance#m-03-silovaultsol--markets-with-assets-that-revert-on-zero-approvals-cannot-be-removed) & [Report](https://code4rena.com/reports/2025-03-silo-finance)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function submitMarketRemoval(IERC4626 _market) external virtual onlyCuratorRole {
+        if (config[_market].removableAt != 0) revert ErrorsLib.AlreadyPending();
+@>      if (config[_market].cap != 0) revert ErrorsLib.NonZeroCap();
+        if (!config[_market].enabled) revert ErrorsLib.MarketNotEnabled(_market);
+        if (pendingCap[_market].validAt != 0) revert ErrorsLib.PendingCap(_market);
+
+        // Safe "unchecked" cast because timelock <= MAX_TIMELOCK.
+        config[_market].removableAt = uint64(block.timestamp + timelock);
+
+        emit EventsLib.SubmitMarketRemoval(_msgSender(), _market);
+    }
+
+    function submitCap(IERC4626 _market, uint256 _newSupplyCap) external virtual onlyCuratorRole {
+        if (_market.asset() != asset()) revert ErrorsLib.InconsistentAsset(_market);
+        if (pendingCap[_market].validAt != 0) revert ErrorsLib.AlreadyPending();
+        if (config[_market].removableAt != 0) revert ErrorsLib.PendingRemoval();
+        uint256 supplyCap = config[_market].cap;
+        if (_newSupplyCap == supplyCap) revert ErrorsLib.AlreadySet();
+
+        if (_newSupplyCap < supplyCap) {
+            _setCap(_market, SafeCast.toUint184(_newSupplyCap));
+        } else {
+            pendingCap[_market].update(SafeCast.toUint184(_newSupplyCap), timelock);
+
+            emit EventsLib.SubmitCap(_msgSender(), _market, _newSupplyCap);
+        }
+    }
+
+    function setCap(
+        IERC4626 _market,
+        uint184 _supplyCap,
+        address _asset,
+        mapping(IERC4626 => MarketConfig) storage _config,
+        mapping(IERC4626 => PendingUint192) storage _pendingCap,
+        IERC4626[] storage _withdrawQueue
+    ) external returns (bool updateTotalAssets) {
+        MarketConfig storage marketConfig = _config[_market];
+        uint256 approveValue;
+
+        if (_supplyCap > 0) {
+            if (!marketConfig.enabled) {
+                _withdrawQueue.push(_market);
+                if (_withdrawQueue.length > ConstantsLib.MAX_QUEUE_LENGTH) revert ErrorsLib.MaxQueueLengthExceeded();
+                marketConfig.enabled = true;
+                // Take into account assets of the new market without applying a fee.
+                updateTotalAssets = true;
+                emit EventsLib.SetWithdrawQueue(msg.sender, _withdrawQueue);
+            }
+
+            marketConfig.removableAt = 0;
+            // one time approval, so market can pull any amount of tokens from SiloVault in a future
+            approveValue = type(uint256).max;
+        }
+
+        marketConfig.cap = _supplyCap;
+
+@>      IERC20(_asset).forceApprove(address(_market), approveValue);
+        emit EventsLib.SetCap(msg.sender, _market, _supplyCap);
+        delete _pendingCap[_market];
+    }
+
+    function forceApprove(IERC20 token, address spender, uint256 value) internal {
+        bytes memory approvalCall = abi.encodeCall(token.approve, (spender, value));
+
+        if (!_callOptionalReturnBool(token, approvalCall)) {
+            _callOptionalReturn(token, abi.encodeCall(token.approve, (spender, 0)));
+            _callOptionalReturn(token, approvalCall);
+        }
+    }
+```
+
+</details>

