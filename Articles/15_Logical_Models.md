@@ -74,13 +74,13 @@ One method to test whether a sentence $\theta$ is independent of a theory $T$ is
 **Incomplete First-Order Theories:**
 
 - **Group Theory:** The commutativity axiom $\forall x \forall y (xy = yx)$ is independent of the basic axioms of group theory.
-- **Theory of Ordered Fields:** The statement “$\sqrt{2}$ exists” is independent.
+- **Theory of Ordered Fields:** The statement “ $\sqrt{2}$ exists ” is independent.
 - **Theory of Algebraically Closed Fields:** The statement “The characteristic is 17” is independent unless characteristic is fixed.
 
 **Complete First-Order Theories:**
 
-- **DLO (Dense Linear Orders without Endpoints):** The theory of dense linear orders with no endpoints (e.g., $(\mathbb{Q}, <)$) is complete.
-- **T_dlo (Discrete Linear Orders without Endpoints):** The theory modeled by $(\mathbb{Z}, <)$ is also complete.
+- **DLO (Dense Linear Orders without Endpoints):** The structure ($\mathbb{Q}, <$)serves as a model of the theory of dense linear orders without endpoints (DLO), which is known to be complete.
+- **$T_{dlo}$ (Discrete Linear Orders without Endpoints):** The theory modeled by $(\mathbb{Z}, <)$ is also complete.
 
 These theories are also examples of **$\omega$-categorical** theories, meaning that all countable models of the theory are **isomorphic**. For more complex theories like algebraically closed fields or real closed fields, completeness can be obtained by **adding specific axioms** (e.g., fixing the characteristic or ordering properties).
 
@@ -140,7 +140,7 @@ Additionally, the following equivalent characterizations hold:
 - **Quantifier Elimination**: Every formula is equivalent to a quantifier-free formula.
 - **Substructure Completeness**: Every substructure determines the truth of sentences.
 - **Diamond Lemma**: Amalgamation property for embeddings over a common substructure.
-- **Isomorphism Extension Property**: Given isomorphic substructures $M_0 \cong N_0$ of $M \models T$, $N \models T$, there exist extensions $M^*, N^* \models T$ with $M^* \cong N^*$ extending the isomorphism.
+- **Isomorphism Extension Property**: Given isomorphic substructures $M_0 \cong N_0$ of $M \models T$, $N \models T$, there exist extensions $M^{\*}, N^{\*} \models T$ with $M^{\*} \cong N^{\*}$ extending the isomorphism.
 
 If the language $\mathcal{L}$ is countable, the above equivalences also hold for countable models, since finitely generated substructures remain countable.
 
@@ -351,13 +351,13 @@ We begin by constructing a countable set of elements $X = \{a_i : i \in I\}$, in
 To achieve this:
 
 - Extend the language $L$ by adding a constant symbol $c_i$ for each $i \in I$.
-- Define a theory $T^*$ consisting of:
+- Define a theory $T^{\*}$ consisting of:
 
   - All sentences of $T$;
   - The inequalities $c_i \neq c_j$ for $i \neq j$, ensuring distinctness;
   - Axioms that enforce indiscernibility: for any two increasing sequences $i_1 < \dots < i_m$, $j_1 < \dots < j_m$, the tuples $(c_{i_1}, \dots, c_{i_m})$ and $(c_{j_1}, \dots, c_{j_m})$ satisfy the same formulas.
 
-Using the **Compactness Theorem** and **Ramsey's Theorem**, we can prove that $T^*$ is consistent. Thus, it has a model $\mathcal{M}^*$ in which the constants $\{c_i\}$ interpret an indiscernible sequence as desired.
+Using the **Compactness Theorem** and **Ramsey's Theorem**, we can prove that $T^{\*}$ is consistent. Thus, it has a model $\mathcal{M}^{\*}$ in which the constants $\{c_i\}$ interpret an indiscernible sequence as desired.
 
 #### Step 2: Taking the Skolem Closure
 
@@ -416,12 +416,10 @@ These theories are not only central to pure logic but also deeply connected with
   - **Characteristic**:
 
     - For **characteristic 0**: Include the axioms
-      $\forall n \in \mathbb{N}_+,\ \underbrace{1 + \cdots + 1}_{n\text{ times}} \neq 0$
+      $\forall n \in \mathbb{N}^+,\ \underbrace{1 + \cdots + 1}_{n\text{ times}} \neq 0$
     - For **characteristic p**:
 
-      $$
-      \underbrace{1 + \cdots + 1}_{p \text{ times}} = 0\quad \text{and} \quad \forall 1 \leq n < p,\ \underbrace{1 + \cdots + 1}_{n\text{ times}} \neq 0
-      $$
+    $\underset{p \text{ times}}{\underbrace{1 + \cdots + 1}} = 0\quad \text{and} \quad \forall 1 \leq n < p,\ \underset{n\text{ times}}{\underbrace{1 + \cdots + 1}} \neq 0$
 
 #### Model-Theoretic Properties of ACFₚ and ACF₀
 
@@ -574,15 +572,15 @@ Given any additive group $G$ of characteristic 0, one can construct an extension
   $T_{dag}$ is a **complete theory**: for any sentence $\varphi$ in its language, either $\varphi$ or $\neg \varphi$ is provable from $T_{dag}$. In other words, all models of $T_{dag}$ are elementarily equivalent.
 
 - **Prime Model**:
-  The structure $(\mathbb{Q}, 0, +, -)$ is the **prime model** of $T_{dag}$. Every other model of $T_{dag}$ (e.g., $(\mathbb{R}, 0, +, -)$) contains a copy of it, but may not be isomorphic to it.
+  The structure $(\mathbb{Q}, 0, +, -)$ is the **prime model** of $T_{dag}$. Every other model of $T_{dag}$ ( e.g., $(\mathbb{R}, 0, +, -)$ ) contains a copy of it, but may not be isomorphic to it.
 
 #### Strong Minimality
 
 A deep structural property of $(\mathbb{Q}, 0, +, -)$ is that it is **strongly minimal**: any definable subset of the domain (with parameters) is either finite or cofinite. This follows from quantifier elimination and the fact that definable sets are essentially boolean combinations of linear equations, which have extremely low descriptive complexity in one variable.
 
-#### Extended Theory $T_{dag}^*$
+#### Extended Theory $T_{dag}^{\*}$
 
-To avoid degenerate models (like the trivial group), one can extend the language by adding a constant symbol $c_1$ and include an axiom such as $c_0 \neq c_1$ (where $c_0$ denotes 0), ensuring the model contains at least two distinct elements. This enriched theory, denoted **$T_{dag}^*$**, better captures real-world structures like $(\mathbb{Q}, 0, 1, +, -)$ and ensures that the nontriviality of the group is explicitly guaranteed by the language.
+To avoid degenerate models (like the trivial group), one can extend the language by adding a constant symbol $c_1$ and include an axiom such as $c_0 \neq c_1$ (where $c_0$ denotes 0), ensuring the model contains at least two distinct elements. This enriched theory, denoted **$T_{dag}^{\*}$**, better captures real-world structures like $(\mathbb{Q}, 0, 1, +, -)$ and ensures that the nontriviality of the group is explicitly guaranteed by the language.
 
 ---
 
@@ -590,17 +588,17 @@ To avoid degenerate models (like the trivial group), one can extend the language
 
 The **theory of integer addition** in model theory focuses on the logical properties and models of the structure of integers when restricted to **languages involving only addition and its related symbols**. This branch examines what properties of the integers ℤ can be expressed using only addition (sometimes with negation, constants like 0 and 1, or even ordering `<`), and whether such structures admit **completeness**, **quantifier elimination**, or a **decidable and axiomatizable theory**.
 
-A central result is that in the base language without the constant “1”, the theory of integers is **not suitable for quantifier elimination**. However, when “1” is added to the language—making it a so-called **level II₂ theory**—the resulting theory becomes much better behaved: systems such as **T\*** and **Tomrag** (the mod-congruence and ordered mod-congruence theories) **admit quantifier elimination**. With the help of **modulo-n congruence predicates**, one can formulate a **complete and model-complete axiomatization**. Interestingly, the **order relation `<` cannot be defined** in these structures purely using addition and mod predicates.
+A central result is that in the base language without the constant “1”, the theory of integers is **not suitable for quantifier elimination**. However, when “1” is added to the language—making it a so-called **level II₂ theory**—the resulting theory becomes much better behaved: systems such as **T\*** and **$T_{omrag}$** (the mod-congruence and ordered mod-congruence theories) **admit quantifier elimination**. With the help of **modulo-n congruence predicates**, one can formulate a **complete and model-complete axiomatization**. Interestingly, the **order relation `<` cannot be defined** in these structures purely using addition and mod predicates.
 
 #### Strong Characteristic 0 Additive Groups
 
-Consider the structure **(ℤ; 0, 1, +, −)**, also known as the **strong characteristic 0 additive group**. By introducing **predicates $P_n(x)$** for “n divides x,” one obtains the **mod-congruence theory**, denoted **Tₘᵣₐg**. This theory has:
+Consider the structure **(ℤ; 0, 1, +, −)**, also known as the **strong characteristic 0 additive group**. By introducing **predicates $P_n(x)$** for “n divides x,” one obtains the **mod-congruence theory**, denoted **$T_{mrag}$**. This theory has:
 
 - A **complete**, **decidable**, and **quantifier-eliminable** axiomatization.
 - A **minimal (prime) model**, which is ℤ itself.
 - An **inexpressible order relation** `<`, demonstrated by showing that its presence fails to be preserved under isomorphisms to conjugate structures (e.g., ℤ\[√−1]).
 
-When the order relation `<` is explicitly added, forming the structure **(ℤ; 0, 1, +, −, <)**, we get the **ordered mod-congruence theory** (**Tomrag**), which similarly admits a clean axiomatization with quantifier elimination.
+When the order relation `<` is explicitly added, forming the structure **(ℤ; 0, 1, +, −, <)**, we get the **ordered mod-congruence theory** (**$T_{omrag}$**), which similarly admits a clean axiomatization with quantifier elimination.
 
 #### The Three Fundamental Structures of Integer Addition
 
@@ -630,7 +628,7 @@ When the order relation `<` is explicitly added, forming the structure **(ℤ; 0
 | **T**   | {0, +, −, <}                              | Ordered ℤ-group          | Complete theory, **not** quantifier-eliminable              |
 | **T\*** | {0, 1, +, −, <}                           | Ordered ℤ-group          | Complete and **quantifier-eliminable**                      |
 | **T₀**  | {0, +, −, <, +congruence axioms}          | Arithmetic formalization | Complete and quantifier-eliminable, but more complex        |
-| **T%**  | T₀ plus the constant 1                    | —                        | A **simpler level II₂** theory with quantifier elimination  |
+| **T₀\***  | T₀ plus the constant 1                    | —                        | A **simpler level II₂** theory with quantifier elimination  |
 | **Tₚᵣ** | Presburger arithmetic for (ℤ; 1, +, −, <) | —                        | Equivalent to the above; complete and quantifier-eliminable |
 
 #### Tr: A Basic but Incomplete Theory
@@ -664,7 +662,7 @@ To fix this, a more powerful theory **T** is defined:
 
   $P_{2^m}(x, y) \leftrightarrow \exists k\; x = y + k \cdot 2^m$
 
-- These predicates come with **defining axioms**, and the extended language is denoted **$\mathcal{L}_{A^*}$**.
+- These predicates come with **defining axioms**, and the extended language is denoted **$\mathcal{L}_{A^{\*}}$**.
 
 This extension is a **conservative one**—it doesn’t introduce any new theorems in the original language—and it **enables full quantifier elimination**, making the theory both **complete** and **decidable**.
 
@@ -696,7 +694,7 @@ The theory $T_{\text{idlo}}$ axiomatizes $(\mathbb{N}, <)$ as follows:
 
 Though this theory captures the structure of $(\mathbb{N}, <)$ completely, its quantifier complexity lies at the $\Pi_3$ level, making it unsuitable for quantifier elimination.
 
-#### The Refined Theory $T_{\text{d1o}}$
+#### The Refined Theory $T_{\text{dlo}}$
 
 To address the complexity, one can **extend the language** by introducing:
 
@@ -704,7 +702,7 @@ To address the complexity, one can **extend the language** by introducing:
 - A unary function symbol $F_s$ for the **successor function** $S(n) = n+1$,
 - A binary predicate symbol $P_<$ for the order relation.
 
-This gives rise to a new language $\mathcal{L}_\mathcal{A}$ and an extended theory $T_{\text{d1o}}$, whose axioms include:
+This gives rise to a new language $\mathscr{L}\mathscr{A}$ and an extended theory $T_{dlo}$, whose axioms include:
 
 - $<$ is a linear order.
 - $c_0$ is the least element.
@@ -712,15 +710,15 @@ This gives rise to a new language $\mathcal{L}_\mathcal{A}$ and an extended theo
 - For all $x$, $x < F_s(x)$, and $F_s(x)$ is the immediate successor of $x$.
 - Every element other than $c_0$ has a predecessor.
 
-All non-logical axioms in $T_{\text{d1o}}$ are of **$\Pi_1$** or **$\Pi_2$** form, significantly simplifying the logical complexity compared to $T_{\text{idlo}}$.
+All non-logical axioms in $T_{\text{dlo}}$ are of **$\Pi_1$** or **$\Pi_2$** form, significantly simplifying the logical complexity compared to $T_{\text{idlo}}$.
 
-Moreover, $T_{\text{d1o}}$ is a **conservative extension** of $T_{\text{idlo}}$: for any formula $\varphi$ in the language of $T_{\text{idlo}}$, if $T_{\text{d1o}} \vdash \varphi$, then $T_{\text{idlo}} \vdash \varphi$. This means the extension does not introduce new theorems in the original language—it merely simplifies the representation of existing truths.
+Moreover, $T_{\text{dlo}}$ is a **conservative extension** of $T_{\text{idlo}}$: for any formula $\varphi$ in the language of $T_{\text{idlo}}$, if $T_{\text{dlo}} \vdash \varphi$, then $T_{\text{idlo}} \vdash \varphi$. This means the extension does not introduce new theorems in the original language—it merely simplifies the representation of existing truths.
 
 **Proof Strategy**:
 
-- Use the completeness theorem to argue that $\varphi$ holds in all models of $T_{\text{d1o}}$.
+- Use the completeness theorem to argue that $\varphi$ holds in all models of $T_{\text{dlo}}$.
 - From any model $M$ of $T_{\text{idlo}}$, identify a unique minimal element $c_0$ satisfying a defining formula $\phi_0$, and define a successor function using $\phi_s$.
-- This allows the construction of a model $M^* = (M, <, S^*, c_0)$ satisfying $T_{\text{d1o}}$, thereby ensuring $\varphi$ is true in $T_{\text{idlo}}$.
+- This allows the construction of a model $M^{\*}* = (M, <, S^{\*}, c_0)$ satisfying $T_{\text{dlo}}$, thereby ensuring $\varphi$ is true in $T_{\text{idlo}}$.
 
 ---
 
@@ -743,7 +741,7 @@ To resolve this incompleteness, we introduce a **family of modular congruence ax
 
 Introduce **unary predicates** $P_3^m(x)$ to denote "divisible by $m$", i.e., $x \in m\mathbb{N}$, and define:
 
-- $T_{\text{oasg}}^* = T_{\text{oasg}} \cup \{ \theta_m \mid m > 1 \}$
+- $T_{\text{oasg}}^{\*} = T_{\text{oasg}} \cup \{ \theta_m \mid m > 1 \}$
 
 This augmented theory aims to eliminate “pseudo-natural” structures that satisfy the basic axioms but violate modular properties—thus narrowing the class of models to those more closely resembling $\mathbb{N}$.
 
@@ -754,7 +752,7 @@ To further develop the theory, we define $T_{\text{omrasg}}$ (the theory of **or
 - Extending the language $\mathcal{L}_{A^\le}$ to include **all** predicates $P_3^n$ for each $n > 1$,
 - Asserting axioms for each such predicate corresponding to modular behavior.
 
-This theory is a **conservative extension** of $T_{\text{oasg}}^*$, maintaining all truths of the original theory while enabling **quantifier elimination** and **model completeness** through the richer language.
+This theory is a **conservative extension** of $T_{\text{oasg}}^{\*}$, maintaining all truths of the original theory while enabling **quantifier elimination** and **model completeness** through the richer language.
 
 To accommodate broader model classes, **weakened versions** of $T_{\text{omrasg}}$ have been proposed by relaxing congruence definitions. These allow for generalized models including $\mathbb{Q} \times \mathbb{Z}$, $\mathbb{Z} \times \mathbb{Z}$, and other hybrid structures, striking a balance between expressive power and model-theoretic properties.
 
@@ -920,7 +918,7 @@ Let $T$ be a consistent first-order theory with language $L(T)$. Suppose we have
 
 $P(x_1, \dots, x_n) \Leftrightarrow \psi(x_1, \dots, x_n)$
 
-This yields a new language $L(T^*) = L(T) \cup \{P\}$, and we define a new theory $T^*$ by adding this defining axiom to $T$.
+This yields a new language $L(T^{\*}) = L(T) \cup \{P\}$, and we define a new theory $T^{\*}$ by adding this defining axiom to $T$.
 
 Similarly, if we have a formula $\varphi(x_1, \dots, x_n, y) \in L(T)$ such that:
 
@@ -931,12 +929,12 @@ then we may introduce a new function symbol $f(x_1, \dots, x_n)$ defined by:
 
 $f(x_1, \dots, x_n) = y \Leftrightarrow \varphi(x_1, \dots, x_n, y)$
 
-Such definitional extensions are **conservative**: they do not alter the original theory’s deductive power. For every formula $\theta \in L(T^*)$, there exists a natural translation $\theta^b \in L(T)$ such that:
+Such definitional extensions are **conservative**: they do not alter the original theory’s deductive power. For every formula $\theta \in L(T^{\*})$, there exists a natural translation $\theta^b \in L(T)$ such that:
 
-- $T^* \vdash \theta \leftrightarrow \theta^b$
-- $T^* \vdash \theta$ if and only if $T \vdash \theta^b$
+- $T^{\*} \vdash \theta \leftrightarrow \theta^b$
+- $T^{\*} \vdash \theta$ if and only if $T \vdash \theta^b$
 
-This shows that definitional extensions are merely syntactic sugar: they enrich the language but do not introduce any new truths. From a model-theoretic perspective, any model $\mathcal{M} \models T$ can be expanded to a model $\mathcal{M}^* \models T^*$ by interpreting the new symbols according to their defining formulas.
+This shows that definitional extensions are merely syntactic sugar: they enrich the language but do not introduce any new truths. From a model-theoretic perspective, any model $\mathcal{M} \models T$ can be expanded to a model $\mathcal{M}^{\*} \models T^{\*}$ by interpreting the new symbols according to their defining formulas.
 
 #### Σ₁-Completeness of Recursive Extensions of PA
 
@@ -1019,7 +1017,7 @@ As this implication is **formally provable within PA**, we conclude: if PA could
 
 #### RPP is True in the Standard Model
 
-Since PHPP is known to be true in the standard model of arithmetic $\mathcal{M}_\mathbb{N}$, and since it implies RPP, it follows that RPP also holds in $\mathcal{M}_\mathbb{N}$. This sets the stage for proving independence: the next step is to find a **nonstandard model of PA** in which RPP fails, leading to the conclusion that PHPP is not provable in PA.
+Since PHPP is known to be true in the standard model of arithmetic $\mathbb{N}$, and since it implies RPP, it follows that RPP also holds in $\mathbb{N}$. This sets the stage for proving independence: the next step is to find a **nonstandard model of PA** in which RPP fails, leading to the conclusion that PHPP is not provable in PA.
 
 #### Ramsey's Theorem vs. Paris–Harrington Principle
 
