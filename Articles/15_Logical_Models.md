@@ -271,9 +271,9 @@ is defined to be a **basic open set**. These sets form a basis for a topology on
 
 ### Stability and Type Count
 
-The **cardinality of $S_1(T)$**, the space of complete 1-types over $T$, is particularly significant. If $S_1(T)$ is uncountable, then $T$ is said to be **unstable over $\omega$** (i.e., it is **not $\omega$-stable**). Conversely, $T$ is called **$\omega$-stable** if for every countable model $M$ of $T$, the type space $S_1(\operatorname{Th}(M))$ is countable.
+The **cardinality of $S_1(T)$**, the space of complete 1-types over $T$, is particularly significant. If $S_1(T)$ is uncountable, then $T$ is said to be **unstable over $\omega$** (i.e., it is **not $\omega$-stable**). Conversely, $T$ is called **$\omega$-stable** if for every countable model $M$ of $T$, the type space $S_1(Th(M))$ is countable.
 
-More generally, $T$ is said to be **$\kappa$-stable** if for every model $M$ of $T$ with $|M| = \kappa$, the type space $S_n(\operatorname{Th}(M))$ has cardinality at most $\kappa$ for each $n$. If $T$ is stable in some infinite cardinality, it is called a **stable theory**.
+More generally, $T$ is said to be **$\kappa$-stable** if for every model $M$ of $T$ with $|M| = \kappa$, the type space $S_n(Th(M))$ has cardinality at most $\kappa$ for each $n$. If $T$ is stable in some infinite cardinality, it is called a **stable theory**.
 
 **Examples:**
 
@@ -321,7 +321,7 @@ A saturated model can be built as the **union of an elementary chain** $M = \big
 
 Saturated models in a given cardinality are often **unique up to isomorphism**. If two countable models $M$ and $N$ are both **saturated** and **elementarily equivalent**, then they are **isomorphic**. This generalizes Cantor’s theorem on the uniqueness of countable dense linear orders, and the **back-and-forth method** provides a constructive proof of such isomorphisms.
 
-For instance, let $T = \operatorname{Th}(\mathbb{Q}, <, a_1, \dots, a_m)$, where $a_i$ are constant symbols for elements in $\mathbb{Q}$. Then the type space $S_1(T)$ has exactly $2m + 1$ complete types, each corresponding to a possible "position" relative to the named points. All such types are realized in $\mathbb{Q}$, highlighting the **realizability** and **saturation** of the model.
+For instance, let $T = Th(\mathbb{Q}, <, a_1, \dots, a_m)$, where $a_i$ are constant symbols for elements in $\mathbb{Q}$. Then the type space $S_1(T)$ has exactly $2m + 1$ complete types, each corresponding to a possible "position" relative to the named points. All such types are realized in $\mathbb{Q}$, highlighting the **realizability** and **saturation** of the model.
 
 ### Prime Models, Prime Types, and the Role of the Prime Model Uniqueness Theorem
 
