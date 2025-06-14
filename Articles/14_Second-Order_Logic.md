@@ -92,7 +92,7 @@ Relativization in second-order logic is a technique that restricts the domain of
 
 $M \models \varphi^U \iff M|_{U^M} \models \varphi$
 
-This method is especially useful when we want to focus on a particular definable domain within a model—such as the set of even natural numbers—by introducing a predicate $U(x)$ interpreted as “$x$ is even,” and interpreting all quantifiers within the scope of $U$.
+This method is especially useful when we want to focus on a particular definable domain within a model—such as the set of even natural numbers—by introducing a predicate $U(x)$ interpreted as “x is even,” and interpreting all quantifiers within the scope of $U$.
 
 Similar to FOL, formulas in SOL can be transformed into **prenex normal form**, where all quantifiers appear at the front. The formula:
 
@@ -213,8 +213,8 @@ To determine the truth value of a formula, we evaluate its **terms** via assignm
 
 Quantifiers are particularly crucial:
 
-- **Universal quantification** ($\forall x\, \varphi(x)$) requires the formula to be true for _all_ possible values of the variable.
-- **Existential quantification** ($\exists x\, \varphi(x)$) requires it to be true for _at least one_ value.
+- **Universal quantification** ( $\forall x\, \varphi(x)$ ) requires the formula to be true for _all_ possible values of the variable.
+- **Existential quantification** ( $\exists x\, \varphi(x)$ ) requires it to be true for _at least one_ value.
 
 Thus, the truth of a formula in a structure is determined jointly by the **interpretation of the symbols**, the **assignment of values to variables**, and the **recursive evaluation of logical structure**.
 
@@ -254,7 +254,7 @@ Then for any term $T(x_1, \ldots, x_n)$ and formula $\varphi(x_1, \ldots, x_n)$:
 
 - **Formula semantic equivalence**:
 
-  $ (M, v) \models \varphi[x_1 := T_1, \ldots, x_n := T_n] \iff (M, \mu) \models \varphi$
+  $(M, v) \models \varphi[x_1 := T_1, \ldots, x_n := T_n] \iff (M, \mu) \models \varphi$
 
 This theorem shows that as long as the substitution is **safe** (i.e., it avoids _variable capture_, where bound variables are accidentally changed), the semantic outcome is **completely invariant** under whether we substitute terms directly or change the assignment accordingly.
 
@@ -301,8 +301,6 @@ To express a mathematical structure in first-order logic, one must specify:
   - **Recursive layer**: Evaluate compound formulas (e.g., conjunctions, negations, quantifiers) based on their constituent parts using the semantics of logical operations.
 
 In this framework—**language → axioms → structure → satisfaction**—we can systematically express and analyze a wide range of mathematical structures using first-order logic. Determining whether a structure satisfies a given set of axioms is equivalent to asking whether it is a **model** of the corresponding first-order theory, a question answered through the recursively defined satisfaction relation.
-
-Sure! Here's your text rewritten as a polished academic-style article in English:
 
 ---
 
@@ -381,7 +379,7 @@ The **Compactness Theorem** asserts that if every finite subset of a set of firs
 
 For instance, consider the set of formulas $\{\varphi_n \mid n \in \mathbb{N}\}$, where each $\varphi_n$ states that "there exist at least $n$ distinct elements." Every finite subset is satisfiable in a finite model, but the full set is only satisfiable in an **infinite model**. Thus, while infinite cardinality can be enforced using compactness, **finiteness is not expressible in first-order logic**—a fundamental limitation.
 
-Similarly, Peano Arithmetic admits **non-standard models** such as $\mathbb{N}^*$, which contains all standard natural numbers along with "non-standard elements" $a \in \mathbb{N}^* \setminus \mathbb{N}$, such that $n <^* a$ for every standard $n \in \mathbb{N}$. Properties such as **the existence of a least element** or **well-ordering** are **not first-order definable**, as shown through models with **infinite descending chains**. These insights highlight the boundary of expressiveness in first-order logic and motivate deeper investigations in second-order and higher-order logics.
+Similarly, Peano Arithmetic admits **non-standard models** such as $\mathbb{N}^{\*}$, which contains all standard natural numbers along with "non-standard elements" $a \in \mathbb{N}^{\*} \setminus \mathbb{N}$, such that $n <^{\*} a$ for every standard $n \in \mathbb{N}$. Properties such as **the existence of a least element** or **well-ordering** are **not first-order definable**, as shown through models with **infinite descending chains**. These insights highlight the boundary of expressiveness in first-order logic and motivate deeper investigations in second-order and higher-order logics.
 
 #### The Homogeneous Enlargement Theorem
 
@@ -393,19 +391,17 @@ This is constructed by:
 
 - Extending the language with constant symbols $\mathcal{L}a$ for each $a \in M$, and $\mathcal{L}\alpha$ for each $\alpha \in \kappa$.
 
-- Defining a new language $\mathcal{L}_{A^{**}}$ and a theory:
+- Defining a new language $\mathcal{L}_{A^{\*\*}}$ and a theory:
 
   $$
   \Gamma = \operatorname{Th}(\mathcal{M}^*) \cup \{ \neg(\mathcal{L}\alpha = \mathcal{L}\beta) \mid \alpha \ne \beta \in \kappa \}
   $$
 
-  $\Gamma = \text{Th}(M^*) \cup \{ \lnot(L\alpha = L\beta) \mid \alpha \neq \beta \in \kappa \}$
+  where $\mathcal{M}^{\*}$ is the expansion interpreting $\mathcal{L}a$ as $a \in M$.
 
-  where $\mathcal{M}^*$ is the expansion interpreting $\mathcal{L}a$ as $a \in M$.
+- Using the Compactness Theorem to prove the consistency of $\Gamma$, yielding a model $\mathcal{N}^{\*\*} \models \Gamma$.
 
-- Using the Compactness Theorem to prove the consistency of $\Gamma$, yielding a model $\mathcal{N}^{**} \models \Gamma$.
-
-4. Restricting $\mathcal{N}^{**}$ to the original language, obtaining the desired $\mathcal{N} \succ \mathcal{M}$.
+- Restricting $\mathcal{N}^{\**}$ to the original language, obtaining the desired $\mathcal{N} \succ \mathcal{M}$.
 
 This construction not only generalizes the idea of non-standard models of arithmetic but also serves as the foundation of the **Upward Löwenheim–Skolem Theorem**, which ensures the existence of arbitrarily large elementary extensions.
 
@@ -451,7 +447,7 @@ Ultrapowers also play a foundational role in the **construction of homogeneous c
 
 $M_{n+1} = M_n^{\mathbb{N}} / U$
 
-Each step includes a natural elementary embedding $e\_{n(n+1)}: M\_n \rightarrow M\_{n+1}$. This results in a directed system $(M\_n, e\_{in})\_{i < n < \infty}$ satisfying the **transitivity** property:
+Each step includes a natural elementary embedding $e_{n(n+1)}: M_n \rightarrow M_{n+1}$. This results in a directed system $(M_n, e_{in})_{i < n < \infty}$ satisfying the **transitivity** property:
 
 $e_{im} = e_{nm} \circ e_{in} \quad \text{for } i < n < m$
 
@@ -465,4 +461,4 @@ $(a, i) \sim (b, j) \iff \exists k > \max\{i, j\} \text{ such that } e_{ik}(a) =
 
 The canonical embeddings into the limit are given by $e_{i\infty}(a) = [(a, i)]_\sim$.
 
-This limit structure $M_\infty$ satisfies a **universal property**: for any coherent family of embeddings $f\_n: M\_n \rightarrow N$, there exists a unique map $f: M\_\infty \rightarrow N$ such that $f\_n = f \circ e\_{n\infty}$. This **“vertical expansion and horizontal gluing”** method is a fundamental construction in model theory, providing a unified framework for building nonstandard models and studying properties such as **model completeness, saturation, and universality**.
+This limit structure $M_{\infty}$ satisfies a **universal property**: for any coherent family of embeddings $f_n: M_n \rightarrow N$, there exists a unique map $f: M_{\infty} \rightarrow N$ such that $f_n = f \circ e_{n\infty}$. This **“vertical expansion and horizontal gluing”** method is a fundamental construction in model theory, providing a unified framework for building nonstandard models and studying properties such as **model completeness, saturation, and universality**.
