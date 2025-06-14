@@ -399,6 +399,8 @@ This is constructed by:
   \Gamma = \operatorname{Th}(\mathcal{M}^*) \cup \{ \neg(\mathcal{L}\alpha = \mathcal{L}\beta) \mid \alpha \ne \beta \in \kappa \}
   $$
 
+  $\Gamma = \text{Th}(M^*) \cup \{ \lnot(L\alpha = L\beta) \mid \alpha \neq \beta \in \kappa \}$
+
   where $\mathcal{M}^*$ is the expansion interpreting $\mathcal{L}a$ as $a \in M$.
 
 - Using the Compactness Theorem to prove the consistency of $\Gamma$, yielding a model $\mathcal{N}^{**} \models \Gamma$.
