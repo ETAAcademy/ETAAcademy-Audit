@@ -519,6 +519,8 @@ So while RCF does not define the _complete_ real number system, it defines its *
 
 ---
 
+## 4. First-Order Theories of Rational and Integer Addition
+
 ### 4.1 Theory of Rational Addition Arithmetic
 
 The **Theory of Rational Addition Arithmetic** refers to the first-order logical theory satisfied by the structure $(\mathbb{Q}, 0, +, -)$, i.e., the field of rational numbers under addition and subtraction. This theory is known in model theory as **$T_{dag}$**, which captures the properties of **nontrivial, divisible abelian groups of characteristic zero**. It plays a foundational role in the logical analysis of additive number structures.
