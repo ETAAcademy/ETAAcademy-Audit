@@ -6,7 +6,7 @@
     <th>tags</th>
   </tr>
   <tr>
-    <td>15 Logical Models </td>
+    <td>15 Logical Models</td>
     <td>
       <table>
         <tr>
@@ -625,13 +625,13 @@ When the order relation `<` is explicitly added, forming the structure **(ℤ; 0
 
 **Five Key Theories and Their Characteristics**
 
-| Name    | Language                                  | Structure                | Characteristics                                             |
-| ------- | ----------------------------------------- | ------------------------ | ----------------------------------------------------------- |
-| **T**   | {0, +, −, <}                              | Ordered ℤ-group          | Complete theory, **not** quantifier-eliminable              |
-| **T\*** | {0, 1, +, −, <}                           | Ordered ℤ-group          | Complete and **quantifier-eliminable**                      |
-| **T₀**  | {0, +, −, <, +congruence axioms}          | Arithmetic formalization | Complete and quantifier-eliminable, but more complex        |
-| **T₀\***  | T₀ plus the constant 1                    | —                        | A **simpler level II₂** theory with quantifier elimination  |
-| **Tₚᵣ** | Presburger arithmetic for (ℤ; 1, +, −, <) | —                        | Equivalent to the above; complete and quantifier-eliminable |
+| Name     | Language                                  | Structure                | Characteristics                                             |
+| -------- | ----------------------------------------- | ------------------------ | ----------------------------------------------------------- |
+| **T**    | {0, +, −, <}                              | Ordered ℤ-group          | Complete theory, **not** quantifier-eliminable              |
+| **T\***  | {0, 1, +, −, <}                           | Ordered ℤ-group          | Complete and **quantifier-eliminable**                      |
+| **T₀**   | {0, +, −, <, +congruence axioms}          | Arithmetic formalization | Complete and quantifier-eliminable, but more complex        |
+| **T₀\*** | T₀ plus the constant 1                    | —                        | A **simpler level II₂** theory with quantifier elimination  |
+| **Tₚᵣ**  | Presburger arithmetic for (ℤ; 1, +, −, <) | —                        | Equivalent to the above; complete and quantifier-eliminable |
 
 #### Tr: A Basic but Incomplete Theory
 

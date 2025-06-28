@@ -608,3 +608,81 @@ index 5f09101..e9eef27 100644
 ```
 
 </details>
+
+## 8.[Medium] Deleveragable Positions Cannot Be Fully Liquidated
+
+### Liquidation
+
+- Summary: This vulnerability prevents the full liquidation of "deleveragable" positions—positions whose total value (TV) has dropped below zero—due to a flawed health check that panics when the total risk (TR) becomes zero after liquidation. Since full liquidation removes all synthetic exposure (making TR = 0), the function `assert_healthy_or_healthier` incorrectly treats the result as invalid and reverts. This breaks the intended risk management mechanism by blocking liquidators, leaving toxic positions on-chain, and forcing the system to rely on the less desirable deleveraging mechanism, which harms healthy participants and weakens protocol stability.
+
+- Impact & Recommendation: The recommendation is to **skip the `assert_healthy_or_healthier` check** when a deleveragable position is being **fully liquidated**, meaning the synthetic balance becomes zero and total risk (TR) becomes zero.
+
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-03-starknet-perpetual#m-01-deleveragable-positions-cannot-be-fully-liquidated) & [Report](https://code4rena.com/reports/2025-03-starknet-perpetual)
+
+<details><summary>POC</summary>
+
+```cairo
+#[test]
+#[should_panic(expected: "POSITION_NOT_HEALTHY_NOR_HEALTHIER")]
+fn test_unsuccessful_liquidate() {
+    // Setup state, token and user:
+    let cfg: PerpetualsInitConfig = Default::default();
+    let token_state = cfg.collateral_cfg.token_cfg.deploy();
+    let mut state = setup_state_with_active_asset(cfg: @cfg, token_state: @token_state);
+
+    let liquidator = Default::default();
+    init_position(cfg: @cfg, ref :state, user: liquidator);
+    let liquidated = UserTrait::new(position_id: POSITION_ID_2, key_pair: KEY_PAIR_2());
+    init_position(cfg: @cfg, ref :state, user: liquidated);
+    add_synthetic_to_position(
+        ref :state,
+        synthetic_id: cfg.synthetic_cfg.synthetic_id,
+        position_id: liquidated.position_id,
+        balance: -SYNTHETIC_BALANCE_AMOUNT,
+    );
+
+    // Test params:
+    let BASE = 20;
+    let QUOTE = -2000; // oracle price is $100
+    let INSURANCE_FEE = 1;
+    let FEE = 2;
+
+    // Setup parameters:
+    let expiration = Time::now().add(delta: Time::days(1));
+    let operator_nonce = state.get_operator_nonce();
+
+    let collateral_id = cfg.collateral_cfg.collateral_id;
+    let synthetic_id = cfg.synthetic_cfg.synthetic_id;
+
+    let order_liquidator = Order {
+        position_id: liquidator.position_id,
+        salt: liquidator.salt_counter,
+        base_asset_id: synthetic_id,
+        base_amount: -BASE,
+        quote_asset_id: collateral_id,
+        quote_amount: -QUOTE,
+        fee_asset_id: collateral_id,
+        fee_amount: FEE,
+        expiration,
+    };
+
+    let liquidator_hash = order_liquidator.get_message_hash(liquidator.get_public_key());
+    let liquidator_signature = liquidator.sign_message(liquidator_hash);
+    // Panics with "POSITION_NOT_HEALTHY_NOR_HEALTHIER" as total_risk after is 0
+    cheat_caller_address_once(contract_address: test_address(), caller_address: cfg.operator);
+    state
+        .liquidate(
+            :operator_nonce,
+            :liquidator_signature,
+            liquidated_position_id: liquidated.position_id,
+            liquidator_order: order_liquidator,
+            actual_amount_base_liquidated: BASE,
+            actual_amount_quote_liquidated: QUOTE,
+            actual_liquidator_fee: FEE,
+            liquidated_fee_amount: INSURANCE_FEE,
+        );
+}
+
+```
+
+</details>
