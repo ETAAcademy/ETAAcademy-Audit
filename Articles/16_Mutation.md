@@ -38,7 +38,7 @@ Mutation testing works by introducing artificial faults (called "mutants") into 
 
 **Practical Use and Tools**
 
-Mutation testing is primarily used in software development (especially in industry), but also finds applications in teaching, learning, and research. While many mutation testing tools are popular in academia, industry and open-source communities prefer tools that are easy to use, integrate well, and have active communities. Popular tools include **Infection** (PHP), **PIT** (Java), **Humbug** (PHP), **StrykerJS** (JavaScript), and **Mutant** (Ruby), each typically targeting specific programming languages. There are also tools for higher-level models (UML, Z), spreadsheets, regular expressions, and even smart contracts. These tools are far more widely used in practice than those commonly cited in academic papers.
+Mutation testing is primarily used in software development (especially in industry), but also finds applications in teaching, learning, and research. While many mutation testing tools are popular in academia, industry and open-source communities prefer tools that are easy to use, integrate well, and have active communities. Popular tools include **Infection** (PHP), **PIT** (Java), **Humbug** (PHP), **StrykerJS** (JavaScript), **Certora** (Solidity) and **Mutant** (Ruby), each typically targeting specific programming languages. There are also tools for higher-level models (UML, Z), spreadsheets, regular expressions, and even smart contracts. These tools are far more widely used in practice than those commonly cited in academic papers.
 
 **The Mutation Testing Process**
 
@@ -68,7 +68,7 @@ Mutants are typically small and can be categorized as follows:
 
 ```mermaid
 graph TD
-A["Vertigo Mutation Operators"] --> B["Conditional Boundary Replacement"]
+A["Mutation Operators"] --> B["Conditional Boundary Replacement"]
 A --> C["Conditional Negation"]
 A --> D["Arithmetic Operator Inversion"]
 A --> E["Increment Statement Mutation"]
@@ -169,9 +169,9 @@ TCCT is language-agnostic and provides a theoretical foundation for ZK circuit a
 
 #### Core Vulnerabilities
 
-- **Under-Constrained:** $Π_{xy}(S(C)) \ Π_{xy}(T(P)) ≠ ∅$; there exists (x, y) accepted by C but not produced by P.
+- **Under-Constrained:** $Π_{xy}(S(C))$ \ $Π_{xy}(T(P)) ≠ ∅$; there exists (x, y) accepted by C but not produced by P.
 - **Over-Constrained:** T(P) \ S(C) ≠ ∅; there exists (x, z, y) produced by P but not accepted by C.
-- **TCCT Consistency:** $Π_{xy}(S(C)) \ Π_{xy}(T(P)) = ∅$ and T(P) \ S(C) = ∅; all execution traces satisfy the constraints, and all accepted input/output pairs can be produced by P. Deciding under- or over-constrained is NP-complete; TCCT as a whole is co-NP-complete.
+- **TCCT Consistency:** $Π_{xy}(S(C))$ \ $Π_{xy}(T(P)) = ∅$ and T(P) \ S(C) = ∅; all execution traces satisfy the constraints, and all accepted input/output pairs can be produced by P. Deciding under- or over-constrained is NP-complete; TCCT as a whole is co-NP-complete.
 
 **TCCT Analysis Example (q=3):**
 
@@ -583,13 +583,11 @@ Havoc mode's formal model consists of two stages:
 - **Normal Stage:** Apply $h$ operators in sequence to a seed $s$, yielding mutant $m$.
 - **Splicing Stage:** First splice two seeds to create $s'$, then apply $h$ operators to $s'$, yielding mutant $m$.
 
-\[
-m = f^h(s) = f(f(\cdots f(s) \cdots))
-\]
+$m = f^h(s) = f(f(\cdots f(s) \cdots))$
+
 or
-\[
-m = f^h(s') = f(f(\cdots f(s') \cdots)),\quad s' = splice(s)
-\]
+
+$m = f^h(s') = f(f(\cdots f(s') \cdots)),\quad s' = splice(s)$
 
 During fuzzing, havoc mode automatically generates a large number of mutated test cases, many of which differ from the original input by only a single byte, with mutation positions uniformly distributed.
 
@@ -610,9 +608,9 @@ Algorithm 1 Enhanced Havoc Mode with Zero-Execution FTI
     𝑡𝑖 = ℎ𝑎𝑣𝑜𝑐_𝑚𝑢𝑡𝑎𝑡𝑒 (𝑠𝑒𝑒𝑑) ⊲ Vanilla havoc mode generates a testcase  𝑡𝑖
     𝑝𝑏𝑖 = 𝑒𝑥𝑒𝑐𝑢𝑡𝑒 (𝑡𝑖 ) ⊲ Record program behavior for 𝑡𝑖
     𝐵𝑦𝑡𝑒𝐷𝑖𝑓𝑓 = 𝑑𝑖𝑓𝑓 (𝑡𝑖, 𝑠𝑒𝑒𝑑)
-    if |𝐵𝑦𝑡𝑒𝐷𝑖 𝑓 𝑓 | ≤ 𝑘 then ⊲ Skip testcases with too many byte diffs to avoid overtaint
+    if |𝐵𝑦𝑡𝑒𝐷𝑖𝑓𝑓 | ≤ 𝑘 then ⊲ Skip testcases with too many byte diffs to avoid overtaint
     if 𝑝𝑏𝑖 ≠ 𝑝𝑏𝑠𝑒𝑒𝑑 then
-        for each index 𝑗 in 𝐵𝑦𝑡𝑒𝐷𝑖 𝑓 𝑓 do
+        for each index 𝑗 in 𝐵𝑦𝑡𝑒𝐷𝑖𝑓𝑓 do
             𝑡𝑎𝑖𝑛𝑡_𝑐𝑜𝑢𝑛𝑡[𝑗] ← 𝑡𝑎𝑖𝑛𝑡_𝑐𝑜𝑢𝑛𝑡[𝑗] + 1
  /* Phase 2: Biased havoc mode focusing on bytes with high taint count */
  for 𝑖 = 1, 2, ..., 𝑛2 do
