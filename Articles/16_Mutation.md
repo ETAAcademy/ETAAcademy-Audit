@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 16. Mutation Testing
+# ETAAcademy-Audit: 16. Mutation Testing
 
 <table>
   <tr>

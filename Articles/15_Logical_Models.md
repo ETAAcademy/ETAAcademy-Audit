@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 15. Logical Models
+# ETAAcademy-Audit: 15. Logical Models
 
 <table>
   <tr>

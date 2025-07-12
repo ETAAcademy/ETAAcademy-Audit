@@ -447,3 +447,108 @@ func (ch *Child) endBlockHandler(ctx types.Context, args nodetypes.EndBlockArgs)
 ```
 
 </details>
+
+## 14. [High] Mishandling of receiving HYPE in the StakingManager, user can’t confirm withdrawal and inflate the exchange ratio
+
+### State machine logic
+
+- Summary: The StakingManager contract's `receive()` function indiscriminately calls `stake()` for all incoming HYPE transfers regardless of the sender's identity or purpose. When the system address sends HYPE to fulfill user withdrawal requests, the `receive()` function automatically re-stakes these funds instead of keeping them available for withdrawal confirmation, causing a circular fund flow disruption. This results in users being unable to confirm their withdrawals due to insufficient contract balance, while simultaneously inflating the `HYPE/KHYPE` exchange ratio through double accounting - the same HYPE amount gets recorded in totalStaked twice (once during initial user staking, again when system sends withdrawal funds), leading to additional KHYPE being minted to the system address and permanently locked, creating an exploitable economic imbalance in the protocol.
+
+- Impact & Recommendation: The recommended fix is to add sender identity verification in the receive() function to prevent automatic re-staking of withdrawal funds.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-04-kinetiq#h-03-mishandling-of-receiving-hype-in-the-stakingmanager-user-cant-confirm-withdrawal-and-inflate-the-exchange-ratio) & [Report](https://code4rena.com/reports/2025-04-kinetiq)
+
+<details><summary>POC</summary>
+```solidity
+    receive() external payable {
+        // Simply call the stake function
+        if (msg.sender != systemAddress) {
+        stake();
+        }
+    }
+```
+
+```solidity
+function test_misshandlingOfReceivingHYPE() public {
+        // Set actor
+        address systemAddressForHYPE = makeAddr("systemAddressForHYPE");
+
+        // Set staking amount
+        uint256 stakeAmount = 1 ether;
+
+        // fund the system for mocking withdrawal process and the user
+        vm.deal(systemAddressForHYPE, 1 ether);
+        vm.deal(user, 1 ether);
+
+        // Set up delegation first
+        vm.startPrank(manager);
+        validatorManager.activateValidator(validator);
+        validatorManager.setDelegation(address(stakingManager), validator);
+        vm.stopPrank();
+
+        console.log("");
+        console.log(" START TEST ... ");
+        console.log("");
+
+        // check stakingManager balance
+        uint256 initialStakingManagerBalance = address(stakingManager).balance;
+        console.log("Staking Manager Initial HYPE Balance:", initialStakingManagerBalance);
+
+        console.log("");
+        console.log(" USER STAKE ... ");
+        console.log("");
+
+        // User stake
+        vm.prank(user);
+        stakingManager.stake{value: stakeAmount}();
+
+        uint256 stakingManagerBalanceAfterUserDeposit = address(stakingManager).balance;
+        console.log("\\ This value will be zero because HYPE will directly send to system address on core");
+        console.log("Staking Manager HYPE Balance After User Deposit:", stakingManagerBalanceAfterUserDeposit);
+
+        console.log("");
+        console.log(" OPERATOR EXECUTE L1 DEPOSIT OPERATION ... ");
+        console.log("");
+
+        // operator execute L1 operations : delegate HYPE to validator
+        vm.prank(operator);
+        stakingManager.processL1Operations(0);
+
+        console.log(" USER QUEUE WITHDRAWAL ... ");
+        console.log("");
+
+        // User withdraw
+        vm.startPrank(user);
+        kHYPE.approve(address(stakingManager), stakeAmount);
+        stakingManager.queueWithdrawal(stakeAmount);
+        vm.stopPrank();
+
+        console.log(" OPERATOR EXECUTE L1 WITHDRAWAL OPERATION ... ");
+        console.log("");
+
+        // operator execute L1 operations : undelegated HYPE from validator
+        vm.prank(operator);
+        stakingManager.processL1Operations(0);
+
+        console.log(" WITHDRAWAL HYPE FROM CORE SEND TO STAKINGMANAGER ... ");
+        console.log("");
+
+        // systemAddress send back undelegated HYPE from validator to stakingManager
+        vm.prank(systemAddressForHYPE);
+        address(stakingManager).call{value : stakeAmount}("");
+
+        uint256 stakingManagerBalanceAfterHYPESentFromCore = address(stakingManager).balance;
+        console.log("\\ This value will be zero, HYPE will directly stacked again because receive() initiate stake() function");
+        console.log("Staking Manager HYPE Balance After HYPE Sent From Core :", stakingManagerBalanceAfterHYPESentFromCore);
+
+        // warp 7 days
+        vm.warp(block.timestamp + 7 days);
+
+        // User want to confirm withdrawal failed because lack of HYPE on stakingManager
+        vm.prank(user);
+        vm.expectRevert();
+        stakingManager.confirmWithdrawal(0);
+    }
+
+```
+
+</details>

@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 10. Symbolic Execution
+# ETAAcademy-Audit: 10. Symbolic Execution
 
 <table>
   <tr>

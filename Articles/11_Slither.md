@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 11. Slither
+# ETAAcademy-Audit: 11. Slither
 
 <table>
   <tr>

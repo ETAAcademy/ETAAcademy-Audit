@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 12. Certora
+# ETAAcademy-Audit: 12. Certora
 
 <table>
   <tr>

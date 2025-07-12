@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 2. Wallet
+# ETAAcademy-Audit: 2. Wallet
 
 <table>
   <tr>

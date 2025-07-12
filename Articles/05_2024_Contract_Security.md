@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 5. 2024 Contract Security
+# ETAAcademy-Audit: 5. 2024 Contract Security
 
 <table>
   <tr>

@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 4. Cosmos Security
+# ETAAcademy-Audit: 4. Cosmos Security
 
 <table>
   <tr>

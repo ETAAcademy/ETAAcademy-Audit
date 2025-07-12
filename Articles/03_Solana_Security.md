@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 3. Solana Security
+# ETAAcademy-Audit: 3. Solana Security
 
 <table>
   <tr>

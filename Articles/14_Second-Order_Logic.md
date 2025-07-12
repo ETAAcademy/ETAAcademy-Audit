@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 14. Second-Order Logic
+# ETAAcademy-Audit: 14. Second-Order Logic
 
 <table>
   <tr>

@@ -149,11 +149,11 @@ contract MaliciousRouter {
 
 </details>
 
-## 2. [Medium] Incorrect call argument in THORChain_Router::\_transferOutAndCallV5, leading to grief/steal of THORChain_Aggregator’s funds or DoS
+## 2. [Medium] Incorrect call argument in THORChain_Router::`_transferOutAndCallV5`, leading to grief/steal of THORChain_Aggregator’s funds or DoS
 
 ### Charge fees on transfer
 
-- Summary: The \_transferOutAndCallV5 function transfers tokens to the THORChain_Aggregator and then calls swapOutV5 with the same amount. However, if the token charges a fee on transfer, the THORChain_Aggregator might not receive the full amount, causing the swapOutV5 call to fail or allowing a malicious actor to steal or lock funds.
+- Summary: The `_transferOutAndCallV5` function transfers tokens to the THORChain_Aggregator and then calls swapOutV5 with the same amount. However, if the token charges a fee on transfer, the THORChain_Aggregator might not receive the full amount, causing the swapOutV5 call to fail or allowing a malicious actor to steal or lock funds.
 
 - Impact & Recommendation: Implement a safe transfer function to correctly handle tokens that charge fees on transfer, ensuring the actual transferred amount is used in subsequent operations.
 
@@ -348,6 +348,265 @@ describe('Aggregator griefing', function () {
       )
     ).to.equal(true);
   });
+});
+
+```
+
+</details>
+
+## 3. [Medium] MinterUpgradeable: double-subtracting smNFT burns causes rebase underpayment
+
+### Double-subtraction causes rebase underpayment
+
+- Summary: This is a double-subtraction token allocation error vulnerability: In the Blackhole protocol, creating Supermassive NFTs (smNFTs) burns BLACK tokens, automatically reducing `totalSupply()`, but the `calculate_rebase()` function incorrectly subtracts the smNFT token amount again from the already-reduced total supply (`circulatingBlack = _blackTotal - _veTotal - _smNFTBalance`), causing circulating supply to be underestimated. Since the rebase formula contains a squared term, this error is mathematically amplified, ultimately resulting in significantly reduced rebase rewards for `LPs/stakers` while veBLACK voters controlling gauges receive excessive allocations, systematically breaking the protocol's economic incentive balance.
+
+- Impact & Recommendation: `The fix is to remove the duplicate subtraction: circulatingBlack = _blackTotal - _veTotal.`
+
+<br> 🐬: [Source](https://code4rena.com/reports/2025-05-blackhole#m-01-minterupgradeable-double-subtracting-smnft-burns-causes-rebase-underpayment) & [Report](https://code4rena.com/reports/2025-05-blackhole)
+
+<details><summary>POC</summary>
+
+```solidity
+const { expect } = require("chai");
+const { ethers, network } = require("hardhat");
+describe("MinterUpgradeable - Rebase Miscalculation PoC", function () {
+    let deployer, user1, team; // Signers
+    let blackToken, votingEscrow, minter, gaugeManagerMock, rewardsDistributorMock, blackGovernorMock;
+    let votingBalanceLogic, votingDelegationLib; // Libraries
+
+    const WEEK = 1800;
+    const PRECISION = ethers.BigNumber.from("10000");
+    const TOKEN_DECIMALS = 18; // For formatting ethers
+
+    async function setupContracts() {
+        [deployer, user1, team] = await ethers.getSigners();
+        const BlackFactory = await ethers.getContractFactory("Black");
+        blackToken = await BlackFactory.deploy();
+        await blackToken.deployed();
+
+        if (!(await blackToken.initialMinted())) {
+            await blackToken.connect(deployer).initialMint(deployer.address);
+        }
+
+        const initialUserTokens = ethers.utils.parseEther("1000000");
+        await blackToken.connect(deployer).transfer(user1.address, initialUserTokens);
+
+        const VotingBalanceLogicFactory = await ethers.getContractFactory("VotingBalanceLogic");
+        votingBalanceLogic = await VotingBalanceLogicFactory.deploy();
+        await votingBalanceLogic.deployed();
+
+        const VotingDelegationLibFactory = await ethers.getContractFactory("VotingDelegationLib");
+        votingDelegationLib = await VotingDelegationLibFactory.deploy();
+        await votingDelegationLib.deployed();
+
+        const VotingEscrowFactory = await ethers.getContractFactory("VotingEscrow", {
+            libraries: { VotingBalanceLogic: votingBalanceLogic.address },
+        });
+        votingEscrow = await VotingEscrowFactory.deploy(blackToken.address, ethers.constants.AddressZero, ethers.constants.AddressZero);
+        await votingEscrow.deployed();
+        if ((await votingEscrow.team()) !== team.address) {
+            await votingEscrow.connect(deployer).setTeam(team.address);
+        }
+
+        const GaugeManagerMockFactory = await ethers.getContractFactory("GaugeManagerMock");
+        gaugeManagerMock = await GaugeManagerMockFactory.deploy();
+        await gaugeManagerMock.deployed();
+
+        const RewardsDistributorMockFactory = await ethers.getContractFactory("RewardsDistributorMock");
+        rewardsDistributorMock = await RewardsDistributorMockFactory.deploy();
+        await rewardsDistributorMock.deployed();
+
+        const BlackGovernorMockFactory = await ethers.getContractFactory("BlackGovernorMock");
+        blackGovernorMock = await BlackGovernorMockFactory.deploy();
+        await blackGovernorMock.deployed();
+        await gaugeManagerMock.setBlackGovernor(blackGovernorMock.address);
+
+        const MinterFactory = await ethers.getContractFactory("MinterUpgradeable");
+        minter = await MinterFactory.deploy();
+        await minter.deployed();
+        await minter.connect(deployer).initialize(gaugeManagerMock.address, votingEscrow.address, rewardsDistributorMock.address);
+        if ((await minter.team()) !== team.address) {
+            await minter.connect(deployer).setTeam(team.address);
+            await minter.connect(team).acceptTeam();
+        }
+        await minter.connect(deployer)._initialize([], [], 0);
+        await blackToken.connect(deployer).setMinter(minter.address);
+        await blackToken.connect(user1).approve(votingEscrow.address, ethers.constants.MaxUint256);
+    }
+
+    async function advanceToNextMintingPeriod(minterContract) {
+        let currentActivePeriod = await minterContract.active_period();
+        let currentTime = ethers.BigNumber.from((await ethers.provider.getBlock('latest')).timestamp);
+        let targetTimeForUpdate = currentActivePeriod.add(WEEK);
+
+        if (currentTime.lt(targetTimeForUpdate)) {
+            const timeToAdvance = targetTimeForUpdate.sub(currentTime).toNumber();
+            if (timeToAdvance > 0) {
+                await network.provider.send("evm_increaseTime", [timeToAdvance]);
+            }
+        }
+        await network.provider.send("evm_mine"); // Mine a block regardless to update timestamp
+    }
+    // Helper function to format BigNumbers consistently for logging
+    function formatBN(bn) {
+        return ethers.utils.formatUnits(bn, TOKEN_DECIMALS);
+    }
+
+    it("should have correct rebase when smNFTBalance is zero", async function () {
+        await setupContracts();
+        const lockAmount = ethers.utils.parseEther("10000");
+        const lockDuration = WEEK * 52;
+        await votingEscrow.connect(user1).create_lock(lockAmount, lockDuration, false /* isSMNFT */);
+
+        await advanceToNextMintingPeriod(minter);
+        const veTotal = await blackToken.balanceOf(votingEscrow.address);
+        const blackTotal = await blackToken.totalSupply();
+        const smNFTBalance = await votingEscrow.smNFTBalance();
+        const superMassiveBonus = await votingEscrow.calculate_sm_nft_bonus(smNFTBalance);
+        const weeklyEmission = await minter.weekly();
+
+        console.log("\n--- Test Case: smNFTBalance is ZERO ---");
+        console.log("  veTotal:", formatBN(veTotal));
+        console.log("  blackTotal:", formatBN(blackTotal));
+        console.log("  smNFTBalance:", formatBN(smNFTBalance)); // Should be 0
+        console.log("  superMassiveBonus:", formatBN(superMassiveBonus)); // Should be 0
+        console.log("  Weekly Mint:", formatBN(weeklyEmission));
+        const rebaseContract = await minter.calculate_rebase(weeklyEmission);
+        console.log("  Rebase (Contract):", formatBN(rebaseContract));
+
+        // Corrected calculation (should match contract when smNFTBalance is 0)
+        // Contract's circulatingBlack = blackTotal - veTotal - smNFTBalance
+        // Corrected circulatingBlack = blackTotal - veTotal
+        // Since smNFTBalance is 0, these are the same.
+        const correctedCirculating = blackTotal.sub(veTotal);
+        const correctedDenominator = blackTotal.add(superMassiveBonus); // bonus is 0
+
+        let correctedRebase = ethers.BigNumber.from(0);
+        if (!correctedDenominator.isZero() && correctedCirculating.gte(0)) {
+            const numSq = correctedCirculating.mul(correctedCirculating);
+            const denSqTimes2 = correctedDenominator.mul(correctedDenominator).mul(2);
+            if(!denSqTimes2.isZero()) {
+                correctedRebase = weeklyEmission.mul(numSq).div(denSqTimes2);
+            }
+        }
+        console.log("  Rebase (Corrected):", formatBN(correctedRebase));
+
+        expect(smNFTBalance).to.equal(0, "smNFTBalance should be zero for this test case");
+        const diff = rebaseContract.sub(correctedRebase).abs();
+        // Allow for extremely small dust if any fixed point math slightly differs, though should be equal
+        const tolerance = ethers.utils.parseUnits("1", "wei");
+        expect(diff).to.be.lte(tolerance, "Rebase calculations should be identical when smNFTBalance is zero");
+    });
+
+it("should demonstrate rebase miscalculation when smNFTBalance is positive", async function () {
+        await setupContracts(); // Ensure fresh state for this test
+        const lockAmount = ethers.utils.parseEther("10000");
+        const smNFTLockAmount = ethers.utils.parseEther("50000");
+        const lockDuration = WEEK * 52 * 1;
+
+        await votingEscrow.connect(user1).create_lock(lockAmount, lockDuration, false /* isSMNFT */);
+        await votingEscrow.connect(user1).create_lock(smNFTLockAmount, lockDuration, true /* isSMNFT */);
+
+        await advanceToNextMintingPeriod(minter);
+
+        const veTotal_before = await blackToken.balanceOf(votingEscrow.address);
+        const blackTotal_before = await blackToken.totalSupply();
+        const smNFTBalance_before = await votingEscrow.smNFTBalance();
+
+        const superMassiveBonus_before = await votingEscrow.calculate_sm_nft_bonus(smNFTBalance_before);
+
+        const weeklyEmission_for_period = await minter.weekly();
+        console.log("\n--- Test Case: smNFTBalance is POSITIVE ---");
+        console.log("State BEFORE Minter.update_period / calculate_rebase (Revised Inputs):");
+        console.log("  veTotal (tokens in VE for normal/perm locks):", formatBN(veTotal_before));
+        console.log("  blackTotal (actual totalSupply after smNFT burn):", formatBN(blackTotal_before));
+        console.log("  smNFTBalance (sum of original principals burned for smNFTs):", formatBN(smNFTBalance_before));
+        console.log("  superMassiveBonus (conceptual bonus on smNFTBalance):", formatBN(superMassiveBonus_before));
+        console.log("  Weekly Mint for this period (emission to be distributed):", formatBN(weeklyEmission_for_period));
+
+        const rebaseAmount_from_contract_calc = await minter.calculate_rebase(weeklyEmission_for_period);        console.log("Rebase Amount calculated BY CONTRACT'S LOGIC:", formatBN(rebaseAmount_from_contract_calc));
+
+        // Corrected Logic: circulatingBlack should NOT double-subtract smNFTBalance
+        const corrected_circulatingBlack = blackTotal_before.sub(veTotal_before); // Numerator: BT - VT
+
+        // Corrected Denominator: actual total supply + conceptual bonus
+        const corrected_blackSupply_denominator = blackTotal_before.add(superMassiveBonus_before); // Denominator: BT + B
+
+        console.log("\nFor Manual/Corrected Calculation:");
+        console.log("  Corrected Circulating Black (ActualCirculating):", formatBN(corrected_circulatingBlack));
+        console.log("  Corrected Black Supply Denominator (ActualTotalSupply + Bonus):", formatBN(corrected_blackSupply_denominator));
+
+        let corrected_rebaseAmount = ethers.BigNumber.from(0);
+        if (!corrected_blackSupply_denominator.isZero() && corrected_circulatingBlack.gte(0)) {
+            const num_squared = corrected_circulatingBlack.mul(corrected_circulatingBlack);
+            const den_squared_times_2 = corrected_blackSupply_denominator.mul(corrected_blackSupply_denominator).mul(2);
+            if (!den_squared_times_2.isZero()) {
+                 corrected_rebaseAmount = weeklyEmission_for_period.mul(num_squared).div(den_squared_times_2);
+            }
+        }
+
+        console.log("Rebase Amount calculated MANUALLY (Corrected Logic):", formatBN(corrected_rebaseAmount));
+
+
+        const expected_misallocated_rebase = corrected_rebaseAmount.sub(rebaseAmount_from_contract_calc);
+        console.log("Expected Misallocated Rebase (Corrected - Contract):", formatBN(expected_misallocated_rebase));
+
+        // --- Assertions for Vulnerable Outcome ---
+
+        expect(smNFTBalance_before).to.be.gt(0, "Test setup failed: smNFTBalance should be positive for this test case");
+        expect(rebaseAmount_from_contract_calc).to.be.lt(corrected_rebaseAmount, "Contract's rebase should be less than corrected rebase when smNFTs exist");
+        expect(expected_misallocated_rebase).to.be.gt(0, "Expected misallocated rebase amount should be greater than zero");
+
+        // --- Demonstrate Upstream Impact on State ---
+
+        const rewardsDistributor_bal_before_mint = await blackToken.balanceOf(rewardsDistributorMock.address);
+        const minterTeamAddress = await minter.team();
+        const team_bal_before_mint = await blackToken.balanceOf(minterTeamAddress);
+        const gaugeManager_allowance_before_mint = await blackToken.allowance(minter.address, gaugeManagerMock.address);
+
+// Calculate expected team and gauge amounts based on BOTH contract's flawed rebase AND corrected rebase
+        const teamRate = await minter.teamRate();
+        const MAX_BPS = await minter.MAX_BPS();
+
+        const teamEmission_contract = weeklyEmission_for_period.mul(teamRate).div(MAX_BPS);
+        const gaugeEmission_contract = weeklyEmission_for_period.sub(rebaseAmount_from_contract_calc).sub(teamEmission_contract);
+
+        const teamEmission_corrected = weeklyEmission_for_period.mul(teamRate).div(MAX_BPS); // team emission is same
+        const gaugeEmission_corrected = weeklyEmission_for_period.sub(corrected_rebaseAmount).sub(teamEmission_corrected);
+
+        console.log("\n--- Predicted Distribution (based on contract's flawed rebase) ---");
+        console.log("  Predicted Rebase to Distributor:", formatBN(rebaseAmount_from_contract_calc));
+        console.log("  Predicted Emission to Team:", formatBN(teamEmission_contract));
+        console.log("  Predicted Emission to Gauges:", formatBN(gaugeEmission_contract));
+        console.log("\n--- Predicted Distribution (based on CORRECTED rebase) ---");
+        console.log("  Predicted Rebase to Distributor (Corrected):", formatBN(corrected_rebaseAmount));
+        console.log("  Predicted Emission to Team (Corrected):", formatBN(teamEmission_corrected));
+        console.log("  Predicted Emission to Gauges (Corrected):", formatBN(gaugeEmission_corrected));
+
+        // Execute the minting period update
+        await minter.connect(deployer).update_period();
+
+        const rewardsDistributor_bal_after_mint = await blackToken.balanceOf(rewardsDistributorMock.address);
+        const team_bal_after_mint = await blackToken.balanceOf(minterTeamAddress);
+        const gaugeManager_allowance_after_mint = await blackToken.allowance(minter.address, gaugeManagerMock.address);
+        const rebase_actually_paid = rewardsDistributor_bal_after_mint.sub(rewardsDistributor_bal_before_mint);
+        const team_actually_paid = team_bal_after_mint.sub(team_bal_before_mint);
+        const gauge_actually_approved = gaugeManager_allowance_after_mint.sub(gaugeManager_allowance_before_mint); // Assuming allowance starts at 0 or reset
+        console.log("\n--- Actual Distribution After Minter.update_period() ---");
+        console.log("  Actual Rebase Paid to RewardsDistributor:", formatBN(rebase_actually_paid));
+        console.log("  Actual Emission Paid to Team:", formatBN(team_actually_paid));
+        console.log("  Actual Emission Approved for GaugeManager:", formatBN(gauge_actually_approved));
+
+        // Assert that actual payments match the contract's flawed calculations
+        expect(rebase_actually_paid).to.equal(rebaseAmount_from_contract_calc, "Actual rebase paid should match contract's flawed calculation");
+        expect(team_actually_paid).to.equal(teamEmission_contract, "Actual team emission should match contract's calculation");
+        expect(gauge_actually_approved).to.equal(gaugeEmission_contract, "Actual gauge approval should match contract's calculation");
+
+        // Assert that gauge emission is higher than it should be
+        expect(gauge_actually_approved).to.be.gt(gaugeEmission_corrected, "Gauge emission is higher than it should be due to understated rebase");
+        const excessToGauges = gauge_actually_approved.sub(gaugeEmission_corrected);
+        expect(excessToGauges).to.equal(expected_misallocated_rebase, "Excess to gauges should equal the rebase misallocation");
+    });
 });
 
 ```

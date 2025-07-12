@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 1. DEXs Swap Vulnerabilities
+# ETAAcademy-Audit: 1. DEXs Swap Vulnerabilities
 
 <table>
   <tr>

@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 7. Static Analysis
+# ETAAcademy-Audit: 7. Static Analysis
 
 <table>
   <tr>

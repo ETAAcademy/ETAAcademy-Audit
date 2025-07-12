@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 8. Dynamic Analysis and Deep Learning
+# ETAAcademy-Audit: 8. Dynamic Analysis and Deep Learning
 
 <table>
   <tr>

@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 13. Mathematical Logic
+# ETAAcademy-Audit: 13. Mathematical Logic
 
 <table>
   <tr>

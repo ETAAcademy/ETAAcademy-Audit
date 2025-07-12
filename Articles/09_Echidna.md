@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 9. Echidna
+# ETAAcademy-Audit: 9. Echidna
 
 <table>
   <tr>

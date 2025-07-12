@@ -1,4 +1,4 @@
-# ETAAcademy-Adudit: 6. ZK Security
+# ETAAcademy-Audit: 6. ZK Security
 
 <table>
   <tr>
