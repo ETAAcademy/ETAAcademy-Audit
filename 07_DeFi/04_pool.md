@@ -1094,3 +1094,30 @@ fn calc_state(suite: &mut TestingSuite, creator: &str) -> [Uint128; 4] {
 ```
 
 </details>
+
+## 20.[Medium] User can't unlock when getTotalUnits == 0 even though tax is zero.
+
+### Unlock failure
+
+- Summary: The unlock logic reverts whenever `STAKER_DISTRIBUTION_POOL.getTotalUnits()` or `LP_DISTRIBUTION_POOL.getTotalUnits()` equals zero, without considering that one of the allocation percentages (`stakerAllocationBP` or `liquidityProviderAllocationBP`) may legitimately be zero. In such cases, since no rewards are distributed to that pool, its total units remain zero, but users are still blocked from unlocking even though no tax is owed. This leads to funds being stuck.
+
+- Impact & Recommendation: The fix is to only revert if `totalUnits == 0` **and** the corresponding allocation is greater than zero, ensuring unlock works correctly when a pool’s allocation is zero.
+  <br> 🐬: [Source](https://github.com/sherlock-audit/2025-06-superfluid-locker-system-judging/issues/50) & [Report](https://audits.sherlock.xyz/contests/968/report)
+
+<details><summary>POC</summary>
+
+```solidity
++	(uint256 stakerAllocation, uint256 providerAllocation) = STAKING_REWARD_CONTROLLER.getTaxAllocation();
+-	if (STAKER_DISTRIBUTION_POOL.getTotalUnits() == 0) {
++	if (STAKER_DISTRIBUTION_POOL.getTotalUnits() == 0 && stakerAllocation > 0) {
+		revert STAKER_DISTRIBUTION_POOL_HAS_NO_UNITS();
+	}
+
+-	if (LP_DISTRIBUTION_POOL.getTotalUnits() == 0) {
++	if (LP_DISTRIBUTION_POOL.getTotalUnits() == 0 && providerAllocation > 0) {
+		revert LP_DISTRIBUTION_POOL_HAS_NO_UNITS();
+	}
+
+```
+
+</details>

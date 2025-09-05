@@ -538,3 +538,67 @@ public entry fun extend_expiration(
 ```
 
 </details>
+
+## 11.[Medium] Agents can evade the full extent of a slash
+
+### Evade slash
+
+- Summary: The `slashTimestamp()` function in Cap Delegation is flawed because it always returns the later of an agent’s last borrow time or delegation epoch start, which creates only a narrow window for slashing. This allows agents to front-run share reduction transactions by borrowing in the same block, causing their `slashableCollateral` and `coverage` to always return zero. As a result, agents can avoid the full penalty—or even completely evade slashing—despite being slashable under the symbiotic vault’s rules, leading to an under-enforcement of penalties.
+
+- Impact & Recommendation: Adjust `slashTimestamp` to use `lastBorrow - 1` and include a check of the agent’s collateral state before the borrow, ensuring slashing still applies even if borrowing and share reduction occur in the same block.
+
+  <br> 🐬: [Source](https://github.com/sherlock-audit/2025-07-cap-judging/issues/316) & [Report](https://audits.sherlock.xyz/contests/990/report)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    /// @inheritdoc IDelegation
+    function slashTimestamp(address _agent) public view returns (uint48 _slashTimestamp) {
+        DelegationStorage storage $ = getDelegationStorage();
+        _slashTimestamp = uint48(Math.max((epoch() - 1) * $.epochDuration, $.agentData[_agent].lastBorrow));
+        if (_slashTimestamp == block.timestamp) _slashTimestamp -= 1;
+    }
+
+```
+
+</details>
+
+## 12.[Medium] Changing the epoch duration will completely break the vault and the slashers
+
+### Epoch duration mismatch
+
+- Summary: This issue arises because the vaults (`BASE_VAULT_VERSION`, `TOKENIZED_VAULT_VERSION`) and slashers (INSTANT, VETO) use a fixed epoch duration that does not update when `EpochManager::setEpochDuration()` is called. Changing the epoch length in the manager creates inconsistencies: slashing checks depending on epoch timing (e.g., instant slashing within one epoch, veto duration vs. epoch duration, `Vault::onSlash()` requiring currentEpoch - 1) will revert or fail, making slashing impossible or ineffective. As a result, the staking and slashing mechanisms break entirely if the epoch duration changes.
+
+- Impact & Recommendation: When saving a config, make sure collateral is already registered, require burner == address(0) when isBurnerHook is false, and if a VETO slasher is chosen verify epochDuration – vetoDuration is still at least slashingWindow (plus the recommended safety buffer).
+
+  <br> 🐬: [Source](https://github.com/sherlock-audit/2025-06-symbiotic-relay-judging/issues/410) & [Report](https://audits.sherlock.xyz/contests/967/report)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function _validateConfig(
+        IOpNetVaultAutoDeploy.AutoDeployConfig memory config
+    ) public view {
+        if (config.collateral == address(0)) {
+            revert IOpNetVaultAutoDeploy.OpNetVaultAutoDeploy_InvalidCollateral();
+        }
+        if (config.epochDuration == 0) {
+            revert IOpNetVaultAutoDeploy.OpNetVaultAutoDeploy_InvalidEpochDuration();
+        }
+        uint48 slashingWindow = IVotingPowerProvider(address(this)).getSlashingWindow();
+        if (config.epochDuration < slashingWindow) {
+            revert IOpNetVaultAutoDeploy.OpNetVaultAutoDeploy_InvalidEpochDuration();
+        }
+        if (!config.withSlasher && slashingWindow > 0) {
+            revert IOpNetVaultAutoDeploy.OpNetVaultAutoDeploy_InvalidWithSlasher();
+        }
+        if (!config.withSlasher && config.isBurnerHook) {
+            revert IOpNetVaultAutoDeploy.OpNetVaultAutoDeploy_InvalidBurnerHook();
+        }
+    }
+
+```
+
+</details>

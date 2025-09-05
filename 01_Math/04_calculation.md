@@ -1587,3 +1587,62 @@ Put nav calculation outside of the for loop.
 ```
 
 </details>
+
+## 26.[High] Protocol Fee Multiple Accrual in Oracle.submitReports
+
+### Protocol fee overcharge
+
+- Summary: **ShareModule.handleReport** accrues protocol fees for each asset report using the same outdated timestamp until the base asset is processed, since **FeeManager.updateState** only updates the timestamp for the base asset. As a result, when non-base assets are reported first in a batch, the protocol fee calculation repeats for each report based on the same elapsed time, causing multiple fee accruals for the same period. This leads to **excessive and unfair protocol fees** being minted to the fee recipient whenever multiple reports are submitted in a single transaction with the base asset appearing later in the batch.
+
+- Impact & Recommendation: Accrue protocol fees only once per batch by updating the timestamp at the start of submission or restricting fee calculation to a single call per batch, preventing duplicate charges.
+
+  <br> 🐬: [Source](https://github.com/sherlock-audit/2025-07-mellow-flexible-vaults-judging/issues/167) & [Report](https://audits.sherlock.xyz/contests/964/report)
+
+<details><summary>POC</summary>
+
+```solidity
+function testMultipleTimesFee() external {
+    Deployment memory deployment = createVault(vaultAdmin, vaultProxyAdmin, assetsDefault);
+    Oracle oracle = deployment.oracle;
+    address asset = assetsDefault[0];
+
+    vm.startPrank(vaultAdmin);
+    deployment.feeManager.setFeeRecipient(vaultAdmin);
+    deployment.feeManager.setFees(0,0,0, 1e5); // 10% protocol fee
+    deployment.feeManager.setBaseAsset(address(deployment.vault), asset);
+    vm.stopPrank();
+
+    IOracle.Report[] memory reports = new IOracle.Report[](3);
+    for (uint256 i = 0; i < 3; i++) {
+        reports[i].asset = assetsDefault[2 - i];
+        reports[i].priceD18 = 1e18;
+    }
+
+    vm.startPrank(vaultAdmin);
+    oracle.submitReports(reports);
+    for (uint256 i = 0; i < 3; i++) {
+        oracle.acceptReport(reports[i].asset, reports[i].priceD18, uint32(block.timestamp));
+    }
+    vm.stopPrank();
+
+    // Set initial shares to 1000
+    vm.prank(address(deployment.vault));
+    deployment.shareManager.mint(address(0x100), 1000 ether);
+
+    // Move time forward by 1 year
+    skip(365 days);
+
+    // Submit reports for 3 assets
+    vm.prank(vaultAdmin);
+    oracle.submitReports(reports);
+
+    // Check the fee recipient's shares
+    uint256 feeRecipientShares = deployment.shareManager.sharesOf(vaultAdmin);
+    console.log("Fee recipient shares:", feeRecipientShares);
+
+    assertGt(feeRecipientShares, 300 ether, "Fee recipient shares mismatch");
+}
+
+```
+
+</details>
