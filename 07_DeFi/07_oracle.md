@@ -476,7 +476,7 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
 - Summary: ChainLinkDataConsumer applies the same allowedPriceUpdateDelay (heartbeat) to multiple Chainlink feeds, despite each feed having different native heartbeats (e.g., USDC/USD with 24h vs. others with ~1h). This design forces the contract to either use the longest heartbeat (risking consumption of stale prices from faster feeds) or the shortest heartbeat (causing frequent reverts when slower feeds are within their normal delay). As a result, the system faces a trade-off between downtime and stale data, undermining the reliability of price checks.
 
 - Impact & Recommendation: Use individual heartbeat periods
-  <br> 🐬: [Source](https://audits.sherlock.xyz/contests/1065/report#NeutrlProtocol) & [Report](https://audits.sherlock.xyz/contests/1065/report)
+  <br> 🐬: [Source](https://code4rena.com/reports/2025-08-morpheus#m-01-same-heartbeat-for-multiple-price-feeds-is-vulnerable) & [Report](https://code4rena.com/reports/2025-08-morpheus)
 
 <details><summary>POC</summary>
 

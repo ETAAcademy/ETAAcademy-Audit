@@ -1883,11 +1883,19 @@ contract EURFToken is
 - Summary: The `_deposit()` function in `sNUSD.sol` only checks for `SOFT_RESTRICTED_STAKER_ROLE` but not `FULL_RESTRICTED_STAKER_ROLE`, allowing fully blacklisted users to bypass restrictions by depositing or minting through another address. As a result, users with a full blacklist role can continue accessing Neutrl’s yield strategies, undermining KYC/AML compliance, enabling sanctioned or fraudulent actors to participate, exposing the protocol to legal and regulatory risks, and compromising the integrity of its blacklist system.
 
 - Impact & Recommendation: The recommended fix is to override `approve()` and add a call to `transferSanity()` to ensure both parties are not blacklisted before approval is granted.
-  <br> 🐬: [Source](https://code4rena.com/reports/2025-01-next-generation#m-02-approve-operation-is-not-overridden-to-call-transfersanity-thus-its-allowed-to-approve-blacklisted-accounts-which-breaks-protocol-invariant) & [Report](https://code4rena.com/reports/2025-01-next-generation)
+  <br> 🐬: [Source](https://audits.sherlock.xyz/contests/1065/report#NeutrlProtocol) & [Report](https://audits.sherlock.xyz/contests/1065/report)
 
 <details><summary>POC</summary>
 
 ```solidity
+function _deposit(address caller, address receiver, uint256 assets, uint256 shares) internal override {
+    if (hasRole(SOFT_RESTRICTED_STAKER_ROLE, caller) || hasRole(SOFT_RESTRICTED_STAKER_ROLE, receiver)) {
+        revert OperationNotAllowed();  // ⚠️ ONLY CHECKS SOFT_RESTRICTED_STAKER_ROLE
+    }
+    if (assets == 0 || shares == 0) revert ZeroInput();
+    super._deposit(caller, receiver, assets, shares);
+    _checkMinShares();
+}
 
 ```
 
