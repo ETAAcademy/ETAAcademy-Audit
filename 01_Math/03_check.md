@@ -1900,3 +1900,42 @@ function _deposit(address caller, address receiver, uint256 assets, uint256 shar
 ```
 
 </details>
+
+## 35. [Medium] Rebalancer can drain market funds via excessive bridge fees
+
+### Protocol drainage
+
+- Summary: A semi-trusted REBALANCER_EOA can drain user funds by abusing the EverclearBridge: since `sendMsg` accepts unchecked messages, a malicious rebalancer can set an arbitrarily high `maxFee` (e.g., 9.9 WETH on a 10 WETH transfer), causing almost all bridged funds to be lost as fees, directly depleting market liquidity; while the rebalancer does not receive the funds, this contradicts the assumption that it cannot steal user assets, so the fix is to enforce protocol-defined maximum fee limits per token/chain and validate them in the bridge contract.
+
+- Impact & Recommendation: Add per-token/chain fee caps set by GUARDIAN_BRIDGE and validate maxFee in EverclearBridge.sendMsg.
+  <br> 🐬: [Source](https://audits.sherlock.xyz/contests/1029/report#Malda-M-12-Rebalancer-can-drain-market-funds-via-excessive-bridge-fees) & [Report](https://audits.sherlock.xyz/contests/1029/report)
+
+<details><summary>POC</summary>
+
+```solidity
+
+    function sendMsg(
+        uint256 _extractedAmount,
+        address _market,
+        uint32 _dstChainId,
+        address _token,
+        bytes memory _message,
+        bytes memory // unused
+    ) external payable onlyRebalancer {
+...
+        (bytes32 id,) = everclearFeeAdapter.newIntent(
+            params.destinations,
+            params.receiver,
+            params.inputAsset,
+            params.outputAsset,
+            params.amount,
+            params.maxFee,
+            params.ttl,
+            params.data,
+            params.feeParams
+        );
+    }
+
+```
+
+</details>

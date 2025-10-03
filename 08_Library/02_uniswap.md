@@ -166,3 +166,80 @@ contract TestPoCReallocate is TestPool {
 ```
 
 </details>
+
+## 5.[High] Gas consumed in notifyUnsubscribe is underestimated during tests and is greater than 300,000 without pre-warming
+
+### Gas underestimation causes ghost liquidity and reward dilution
+
+- Summary: `PositionManagerAdapter.notifyUnsubscribe` can consume more gas than Uniswap V4’s `unsubscribeGasLimit` (300k), so during an `unsubscribe` the notifier may skip the `notifyUnsubscribe` call (caught by `try/catch`) while Uniswap still considers the unsubscribe successful; as a result Deli’s gauge accounting continues to include the position’s liquidity (a “ghost” liquidity) and a malicious user can exploit this to permanently dilute rewards for that range (by burning or re-subscribing the NFT), and admin remedies like `adminForceUnsubscribe` do not clear the incorrect global accounting.
+
+- Impact & Recommendation: Keep notifyUnsubscribe gas under ~295k, or raise unsubscribeGasLimit above 300k to prevent ghost liquidity.
+  <br> 🐬: [Source](https://audits.sherlock.xyz/contests/1154/report#BMX-Deli-Swap-Issue-H-1-Gas-consumed-in-notifyUnsubscribe-is-underestimated-during-tests-and-is-greater-than-300,000-without-pre-warming) & [Report](https://audits.sherlock.xyz/contests/1154/report)
+
+<details><summary>POC</summary>
+
+```solidity
+
+diff --git a/deli-swap-contracts/test/integration/PositionLifecycleCleanup.t.sol b/deli-swap-contracts/test/integration/PositionLifecycleCleanup.t.sol
+index 07499d3..56ab07e 100644
+--- a/deli-swap-contracts/test/integration/PositionLifecycleCleanup.t.sol
++++ b/deli-swap-contracts/test/integration/PositionLifecycleCleanup.t.sol
+@@ -594,31 +594,36 @@ contract PositionLifecycleCleanup_IT is Test, Deployers {
+         _gasAdapterNotifyUnsub(3, "adapter_notify_unsub_3");
+     }
+
+-    /// Worst-case parameters for unsubscribe gas: two extra incentive tokens (plus base wBLT from _activateStream),
+-    /// large elapsed time without prior syncs to force Daily's multi-day integration and maximize cold reads.
+-    /// to force Daily's multi-day integration during unsubscribe and maximize cold reads.
+-    function testGasAdapterNotifyUnsubTwoWorst() public {
++    function worstCaseBeforeSetup() public {
+         // 1) Mint and subscribe two positions
+-        uint256 tokenId = _mintAndSubscribe(-1800, 1800, 1e22);
++        uint256 tokenId = _mintAndSubscribe(-2400, 2400, 1e22);
++        //@audit-ok enforce first token minted has id == 2 for consistency with test case
++        assert(tokenId == 2);
+         uint256 tokenId2 = _mintAndSubscribe(-1800, 1800, 1e22);
+
+         // 2) Activate Daily stream and base incentive, then add two extra incentive tokens (3 total incentives)
+         _activateStream();
+-        _addIncentiveTokens(10);
++        //@audit-ok no need to add additional incentive tokens
+
+-        // 3) Warp many days ahead to force DailyEpochGauge._amountOverWindow to iterate across many day boundaries
+-        //    and ensure significant elapsed time for incentive calculations, without additional pokes.
+-        vm.warp(block.timestamp + 4 days);
++        //@audit-ok no need to even warp
++    }
+
+-        // 4) Measure only the adapter.notifyUnsubscribe path
+-        vm.startPrank(address(positionManager));
+-        vm.startSnapshotGas("adapter_notify_unsub_2_worst_first");
+-        adapter.notifyUnsubscribe(tokenId);
+-        vm.stopSnapshotGas();
+-        vm.startSnapshotGas("adapter_notify_unsub_2_worst_second");
+-        adapter.notifyUnsubscribe(tokenId2);
+-        vm.stopSnapshotGas();
+-        vm.stopPrank();
++    //@audit-ok special foundry function, isolates calls before test in a separate transaction
++    function beforeTestSetup(bytes4 testSelector) public returns (bytes[] memory beforeTestCalldata) {
++        if (testSelector == this.testGasAdapterNotifyUnsubTwoWorst.selector) {
++            beforeTestCalldata = new bytes[](1);
++            //@audit-ok make the setup for the worst case in an isolated transaction
++            //@audit-ok we do this to avoid warming up all of the storage slots used later in notifySubscribe call
++            beforeTestCalldata[0] = abi.encodeWithSelector(this.worstCaseBeforeSetup.selector);
++        }
++    }
++
++    /// Worst-case parameters for unsubscribe gas: two extra incentive tokens (plus base wBLT from _activateStream),
++    /// large elapsed time without prior syncs to force Daily's multi-day integration and maximize cold reads.
++    /// to force Daily's multi-day integration during unsubscribe and maximize cold reads.
++    function testGasAdapterNotifyUnsubTwoWorst() public {
++        //@audit-ok use hardcoded token id 2 for simplicity, but this is enforced with assert during preparation
++        positionManager.unsubscribe(2); // @audit-ok run forge test -vvvv to see that notifyUnsubscribe has failed with OOG
+     }
+
+     /*//////////////////////////////////////////////////////////////
+
+```
+
+</details>

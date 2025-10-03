@@ -552,3 +552,40 @@ function test_misshandlingOfReceivingHYPE() public {
 ```
 
 </details>
+
+## 15. [High] Batch State Commitment Bypass Leading to Replay Attacks
+
+### Batch Replay Attack
+
+- Summary: The original code simply used the current batch commitment directly as the proof public input ( proofPublicInput[i] = uint256(currentBatchCommitment) ), which created vulnerabilities including potential batch replay attacks, state commitment bypass, and insufficient batch linking integrity. The updated implementation introduces a more robust approach by computing the public input as a hash of three components: the previous batch state commitment, current batch state commitment, and current batch commitment ( keccak256(abi.encodePacked(prevBatchStateCommitment, currentBatchStateCommitment, currentBatchCommitment)) >> PUBLIC_INPUT_SHIFT ).
+
+- Impact & Recommendation: This change ensures proper batch chaining, prevents replay attacks by making each proof unique through dependency on previous state, validates both the commitment and state hash to prevent state inconsistencies, and applies a bit shift operation to conform to zero-knowledge proof system field size requirements, ultimately strengthening the overall security of zkSync's batch processing mechanism against potential manipulation or bypass attempts.
+  <br> 🐬: [Source](https://github.com/matter-labs/era-contracts/pull/1626) & [Report](https://github.com/matter-labs/era-contracts/commit/58b6e835a89e033cebda96d9bab3e302fb50153e)
+
+<details><summary>POC</summary>
+```solidity
+
+        bytes32 prevBatchStateCommitment = prevBatch.batchHash;
+        for (uint256 i = 0; i < committedBatchesLength; i = i.uncheckedInc()) {
+            currentTotalBatchesVerified = currentTotalBatchesVerified.uncheckedInc();
+            if (_hashStoredBatchInfo(committedBatches[i]) != s.storedBatchHashes[currentTotalBatchesVerified]) {
+
+            bytes32 currentBatchCommitment = committedBatches[i].commitment;
+            bytes32 currentBatchStateCommitment = committedBatches[i].batchHash;
+            if (s.boojumOS) {
+                proofPublicInput[i] = uint256(
+                    keccak256(abi.encodePacked(prevBatchStateCommitment, currentBatchStateCommitment, currentBatchCommitment))
+                ) >> PUBLIC_INPUT_SHIFT;
+            } else {
+                proofPublicInput[i] = _getBatchProofPublicInput(prevBatchCommitment, currentBatchCommitment);
+            }
+
+            prevBatchCommitment = currentBatchCommitment;
+            prevBatchStateCommitment = currentBatchStateCommitment;
+        }
+        if (currentTotalBatchesVerified > s.totalBatchesCommitted) {
+            revert VerifiedBatchesExceedsCommittedBatches();
+
+```
+</details>
+```

