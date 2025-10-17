@@ -306,6 +306,8 @@ Data: tlen  // denotes the length of captured trace
 25  return S
 ```
 
+</details>
+
 ---
 
 ### Side-Channel Vulnerabilities in Machine Learning Models with Embedding Tables and the Security Promise of Deep Hash Embedding
