@@ -26,7 +26,7 @@ Authors: [Evta](https://twitter.com/pwhattie), looking forward to your joining
 
 # From Voltage Levels to Formal Proofs: A Deep Trace of the Hardware-Software Interface
 
-The foundation of computer systems lies in digital abstraction: through nonlinear regeneration mechanisms, the system forcibly constructs absolute "0"s and "1"s amidst the fog of analog voltage noise, laying the cornerstone for logical certainty in the upper layers. 
+The foundation of computer systems lies in digital abstraction: through nonlinear regeneration mechanisms, the system forcibly constructs absolute "0"s and "1"s amidst the fog of analog voltage noise, laying the cornerstone for logical certainty in the upper layers.
 
 Above this, processor hardware leverages complex pipeline prediction, out-of-order execution, and multi-level memory hierarchies to navigate the arduous "impossible triangle" of performance, capacity, and cost. Operating systems further extend this art of "illusion," creating independent and controlled execution environments for every process via virtual memory mapping and privilege mode transitions.
 
@@ -34,7 +34,7 @@ However, against the grand backdrop of contemporary heterogeneous distributed So
 
 ---
 
-Modern computers are no longer built around one or several symmetric CPUs connected to memory and devices via a uniform bus. Instead, a contemporary system-on-chip (SoC) is a *distributed hardware network*. Linux is merely one large node inside that network—not its master.
+Modern computers are no longer built around one or several symmetric CPUs connected to memory and devices via a uniform bus. Instead, a contemporary system-on-chip (SoC) is a _distributed hardware network_. Linux is merely one large node inside that network—not its master.
 
 Today’s SoCs, whether in smartphones or servers, are deeply heterogeneous distributed systems. A single chip may contain dozens of processors: general-purpose CPUs, GPUs, DSPs, AI accelerators, power-management cores, security enclaves, and a wide range of controllers. These processors differ in architecture (ARM, RISC-V, proprietary ISAs), privilege models, and trust assumptions. They often do **not** share a unified physical address space; the same memory region may appear at different addresses to different cores. Cache coherence does not extend across the entire chip. Linux runs on only a subset of this hardware.
 
@@ -44,19 +44,19 @@ If hardware has become distributed, the operating system must be redesigned as a
 
 #### Linux Is Not the OS—It Is One Tenant Among Many
 
-On modern devices, Linux occupies only a fraction of the system. The *real* operating system is a patchwork: Linux on the application CPU, real-time kernels on DSPs, microkernels in secure enclaves, proprietary firmware for power management, networking, and media processing.
+On modern devices, Linux occupies only a fraction of the system. The _real_ operating system is a patchwork: Linux on the application CPU, real-time kernels on DSPs, microkernels in secure enclaves, proprietary firmware for power management, networking, and media processing.
 
 This “operating system” was not architected as a coherent whole. It emerged by **congealing incompatible software fragments** over time. The result is a fragile, security-critical mess.
 
-So-called *shadow systems* are everywhere. Modern computers routinely run multiple operating systems in parallel—Intel Management Engine, AMD PSP, secure enclave OSes, modem OSes—without the knowledge or visibility of the main OS. This fragmentation of authority creates ideal conditions for hardware Trojans, persistent backdoors, and systemic vulnerabilities.
+So-called _shadow systems_ are everywhere. Modern computers routinely run multiple operating systems in parallel—Intel Management Engine, AMD PSP, secure enclave OSes, modem OSes—without the knowledge or visibility of the main OS. This fragmentation of authority creates ideal conditions for hardware Trojans, persistent backdoors, and systemic vulnerabilities.
 
 Linux believes it controls the machine. In reality, it is a tenant living in a vast hardware building whose neighboring rooms it cannot see—and may already be compromised.
 
 #### Cross-SoC Attacks and the “Dumb Device” Fallacy
 
-A striking example is the class of *cross-SoC attacks*, such as Qualcomm’s **QualPwn** vulnerabilities. Linux treats components like the cellular modem as “dumb devices”: peripherals that merely send and receive data. But modern modems are powerful computers running their own complex operating systems.
+A striking example is the class of _cross-SoC attacks_, such as Qualcomm’s **QualPwn** vulnerabilities. Linux treats components like the cellular modem as “dumb devices”: peripherals that merely send and receive data. But modern modems are powerful computers running their own complex operating systems.
 
-An attacker can exploit the modem via malicious radio packets, compromise its OS, and then attack Linux *from inside the same chip*. Linux fails to defend itself because it trusts the hardware boundary—assuming the modem is not a peer OS but a passive device.
+An attacker can exploit the modem via malicious radio packets, compromise its OS, and then attack Linux _from inside the same chip_. Linux fails to defend itself because it trusts the hardware boundary—assuming the modem is not a peer OS but a passive device.
 
 The irony is stark: Linux thinks it manages hardware, but in reality it is surrounded by autonomous subsystems that can outgun it.
 
@@ -64,7 +64,7 @@ The irony is stark: Linux thinks it manages hardware, but in reality it is surro
 
 Linux assumes a single, global physical address space. On SoCs, this assumption collapses.
 
-Different processors often see memory through different address mappings. To communicate, drivers must manually perform *pointer swizzling*, translating addresses between incompatible views of memory. This is not a peripheral problem—it is a core operating system responsibility.
+Different processors often see memory through different address mappings. To communicate, drivers must manually perform _pointer swizzling_, translating addresses between incompatible views of memory. This is not a peripheral problem—it is a core operating system responsibility.
 
 Because Linux lacks native support for heterogeneous address spaces, the burden is pushed onto device drivers. A mistake in address translation can allow a compromised subsystem (such as a modem) to trick Linux into mapping the wrong memory, leading to full system compromise.
 
@@ -80,7 +80,7 @@ This is not coordination; it is blind interference.
 
 #### The Great Retreat of the Operating System
 
-As Linux fails to manage security, power, and heterogeneity, hardware vendors respond by **bypassing the OS entirely**. More logic moves into firmware, microcontrollers, and opaque hardware state machines. Hardware is increasingly designed to *sandbox Linux*, rather than be managed by it.
+As Linux fails to manage security, power, and heterogeneity, hardware vendors respond by **bypassing the OS entirely**. More logic moves into firmware, microcontrollers, and opaque hardware state machines. Hardware is increasingly designed to _sandbox Linux_, rather than be managed by it.
 
 The result is architectural ossification. The operating system retreats into a small, comfortable corner of the chip, while the rest of the system evolves beyond its control.
 
@@ -90,7 +90,7 @@ Linux resembles an old aristocracy, clinging to the illusion of sovereignty over
 
 This problem is not limited to mobile SoCs. Even modern servers are deeply heterogeneous.
 
-Every server contains a **Baseboard Management Controller (BMC)**—a separate computer that controls power, clocks, cooling, resets, and firmware updates. A BMC can access system memory *before the main CPU boots*. It often runs Linux or OpenBMC itself.
+Every server contains a **Baseboard Management Controller (BMC)**—a separate computer that controls power, clocks, cooling, resets, and firmware updates. A BMC can access system memory _before the main CPU boots_. It often runs Linux or OpenBMC itself.
 
 Thus, a “server” is not one system but at least two: the host OS and the BMC OS, plus additional autonomous systems in NICs, storage controllers, and power units. The comforting mental model of a clean, Linux-controlled server is a fantasy.
 
@@ -98,9 +98,9 @@ Thus, a “server” is not one system but at least two: the host OS and the BMC
 
 Linux remains a monolithic kernel designed for a single hardware node. Supporting many cores or large memory does not make it distributed in the architectural sense.
 
-A true distributed operating system provides a *single system image* (SSI), transparently managing CPUs, memory, and storage across multiple nodes. Classic examples include Amoeba, Plan 9, and LOCUS.
+A true distributed operating system provides a _single system image_ (SSI), transparently managing CPUs, memory, and storage across multiple nodes. Classic examples include Amoeba, Plan 9, and LOCUS.
 
-Linux is instead an operating system *used to build distributed systems*, not a distributed OS itself.
+Linux is instead an operating system _used to build distributed systems_, not a distributed OS itself.
 
 Attempts to turn Linux into one—MOSIX, Kerrighed, OpenSSI—failed to enter the mainline due to overwhelming complexity, performance overhead, and synchronization costs. Network latency fundamentally breaks the assumptions of kernel-level memory sharing and process migration.
 
@@ -110,9 +110,9 @@ By 2026, the industry consensus is clear: distribution belongs in **user space**
 
 Linux remains a highly optimized single-node kernel, while higher-level systems provide distributed behavior:
 
-* **Kubernetes** acts as a “cloud operating system,” scheduling workloads across thousands of Linux nodes.
-* **Distributed file systems** like Ceph and Lustre unify storage above the OS.
-* **eBPF** enables powerful, low-overhead observability and control without modifying the kernel.
+- **Kubernetes** acts as a “cloud operating system,” scheduling workloads across thousands of Linux nodes.
+- **Distributed file systems** like Ceph and Lustre unify storage above the OS.
+- **eBPF** enables powerful, low-overhead observability and control without modifying the kernel.
 
 Linux survives not by becoming distributed, but by serving as a substrate for distributed orchestration.
 
@@ -132,9 +132,9 @@ This space—rethinking OS design for fundamentally distributed hardware—is a 
 
 ## 1. Digital Systems Are a Useful Illusion: How Energy Buys Certainty in a Noisy World
 
-Digital systems do not truly exist in nature. At the lowest level, everything is analog. Voltages are continuous, noisy, and fundamentally uncertain. The idea that computers manipulate perfect 0s and 1s is, in a very real sense, a carefully engineered *fiction*.
+Digital systems do not truly exist in nature. At the lowest level, everything is analog. Voltages are continuous, noisy, and fundamentally uncertain. The idea that computers manipulate perfect 0s and 1s is, in a very real sense, a carefully engineered _fiction_.
 
-What we call “digital” is an abstraction imposed on an analog physical substrate. By defining strict electrical input/output specifications—most importantly voltage transfer characteristics (VTCs)—we force inherently noisy analog circuits to *behave as if* they were ideal discrete switches.
+What we call “digital” is an abstraction imposed on an analog physical substrate. By defining strict electrical input/output specifications—most importantly voltage transfer characteristics (VTCs)—we force inherently noisy analog circuits to _behave as if_ they were ideal discrete switches.
 
 This abstraction is extraordinarily powerful. It allows us to compose **billions of transistors** without worrying that a tiny voltage fluctuation will cause the computer to miscalculate something as simple as (1 + 1).
 
@@ -144,14 +144,14 @@ At its core, the strength of digital systems lies in a single tradeoff:
 
 ### 1.1 Analog vs. Digital: The Fundamental Difference
 
-In analog systems, signals are continuous. Voltage, current, temperature, and sound pressure all vary smoothly over time. The problem is that *every variation matters*, including noise.
+In analog systems, signals are continuous. Voltage, current, temperature, and sound pressure all vary smoothly over time. The problem is that _every variation matters_, including noise.
 
 Consider a chain of analog amplifiers:
 
-* The input signal $V_I$ is corrupted by noise $\epsilon_1$.
-* The first stage processes $f(V_I + \epsilon_1)$.
-* More noise $\epsilon_2$ is added.
-* The next stage processes $g(f(V_I + \epsilon_1) + \epsilon_2)$.
+- The input signal $V_I$ is corrupted by noise $\epsilon_1$.
+- The first stage processes $f(V_I + \epsilon_1)$.
+- More noise $\epsilon_2$ is added.
+- The next stage processes $g(f(V_I + \epsilon_1) + \epsilon_2)$.
 
 Each stage treats noise as legitimate signal. Noise accumulates, propagates, and is often amplified. After enough stages, the original signal becomes unrecoverable.
 
@@ -159,7 +159,7 @@ This is the fatal weakness of analog computation: **noise compounds**.
 
 **Digital Systems: Noise Is Eliminated, Stage by Stage**
 
-Digital systems work differently. They do not preserve signal fidelity; they preserve *symbol identity*.
+Digital systems work differently. They do not preserve signal fidelity; they preserve _symbol identity_.
 
 A digital system only cares whether a voltage lies within a predefined range corresponding to “0” or “1”. As long as noise does not push the signal outside that range, the symbol remains intact.
 
@@ -171,8 +171,8 @@ This regenerative property is the true superpower of digital logic.
 
 A naïve approach would be to define a single threshold $V_{TH}$:
 
-* $V < V_{TH}$ → “0”
-* $V \ge V_{TH}$ → “1”
+- $V < V_{TH}$ → “0”
+- $V \ge V_{TH}$ → “1”
 
 This is fragile. If the transmitted voltage lies near $V_{TH}$, even a tiny amount of noise can flip the interpretation. Such a system cannot operate reliably in the physical world.
 
@@ -180,9 +180,9 @@ This is fragile. If the transmitted voltage lies near $V_{TH}$, even a tiny amou
 
 A better idea is to introduce two thresholds:
 
-* $V \le V_L$ → “0”
-* $V \ge V_H$ → “1”
-* $V_L < V < V_H$ → **undefined (illegal region)**
+- $V \le V_L$ → “0”
+- $V \ge V_H$ → “1”
+- $V_L < V < V_H$ → **undefined (illegal region)**
 
 This creates a buffer zone between valid 0 and 1. However, by itself, this still does not guarantee reliability.
 
@@ -200,19 +200,20 @@ This leads to the fundamental inequality:
 
 $V_{OL} < V_{IL} < V_{IH} < V_{OH}$
 
-* **Output standards**
+- **Output standards**
 
-  * $V_{OL}$: maximum voltage guaranteed for output “0”
-  * $V_{OH}$: minimum voltage guaranteed for output “1”
-* **Input standards**
+  - $V_{OL}$: maximum voltage guaranteed for output “0”
+  - $V_{OH}$: minimum voltage guaranteed for output “1”
 
-  * $V_{IL}$: maximum voltage still recognized as input “0”
-  * $V_{IH}$: minimum voltage recognized as input “1”
+- **Input standards**
+
+  - $V_{IL}$: maximum voltage still recognized as input “0”
+  - $V_{IH}$: minimum voltage recognized as input “1”
 
 This asymmetry creates **noise margins**:
 
-* Low-level noise margin: $V_{IL} - V_{OL}$
-* High-level noise margin: $V_{OH} - V_{IH}$
+- Low-level noise margin: $V_{IL} - V_{OL}$
+- High-level noise margin: $V_{OH} - V_{IH}$
 
 As long as noise stays within these margins, correct interpretation is guaranteed.
 
@@ -247,8 +248,8 @@ $\left| \frac{dV_{out}}{dV_{in}} \right| > 1$
 
 This high gain ensures that small input variations produce large output swings. Since:
 
-* Output swing: $V_{OH} - V_{OL}$
-* Input uncertainty window: $V_{IH} - V_{IL}$
+- Output swing: $V_{OH} - V_{OL}$
+- Input uncertainty window: $V_{IH} - V_{IL}$
 
 We require:
 
@@ -260,7 +261,7 @@ This steep, nonlinear behavior is what rapidly forces ambiguous inputs toward cl
 
 ### 1.2 The Memory Hierarchy: How Computers Achieve Fast, Large, and Cheap Storage
 
-The **memory hierarchy** reveals one of the most important tricks in computer architecture: how modern computers allow us to enjoy storage that feels *both large and fast*, at an extremely low cost.
+The **memory hierarchy** reveals one of the most important tricks in computer architecture: how modern computers allow us to enjoy storage that feels _both large and fast_, at an extremely low cost.
 
 This is not magic—it is a carefully engineered compromise.
 
@@ -279,27 +280,27 @@ Programs feel fast because frequently accessed data stays near the top of this p
 
 Programs exhibit:
 
-* **Temporal locality**: recently used data is likely to be used again
-* **Spatial locality**: nearby data is likely to be used soon
+- **Temporal locality**: recently used data is likely to be used again
+- **Spatial locality**: nearby data is likely to be used soon
 
 Caches exploit this using replicas of memory blocks. Performance is measured by **Average Memory Access Time (AMAT)**:
 
 $AMAT = HitTime + MissRate \times MissPenalty$
 
-With sufficiently high hit rates, even slow memory can *feel* fast.
+With sufficiently high hit rates, even slow memory can _feel_ fast.
 
 #### The Fundamental Tradeoff in Storage Technology
 
 All storage technologies are constrained by an “impossible triangle”:
 
-* **Capacity**
-* **Speed (latency)**
-* **Cost**
+- **Capacity**
+- **Speed (latency)**
+- **Cost**
 
 No technology can optimize all three simultaneously.
 
-* Faster memory (lower latency) is **more expensive** and typically **smaller**, due to higher power consumption and larger silicon area.
-* Larger memory is **cheaper per bit**, but **slower**, due to physical distance, addressing overhead, and signal propagation limits.
+- Faster memory (lower latency) is **more expensive** and typically **smaller**, due to higher power consumption and larger silicon area.
+- Larger memory is **cheaper per bit**, but **slower**, due to physical distance, addressing overhead, and signal propagation limits.
 
 The memory hierarchy embraces this reality by stacking different technologies, each optimized for a different point in this tradeoff space.
 
@@ -309,11 +310,11 @@ The memory hierarchy embraces this reality by stacking different technologies, e
 
 Registers are the fastest storage elements in the system, with access times on the order of **20 picoseconds**.
 
-* Located directly inside the CPU’s **datapath**
-* The *only* storage the CPU can operate on directly
-* Must match the CPU clock rate
-* Extremely expensive in area and power
-* Capacity limited to only a few hundred bits
+- Located directly inside the CPU’s **datapath**
+- The _only_ storage the CPU can operate on directly
+- Must match the CPU clock rate
+- Extremely expensive in area and power
+- Capacity limited to only a few hundred bits
 
 Registers exist solely to keep the processor running at full speed.
 
@@ -321,11 +322,11 @@ Registers exist solely to keep the processor running at full speed.
 
 Static RAM (SRAM) is used for CPU caches (L1, L2, and often L3).
 
-* Access latency: **1–10 nanoseconds**
-* Very fast, but expensive
-* No refresh required
-* Medium capacity (KBs to MBs)
-* Located on-chip or very close to the CPU
+- Access latency: **1–10 nanoseconds**
+- Very fast, but expensive
+- No refresh required
+- Medium capacity (KBs to MBs)
+- Located on-chip or very close to the CPU
 
 SRAM caches exist to mitigate the massive performance gap between the CPU and main memory.
 
@@ -333,11 +334,11 @@ SRAM caches exist to mitigate the massive performance gap between the CPU and ma
 
 Dynamic RAM (DRAM) is what we usually mean by “system memory.”
 
-* Access latency: ~**80 nanoseconds**
-* Large capacity
-* Much cheaper than SRAM
-* Stores data as charge in capacitors
-* Requires periodic refresh
+- Access latency: ~**80 nanoseconds**
+- Large capacity
+- Much cheaper than SRAM
+- Stores data as charge in capacitors
+- Requires periodic refresh
 
 DRAM is the main workspace where programs and data reside during execution.
 
@@ -345,16 +346,17 @@ DRAM is the main workspace where programs and data reside during execution.
 
 Persistent storage trades speed for capacity and cost.
 
-* **Flash (SSD)**:
+- **Flash (SSD)**:
 
-  * Non-volatile
-  * Faster than disks
-  * Limited write endurance
-* **Hard Disk Drives (HDDs)**:
+  - Non-volatile
+  - Faster than disks
+  - Limited write endurance
 
-  * Mechanical, millisecond latency
-  * Extremely cheap (~$0.10/GB)
-  * Ideal for cold, massive datasets
+- **Hard Disk Drives (HDDs)**:
+
+  - Mechanical, millisecond latency
+  - Extremely cheap (~$0.10/GB)
+  - Ideal for cold, massive datasets
 
 #### SRAM vs. DRAM: A Look at the Circuit Level
 
@@ -362,13 +364,14 @@ Persistent storage trades speed for capacity and cost.
 
 An SRAM cell consists of **six transistors**, forming two cross-coupled CMOS inverters.
 
-* The circuit has two stable equilibrium points:
+- The circuit has two stable equilibrium points:
 
-  * Left = 1, Right = 0 (logic 1)
-  * Left = 0, Right = 1 (logic 0)
-* As long as power (Vdd) is applied, the bit is perfectly retained
-* No leakage-related decay
-* No refresh required
+  - Left = 1, Right = 0 (logic 1)
+  - Left = 0, Right = 1 (logic 0)
+
+- As long as power (Vdd) is applied, the bit is perfectly retained
+- No leakage-related decay
+- No refresh required
 
 The cost is area. Storing a single bit requires six transistors plus wordlines and differential bitlines. A 16 MB cache contains nearly **100 million** such cells.
 
@@ -376,17 +379,17 @@ The cost is area. Storing a single bit requires six transistors plus wordlines a
 
 In an **8×6 SRAM array**:
 
-* 8 rows (words)
-* 6 bits per word
-* Total capacity: 48 bits
+- 8 rows (words)
+- 6 bits per word
+- Total capacity: 48 bits
 
 Key components include:
 
-* **Address decoder**: activates exactly one wordline
-* **Wordlines (horizontal)**: enable access to a selected row
-* **Bitlines (vertical)**: carry data in and out
-* **Sense amplifiers**: detect tiny voltage differences during reads
-* **Write drivers**: force new values during writes
+- **Address decoder**: activates exactly one wordline
+- **Wordlines (horizontal)**: enable access to a selected row
+- **Bitlines (vertical)**: carry data in and out
+- **Sense amplifiers**: detect tiny voltage differences during reads
+- **Write drivers**: force new values during writes
 
 Reads rely on sensitive amplification of small signals; writes rely on brute-force overwriting.
 
@@ -396,13 +399,13 @@ Multi-ported SRAM adds additional wordlines, bitlines, and access transistors—
 
 A DRAM cell uses only:
 
-* **1 access transistor**
+- **1 access transistor**
 
-* **1 storage capacitor**
+- **1 storage capacitor**
 
-* Charge = 1
+- Charge = 1
 
-* No charge = 0
+- No charge = 0
 
 Because the capacitor leaks charge, DRAM must be **periodically refreshed**.
 
@@ -414,23 +417,23 @@ This simple structure is roughly **20× denser than SRAM**, which is why DRAM is
 
 Flash memory is built from **floating-gate transistors**.
 
-* A floating gate is completely insulated by oxide
-* High voltage injects electrons via quantum tunneling
-* Trapped electrons remain for years without power
+- A floating gate is completely insulated by oxide
+- High voltage injects electrons via quantum tunneling
+- Trapped electrons remain for years without power
 
 Stored charge shifts the transistor’s threshold voltage:
 
-* Charged → transistor stays off
-* Uncharged → transistor turns on
+- Charged → transistor stays off
+- Uncharged → transistor turns on
 
 By precisely controlling charge levels, one cell can store multiple bits (MLC, TLC, QLC).
 
 Tradeoffs:
 
-* Fast reads
-* Slow writes and erases
-* Block-level erase only
-* Finite write endurance
+- Fast reads
+- Slow writes and erases
+- Block-level erase only
+- Finite write endurance
 
 This is why SSDs have a measurable lifespan.
 
@@ -438,10 +441,10 @@ This is why SSDs have a measurable lifespan.
 
 HDDs store data magnetically on spinning platters.
 
-* Platters rotate at ~7200 RPM
-* Read/write heads float nanometers above the surface
-* Bits are stored as magnetic polarity
-* Organized into tracks and sectors
+- Platters rotate at ~7200 RPM
+- Read/write heads float nanometers above the surface
+- Bits are stored as magnetic polarity
+- Organized into tracks and sectors
 
 HDDs are slow but remain unmatched in cost-per-bit for massive storage.
 
@@ -449,8 +452,8 @@ HDDs are slow but remain unmatched in cost-per-bit for massive storage.
 
 Programs are not random. They exhibit **locality**:
 
-* **Temporal locality**: recently accessed data is likely to be reused
-* **Spatial locality**: nearby data is likely to be accessed soon
+- **Temporal locality**: recently accessed data is likely to be reused
+- **Spatial locality**: nearby data is likely to be accessed soon
 
 Caches exploit this predictability.
 
@@ -476,9 +479,9 @@ Each memory block maps to exactly one cache line.
 
 Address is divided into:
 
-* **Tag**: identifies the memory block
-* **Index**: selects the cache line
-* **Offset**: selects data within the block
+- **Tag**: identifies the memory block
+- **Index**: selects the cache line
+- **Offset**: selects data within the block
 
 Simple and fast, but prone to **conflict misses**.
 
@@ -486,17 +489,17 @@ Simple and fast, but prone to **conflict misses**.
 
 A compromise between direct-mapped and fully associative caches.
 
-* Cache divided into sets
-* Each set has N lines
-* Hardware compares N tags in parallel
+- Cache divided into sets
+- Each set has N lines
+- Hardware compares N tags in parallel
 
 This greatly reduces conflict misses at moderate cost.
 
 **Fully Associative Cache**
 
-* Any block can go anywhere
-* No index field
-* Hardware must compare all tags in parallel
+- Any block can go anywhere
+- No index field
+- Hardware must compare all tags in parallel
 
 Extremely expensive, used only for very small structures.
 
@@ -520,10 +523,10 @@ $$
 Pipeline design primarily targets two levers in this equation:
 
 - **Reduce CPI (Cycles Per Instruction)**
-   In the ideal case, the pipeline completes one instruction every clock cycle, pushing CPI toward 1.
+  In the ideal case, the pipeline completes one instruction every clock cycle, pushing CPI toward 1.
 
 - **Reduce Cycle Time**
-   By breaking a complex instruction into smaller stages (e.g., IF, ID, EX, MEM, WB), each stage does less work, allowing a shorter clock period and higher frequency.
+  By breaking a complex instruction into smaller stages (e.g., IF, ID, EX, MEM, WB), each stage does less work, allowing a shorter clock period and higher frequency.
 
 #### The Classic Five-Stage Pipeline
 
@@ -545,9 +548,9 @@ A **data hazard** occurs when an instruction depends on the result of a previous
 
 The simplest solution is to **stall** the pipeline:
 
-* The dependent instruction waits in the decode stage
-* Empty cycles (called **bubbles** or NOPs) are inserted
-* CPI increases, performance degrades
+- The dependent instruction waits in the decode stage
+- Empty cycles (called **bubbles** or NOPs) are inserted
+- CPI increases, performance degrades
 
 This is a safe but inefficient solution.
 
@@ -555,9 +558,9 @@ This is a safe but inefficient solution.
 
 In reality, results are often ready **before** the write-back stage.
 
-* ALU results are available at the end of the EX stage
-* Load results are available at the end of the MEM stage
-* Hardware can forward these values directly to later stages
+- ALU results are available at the end of the EX stage
+- Load results are available at the end of the MEM stage
+- Hardware can forward these values directly to later stages
 
 Bypassing dramatically reduces stalls and is one of the most important pipeline optimizations.
 
@@ -571,32 +574,32 @@ Early pipeline models assumed that memory access always takes one cycle. This as
 
 Modern processors rely on **cache hierarchies**, making memory access latency variable:
 
-* **Cache hit** → pipeline continues smoothly
-* **Cache miss** → pipeline must stall until data arrives from DRAM
+- **Cache hit** → pipeline continues smoothly
+- **Cache miss** → pipeline must stall until data arrives from DRAM
 
 **Instruction Cache Miss (I-Cache Miss)**
 
 Occurs during instruction fetch:
 
-* The pipeline cannot fetch the next instruction
-* Execution stalls until the instruction is loaded into the cache
+- The pipeline cannot fetch the next instruction
+- Execution stalls until the instruction is loaded into the cache
 
 **Data Cache Miss (D-Cache Miss)**
 
 Occurs during the MEM stage:
 
-* The pipeline stalls **mid-stream**
-* All younger instructions must wait for the data
+- The pipeline stalls **mid-stream**
+- All younger instructions must wait for the data
 
 #### Control Hazards: Not Knowing Where to Go
 
-If data hazards are like *waiting for ingredients*, **control hazards** are like *not knowing which road to take*.
+If data hazards are like _waiting for ingredients_, **control hazards** are like _not knowing which road to take_.
 
 Control hazards arise from **branch and jump instructions**:
 
-* Branches
-* `JAL`
-* `JALR`
+- Branches
+- `JAL`
+- `JALR`
 
 **Why Control Hazards Are Hard**
 
@@ -606,15 +609,15 @@ $\text{NextPC} = PC + 4$
 
 But for control-flow instructions:
 
-* **JAL**:
-  
+- **JAL**:
+
   nextPC = pc + immJ
 
-* **JALR**:
+- **JALR**:
 
   nextPC = {(reg[rs1] + immI)[31:1], 1’b0}
 
-* **Branch**:
+- **Branch**:
 
   nextPC = brFun(reg[rs1], reg[rs2])? pc + immB : pc + 4
 
@@ -630,10 +633,10 @@ The processor can stall until the branch resolves—but this quickly destroys pe
 
 Modern CPUs rely on **speculation**:
 
-* Predict the next PC (usually “not taken” → PC + 4)
-* Continue fetching and executing instructions
-* If prediction is correct → **zero cost**
-* If wrong → **annul (flush)** incorrect instructions and restart
+- Predict the next PC (usually “not taken” → PC + 4)
+- Continue fetching and executing instructions
+- If prediction is correct → **zero cost**
+- If wrong → **annul (flush)** incorrect instructions and restart
 
 A misprediction typically costs **2 or more cycles**, depending on pipeline depth.
 
@@ -641,7 +644,7 @@ A misprediction typically costs **2 or more cycles**, depending on pipeline dept
 
 If both occur in the same cycle:
 
-* **ANNUL (flush) > STALL**
+- **ANNUL (flush) > STALL**
 
 Reason: stall decisions are based on instructions that may already be invalid. If control flow is wrong, all younger instructions are garbage and should be discarded immediately.
 
@@ -649,15 +652,15 @@ Reason: stall decisions are based on instructions that may already be invalid. I
 
 Pipeline performance balances:
 
-* **Lower CPI**
-* **Shorter cycle time**
+- **Lower CPI**
+- **Shorter cycle time**
 
 But hazards increase CPI:
 
 $CPI = CPI_{ideal} + CPI_{hazard}$
 
-* $CPI_{ideal} = 1$
-* $CPI_{hazard}$ comes from data hazards, control hazards, and cache misses
+- $CPI_{ideal} = 1$
+- $CPI_{hazard}$ comes from data hazards, control hazards, and cache misses
 
 #### Beyond Simple Pipelines: Modern CPU Techniques
 
@@ -665,17 +668,17 @@ Modern CPUs are no longer simple fetch-decode-execute machines. They are **highl
 
 **Deep Pipelines**
 
-* 15–20 stages (e.g., Intel Skylake ≈ 19 stages)
-* Higher clock frequency
-* Higher misprediction penalty
-* More pipeline registers and power consumption
+- 15–20 stages (e.g., Intel Skylake ≈ 19 stages)
+- Higher clock frequency
+- Higher misprediction penalty
+- More pipeline registers and power consumption
 
 **Wide (Superscalar) Pipelines**
 
-* Multiple instructions per cycle (e.g., Apple M1: 8-wide)
-* Ideal CPI < 1 (e.g., 0.125)
-* Requires many execution units and register ports
-* Hardware complexity grows rapidly
+- Multiple instructions per cycle (e.g., Apple M1: 8-wide)
+- Ideal CPI < 1 (e.g., 0.125)
+- Requires many execution units and register ports
+- Hardware complexity grows rapidly
 
 **Four Core Strategies to Handle Hazards**
 
@@ -688,10 +691,10 @@ Modern CPUs are no longer simple fetch-decode-execute machines. They are **highl
 
 Instructions do not execute strictly in program order.
 
-* Hardware builds a **dataflow graph**
-* Instructions wait in **reservation stations**
-* As soon as operands are ready, instructions issue
-* Results are committed in order via a **Reorder Buffer (ROB)**
+- Hardware builds a **dataflow graph**
+- Instructions wait in **reservation stations**
+- As soon as operands are ready, instructions issue
+- Results are committed in order via a **Reorder Buffer (ROB)**
 
 This preserves correctness while hiding long latencies (e.g., cache misses).
 
@@ -703,9 +706,9 @@ With deep pipelines, waiting for branch resolution would waste dozens of cycles.
 
 Fixed strategy, no runtime learning:
 
-* Backward branches (loops) → predict taken
-* Forward branches → predict not taken
-* Accuracy ≈ 80%
+- Backward branches (loops) → predict taken
+- Forward branches → predict not taken
+- Accuracy ≈ 80%
 
 **Dynamic Prediction**
 
@@ -713,23 +716,23 @@ Based on runtime behavior.
 
 Branch Target Buffer (BTB)
 
-* Indexed by PC
-* Stores last target address
-* Enables early fetch redirection
+- Indexed by PC
+- Stores last target address
+- Enables early fetch redirection
 
 2-bit Saturating Counters (Smith Predictor)
 
-* Requires two consecutive mispredictions to flip direction
-* Prevents loop-end oscillation
+- Requires two consecutive mispredictions to flip direction
+- Prevents loop-end oscillation
 
 #### Modern Hybrid Predictors
 
 Modern CPUs combine multiple specialized predictors:
 
-* **BTB** – Early target prediction (Fetch stage)
-* **Direction Predictor** – Conditional branch behavior
-* **Return Address Stack (RAS)** – Accurate function returns
-* **Loop Predictor** – Tracks fixed-iteration loops
+- **BTB** – Early target prediction (Fetch stage)
+- **Direction Predictor** – Conditional branch behavior
+- **Return Address Stack (RAS)** – Accurate function returns
+- **Loop Predictor** – Tracks fixed-iteration loops
 
 ---
 
@@ -739,17 +742,17 @@ Modern computing represents a fundamental shift—from **bare hardware execution
 
 At the center of this relationship lies a clean separation of responsibility:
 
-* **Hardware** provides controlled mechanisms (privilege modes, exceptions, interrupts).
-* **The operating system (OS)** uses these mechanisms to safely multiplex resources.
-* **Applications** interact with the system through well-defined interfaces, not raw hardware.
+- **Hardware** provides controlled mechanisms (privilege modes, exceptions, interrupts).
+- **The operating system (OS)** uses these mechanisms to safely multiplex resources.
+- **Applications** interact with the system through well-defined interfaces, not raw hardware.
 
 ### 2.1 From Single-Program Machines to Multitasking Systems
 
 Early computers were effectively **single-user, single-program machines**:
 
-* One instruction stream controlled all hardware
-* Programs interacted directly with devices and memory
-* A single bug could crash the entire system
+- One instruction stream controlled all hardware
+- Programs interacted directly with devices and memory
+- A single bug could crash the entire system
 
 The **Instruction Set Architecture (ISA)** (e.g., RISC-V) served as the only interface between software and hardware. While simple, this model was unsafe and inefficient.
 
@@ -759,38 +762,38 @@ Modern systems must run many programs simultaneously—browsers, editors, media 
 
 Modern systems introduce the **operating system** as a trusted intermediary.
 
-* Applications no longer access hardware directly
-* The OS decides **who uses what, when, and how**
+- Applications no longer access hardware directly
+- The OS decides **who uses what, when, and how**
 
 **ABI: The Application–OS Contract**
 
 The **Application Binary Interface (ABI)** defines how applications request services from the OS:
 
-* How system calls are made
-* Which registers carry arguments and return values
-* How data is represented at the binary level
+- How system calls are made
+- Which registers carry arguments and return values
+- How data is represented at the binary level
 
 Programs rely on the ABI rather than the raw ISA, allowing portability and safety.
 
 #### Program vs. Process
 
-* **Program**: A static collection of instructions stored on disk
-* **Process**: A running instance of a program
+- **Program**: A static collection of instructions stored on disk
+- **Process**: A running instance of a program
 
 A process includes:
 
-* Code
-* Register state
-* Private memory space
+- Code
+- Register state
+- Private memory space
 
 #### The Kernel: The Privileged Core
 
 The **kernel** is the heart of the operating system:
 
-* The first program executed after boot
-* Runs with the highest hardware privilege
-* Decides which process runs on the CPU
-* Controls memory allocation and device access
+- The first program executed after boot
+- Runs with the highest hardware privilege
+- Decides which process runs on the CPU
+- Controls memory allocation and device access
 
 Unlike ordinary processes, the kernel can execute **privileged instructions**.
 
@@ -798,17 +801,17 @@ Unlike ordinary processes, the kernel can execute **privileged instructions**.
 
 **(1) Protection and Privacy**
 
-* Each process has its own isolated address space
-* One program cannot read or corrupt another’s memory
-* A faulty program cannot crash the entire system
+- Each process has its own isolated address space
+- One program cannot read or corrupt another’s memory
+- A faulty program cannot crash the entire system
 
 **(2) Abstraction**
 
 The OS hides hardware complexity behind clean interfaces:
 
-* Disks become **files**
-* Networks become **sockets**
-* Devices become **streams**
+- Disks become **files**
+- Networks become **sockets**
+- Devices become **streams**
 
 Programmers use `open`, `read`, and `write`, not disk sectors or DMA registers.
 
@@ -816,9 +819,9 @@ Programmers use `open`, `read`, and `write`, not disk sectors or DMA registers.
 
 Hardware resources are finite. The OS acts as a fair scheduler:
 
-* Allocates CPU time
-* Manages memory
-* Arbitrates device access
+- Allocates CPU time
+- Manages memory
+- Arbitrates device access
 
 #### The Operating System as a Virtual Machine
 
@@ -826,41 +829,42 @@ A powerful way to understand modern OS design is through the concept of a **virt
 
 For each process, the OS creates the illusion of:
 
-* A **virtual processor**
-* A **private address space**
-* Controlled access via **system calls**
-* Communication channels (files, sockets, events)
+- A **virtual processor**
+- A **private address space**
+- Controlled access via **system calls**
+- Communication channels (files, sockets, events)
 
 **The Illusion of Exclusivity**
 
-* Each process believes it owns the CPU
+- Each process believes it owns the CPU
   → In reality, the OS rapidly switches between processes using preemption.
-* Each process believes it has a large private memory
+- Each process believes it has a large private memory
   → Virtual memory maps private addresses to shared physical memory.
-* Each process believes it directly accesses I/O
+- Each process believes it directly accesses I/O
   → All interactions are mediated by system calls.
 
 Concurrency is simply **fast time-sharing**.
 
 #### The OS’s Dual Identity
 
-* **To hardware**: The OS is a dictator
+- **To hardware**: The OS is a dictator
   Only the kernel can issue privileged commands.
-* **To applications**: The OS is a service provider
+- **To applications**: The OS is a service provider
   Applications request services through system calls.
 
 **Hardware Support for Operating Systems**
 
 To enforce this structure, hardware defines **two execution modes**:
 
-* **User Mode**
+- **User Mode**
 
-  * Restricted
-  * Used by ordinary applications
-* **Supervisor (Kernel) Mode**
+  - Restricted
+  - Used by ordinary applications
 
-  * Full privileges
-  * Used by the OS kernel
+- **Supervisor (Kernel) Mode**
+
+  - Full privileges
+  - Used by the OS kernel
 
 Applications cannot escape user mode on their own.
 
@@ -872,18 +876,18 @@ Exceptions and interrupts form the **emergency communication channel** between h
 
 Triggered by the running program:
 
-* Divide by zero
-* Illegal memory access
-* Illegal instruction
-* System calls (`ecall`)
+- Divide by zero
+- Illegal memory access
+- Illegal instruction
+- System calls (`ecall`)
 
 **Interrupts (Asynchronous)**
 
 Triggered by external events:
 
-* Timer expiration
-* Keyboard input
-* Network packets
+- Timer expiration
+- Keyboard input
+- Network packets
 
 **Exception Handling Flow**
 
@@ -902,19 +906,19 @@ If the error is unrecoverable (e.g., accessing kernel memory), the OS terminates
 
 **Preemptive Scheduling**
 
-* Timer interrupts allow the OS to regain control
-* Prevents a process from monopolizing the CPU
+- Timer interrupts allow the OS to regain control
+- Prevents a process from monopolizing the CPU
 
 **Instruction Emulation**
 
-* Unsupported instructions trigger illegal instruction exceptions
-* The OS emulates the instruction in software
-* Transparent to the application, but slower
+- Unsupported instructions trigger illegal instruction exceptions
+- The OS emulates the instruction in software
+- Transparent to the application, but slower
 
 **System Calls**
 
-* The only legal way for applications to request privileged services
-* Implemented via controlled exceptions
+- The only legal way for applications to request privileged services
+- Implemented via controlled exceptions
 
 #### System Calls: The Only Doorway
 
@@ -922,22 +926,22 @@ Applications run in user mode and **cannot directly access hardware**.
 
 To request services, they must:
 
-* Execute a special instruction (`ecall` in RISC-V)
-* Trigger a synchronous exception
-* Enter the kernel in a controlled manner
+- Execute a special instruction (`ecall` in RISC-V)
+- Trigger a synchronous exception
+- Enter the kernel in a controlled manner
 
 Library functions (e.g., `printf`) eventually invoke system calls such as `write`.
 
 **Common System Calls**
 
-* **File I/O**: `open`, `read`, `write`
-* **Networking**: `bind`, `listen`, `accept`
-* **Memory**: `mmap`
-* **Process Control**:
+- **File I/O**: `open`, `read`, `write`
+- **Networking**: `bind`, `listen`, `accept`
+- **Memory**: `mmap`
+- **Process Control**:
 
-  * `fork` – clone the process
-  * `exec` – replace the program
-  * `kill` – terminate a process
+  - `fork` – clone the process
+  - `exec` – replace the program
+  - `kill` – terminate a process
 
 #### RISC-V Hardware Support for the OS
 
@@ -945,10 +949,10 @@ Library functions (e.g., `printf`) eventually invoke system calls such as `write
 
 CSRs form the kernel’s control panel:
 
-* `mepc` – Exception program counter
-* `mcause` – Reason for the trap
-* `mtvec` – Trap handler entry point
-* `mstatus` – Current privilege state
+- `mepc` – Exception program counter
+- `mcause` – Reason for the trap
+- `mtvec` – Trap handler entry point
+- `mstatus` – Current privilege state
 
 User-mode attempts to modify these registers immediately trigger an illegal instruction exception—this is hardware-enforced security.
 
@@ -956,14 +960,14 @@ User-mode attempts to modify these registers immediately trigger an illegal inst
 
 Applications and the kernel communicate via registers:
 
-* `a7` – System call number
-* `a0–a6` – Arguments
-* `a0–a1` – Return values
+- `a7` – System call number
+- `a0–a6` – Arguments
+- `a0–a1` – Return values
 
 Key difference from function calls:
 
-* Function calls use `jal`
-* System calls use `ecall` and **change privilege level**
+- Function calls use `jal`
+- System calls use `ecall` and **change privilege level**
 
 ---
 
@@ -975,11 +979,11 @@ Modern operating systems provide each process with the illusion of a large, priv
 
 From a process’s point of view, memory consists of well-defined regions:
 
-* **.text** – executable machine code (read-only)
-* **.data** – initialized global and static variables
-* **.bss** – uninitialized global variables (zeroed at program start)
-* **Heap** – dynamically allocated memory (e.g., `malloc`)
-* **Stack** – function call frames, local variables, return addresses
+- **.text** – executable machine code (read-only)
+- **.data** – initialized global and static variables
+- **.bss** – uninitialized global variables (zeroed at program start)
+- **Heap** – dynamically allocated memory (e.g., `malloc`)
+- **Stack** – function call frames, local variables, return addresses
 
 These addresses are **virtual addresses**. They do not directly correspond to physical RAM locations.
 
@@ -987,21 +991,21 @@ These addresses are **virtual addresses**. They do not directly correspond to ph
 
 Two classical approaches exist for organizing memory:
 
-* **Segmentation**: Logical division by purpose (code, data, stack)
-* **Paging**: Division into fixed-size blocks
+- **Segmentation**: Logical division by purpose (code, data, stack)
+- **Paging**: Division into fixed-size blocks
 
 Modern systems rely primarily on **paging**, with a typical page size of **4 KB**.
 
-* **Virtual memory** is divided into **pages**
-* **Physical memory** is divided into **frames**
-* A page maps to a frame of the same size
+- **Virtual memory** is divided into **pages**
+- **Physical memory** is divided into **frames**
+- A page maps to a frame of the same size
 
 #### Address Translation: VPN + Offset → PPN + Offset
 
 A virtual address is split into two parts:
 
-* **Virtual Page Number (VPN)** – identifies which virtual page is being accessed
-* **Offset** – identifies the byte within that page
+- **Virtual Page Number (VPN)** – identifies which virtual page is being accessed
+- **Offset** – identifies the byte within that page
 
 Translation works as follows:
 
@@ -1015,13 +1019,14 @@ Modern operating systems use **demand paging**, loading pages into memory only w
 
 Each **page table entry (PTE)** contains more than just an address:
 
-* **Resident (Valid) Bit**
+- **Resident (Valid) Bit**
 
-  * `1`: page is in physical memory
-  * `0`: page resides on disk
-* **PPN (Physical Page Number)** if resident
-* **DPN (Disk Page Number)** if not resident
-* **Access permissions** (read/write/execute)
+  - `1`: page is in physical memory
+  - `0`: page resides on disk
+
+- **PPN (Physical Page Number)** if resident
+- **DPN (Disk Page Number)** if not resident
+- **Access permissions** (read/write/execute)
 
 If a process accesses a page whose resident bit is `0`, the CPU triggers a **page fault**.
 
@@ -1041,8 +1046,8 @@ This mechanism enables the illusion of memory larger than physical RAM, with dis
 
 If page tables were accessed directly from memory:
 
-* One memory access to translate the address
-* One memory access to fetch the data
+- One memory access to translate the address
+- One memory access to fetch the data
 
 This would cut performance in half.
 
@@ -1052,8 +1057,8 @@ To solve this, CPUs use a **TLB**, a small, fast hardware cache that stores:
 
 $\text{VPN} \rightarrow \text{PPN}$
 
-* **TLB Hit**: Translation completes in a single cycle
-* **TLB Miss**: CPU performs a page table walk (handled by the MMU or OS)
+- **TLB Hit**: Translation completes in a single cycle
+- **TLB Miss**: CPU performs a page table walk (handled by the MMU or OS)
 
 #### Complete Address Translation Flow
 
@@ -1073,9 +1078,9 @@ The CPU performs the following steps:
 
 - **Page table miss (resident = 0)**
 
-   * Trigger page fault
-   * OS loads page from disk
-   * Restart instruction
+  - Trigger page fault
+  - OS loads page from disk
+  - Restart instruction
 
 - **Permission check**: Violations trigger a segmentation fault
 
@@ -1083,9 +1088,9 @@ The CPU performs the following steps:
 
 Each process has its own page tables, meaning address translations differ per process.
 
-* Context switches traditionally require flushing the TLB
-* Modern CPUs include **ASIDs (Address Space Identifiers)** in TLB entries
-* ASIDs allow multiple processes’ translations to coexist in the TLB
+- Context switches traditionally require flushing the TLB
+- Modern CPUs include **ASIDs (Address Space Identifiers)** in TLB entries
+- ASIDs allow multiple processes’ translations to coexist in the TLB
 
 **Caches and Address Translation**
 
@@ -1097,20 +1102,20 @@ A key question in CPU design is:
 
 **VIVT (Virtually Indexed, Virtually Tagged)**
 
-  * Fast but prone to aliasing issues
+- Fast but prone to aliasing issues
 
-  * **Physically Addressed Cache**
+- **Physically Addressed Cache**
 
-  * Requires TLB translation first
+- Requires TLB translation first
 
 **VIPT (Virtually Indexed, Physically Tagged)**
 
 Modern CPUs use **VIPT caches**:
 
-* Cache index comes from the **page offset**
-* Page offset is identical in virtual and physical addresses
-* Cache lookup and TLB translation proceed in parallel
-* Physical tag from TLB is used for final comparison
+- Cache index comes from the **page offset**
+- Page offset is identical in virtual and physical addresses
+- Cache lookup and TLB translation proceed in parallel
+- Physical tag from TLB is used for final comparison
 
 **Limitation**
 
@@ -1118,10 +1123,10 @@ Because the cache index must fit within the page offset, this limits L1 cache si
 
 Example:
 
-* 4 KB pages → 12-bit offset
-* Typical L1 cache: **32 KB, 8-way**
+- 4 KB pages → 12-bit offset
+- Typical L1 cache: **32 KB, 8-way**
 
-  * 64 sets × 64 bytes × 8 ways = 32 KB
+  - 64 sets × 64 bytes × 8 ways = 32 KB
 
 Increasing size requires higher associativity.
 
@@ -1131,47 +1136,47 @@ In 64-bit systems, the virtual address space is enormous. A flat page table woul
 
 **Solution: Multi-Level Page Tables**
 
-* Page tables form a tree structure
-* Upper levels store pointers to lower-level tables
-* Memory is allocated only for populated regions
+- Page tables form a tree structure
+- Upper levels store pointers to lower-level tables
+- Memory is allocated only for populated regions
 
 Tradeoff:
 
-* More memory accesses per translation
-* Mitigated by TLB hits
+- More memory accesses per translation
+- Mitigated by TLB hits
 
 #### Page Replacement Algorithms
 
 When physical memory is full, the OS must evict a page:
 
-* **FIFO** – First In, First Out
-* **LRU** – Least Recently Used
-* **Clock Algorithm**
+- **FIFO** – First In, First Out
+- **LRU** – Least Recently Used
+- **Clock Algorithm**
 
-  * Approximate LRU
-  * Uses a circular pointer and reference bits
-  * Efficient and widely used
+  - Approximate LRU
+  - Uses a circular pointer and reference bits
+  - Efficient and widely used
 
 #### Memory Mapping (mmap)
 
 `mmap` maps files directly into a process’s virtual address space.
 
-* File contents appear as memory
-* Pages are loaded on demand
-* Often faster than `read()` / `write()`
-* Enables zero-copy I/O
+- File contents appear as memory
+- Pages are loaded on demand
+- Often faster than `read()` / `write()`
+- Enables zero-copy I/O
 
 #### Copy-on-Write (CoW)
 
 Copy-on-Write enables efficient process creation:
 
-* Parent and child share the same physical pages
-* Pages are marked read-only
-* On write:
+- Parent and child share the same physical pages
+- Pages are marked read-only
+- On write:
 
-  * CPU triggers a fault
-  * OS copies the page
-  * Writer receives a private writable copy
+  - CPU triggers a fault
+  - OS copies the page
+  - Writer receives a private writable copy
 
 This dramatically reduces memory usage and speeds up `fork()`.
 
@@ -1214,10 +1219,10 @@ BTX acts as a **translator and execution bridge**, remaining resident in memory 
 
 The loader is the most powerful boot component. It is an interactive environment built around a **Forth interpreter**. Its responsibilities include:
 
-* Reading `/boot/loader.conf`
-* Loading kernel modules
-* Selecting alternate kernels
-* Entering single-user mode
+- Reading `/boot/loader.conf`
+- Loading kernel modules
+- Selecting alternate kernels
+- Entering single-user mode
 
 Once ready, it loads `/boot/kernel/kernel` and required modules into memory, then permanently hands control to the kernel.
 
@@ -1225,9 +1230,9 @@ Once ready, it loads `/boot/kernel/kernel` and required modules into memory, the
 
 Once execution enters the kernel, FreeBSD begins fully “taking over the machine.”
 
-* Page tables are created and **virtual memory is enabled**
-* Kernel stacks are set up
-* CPU-local structures are initialized
+- Page tables are created and **virtual memory is enabled**
+- Kernel stacks are set up
+- CPU-local structures are initialized
 
 Rather than relying on a monolithic `main()` function, FreeBSD uses the **SYSINIT framework**. Initialization routines scattered throughout the kernel register themselves with priorities. During boot, SYSINIT executes them in a strictly ordered sequence.
 
@@ -1235,9 +1240,9 @@ This design allows new subsystems to integrate cleanly—and also explains how k
 
 FreeBSD uses the **Newbus** framework for device management:
 
-* The kernel scans buses (PCI, USB, etc.)
-* Drivers `probe` devices to see if they match
-* Matching drivers `attach`, initialize hardware, and register interrupts
+- The kernel scans buses (PCI, USB, etc.)
+- Drivers `probe` devices to see if they match
+- Matching drivers `attach`, initialize hardware, and register interrupts
 
 The kernel mounts the root filesystem, then launches **process 1 (`init`)**, the ancestor of all user-space processes. `init` executes `/etc/rc`, starting networking, firewalls, databases, and services. The system is now fully operational.
 
@@ -1245,11 +1250,11 @@ The kernel mounts the root filesystem, then launches **process 1 (`init`)**, the
 
 FreeBSD’s kernel is built around a few powerful ideas:
 
-* **Object-oriented layering** via Kobj
-* **Deterministic initialization** via SYSINIT
-* **Fine-grained locking** for concurrency
-* **Strong isolation** via Jails
-* **Mandatory Access Control (MAC)** for security
+- **Object-oriented layering** via Kobj
+- **Deterministic initialization** via SYSINIT
+- **Fine-grained locking** for concurrency
+- **Strong isolation** via Jails
+- **Mandatory Access Control (MAC)** for security
 
 Each subsystem contributes to both performance and attack resistance.
 
@@ -1259,8 +1264,8 @@ Modern systems are multi-core, and concurrency errors are a major vulnerability 
 
 **Mutexes**
 
-* **Spin mutexes** busy-wait briefly (used in interrupt contexts)
-* **Sleep mutexes** block and reschedule threads
+- **Spin mutexes** busy-wait briefly (used in interrupt contexts)
+- **Sleep mutexes** block and reschedule threads
 
 **Shared/Exclusive (SX) Locks**
 
@@ -1276,9 +1281,9 @@ Poor locking discipline leads directly to **race condition vulnerabilities**, on
 
 Although written in C, FreeBSD implements an **OOP framework** using Kobj:
 
-* Interfaces define expected behavior
-* Drivers implement interfaces
-* Dynamic method resolution occurs at runtime
+- Interfaces define expected behavior
+- Drivers implement interfaces
+- Dynamic method resolution occurs at runtime
 
 This makes the driver ecosystem highly modular and extensible, especially within the Newbus framework.
 
@@ -1288,18 +1293,18 @@ The **Jail subsystem** is FreeBSD’s flagship security feature and the conceptu
 
 A jail isolates:
 
-* Filesystem root
-* Hostname
-* IP addresses
-* Process namespace
+- Filesystem root
+- Hostname
+- IP addresses
+- Process namespace
 
 Even a compromised `root` inside a jail cannot escape to the host.
 
 Processes inside jails are stripped of dangerous privileges:
 
-* No kernel module loading
-* No raw socket access
-* No direct hardware access
+- No kernel module loading
+- No raw socket access
+- No direct hardware access
 
 Jails enforce **containment after compromise**, a critical security principle.
 
@@ -1307,20 +1312,20 @@ Jails enforce **containment after compromise**, a critical security principle.
 
 The MAC framework provides **Mandatory Access Control**, stronger than traditional Unix DAC.
 
-* DAC: owners control permissions
-* MAC: system-enforced policies, unchangeable by users (even root)
+- DAC: owners control permissions
+- MAC: system-enforced policies, unchangeable by users (even root)
 
 MAC hooks intercept critical kernel operations:
 
-* File access
-* Network connections
-* Process execution
+- File access
+- Network connections
+- Process execution
 
 Policy modules include:
 
-* **Biba** (integrity)
-* **MLS** (confidentiality levels)
-* **mac_portacl** (restricted port binding)
+- **Biba** (integrity)
+- **MLS** (confidentiality levels)
+- **mac_portacl** (restricted port binding)
 
 Even a fully compromised root process can be stopped by MAC policy.
 
@@ -1328,10 +1333,10 @@ Even a fully compromised root process can be stopped by MAC policy.
 
 FreeBSD’s VM system is elegant and highly decoupled.
 
-* `vm_page_t`: represents a physical page (typically 4 KB)
-* `vm_object_t`: the backing store (file, anonymous memory)
-* `vm_map_t`: a process’s virtual address space
-* `vm_entry_t`: a region within the map (heap, stack, text)
+- `vm_page_t`: represents a physical page (typically 4 KB)
+- `vm_object_t`: the backing store (file, anonymous memory)
+- `vm_map_t`: a process’s virtual address space
+- `vm_entry_t`: a region within the map (heap, stack, text)
 
 The kernel itself has a dedicated virtual address space (KVM).
 
@@ -1341,9 +1346,9 @@ By separating **address space (map)** from **data source (object)**, FreeBSD ena
 
 SMPng (“Symmetric Multi-Processing, next generation”) eliminated the historic **Giant Lock**, which once serialized all kernel execution.
 
-* Locks were decomposed into fine-grained structures
-* Network stacks and filesystems were heavily optimized
-* Multiple CPUs can process packets and I/O concurrently
+- Locks were decomposed into fine-grained structures
+- Network stacks and filesystems were heavily optimized
+- Multiple CPUs can process packets and I/O concurrently
 
 This design is why FreeBSD excels in high-throughput environments such as Netflix’s streaming infrastructure.
 
@@ -1357,9 +1362,9 @@ All devices appear under `/dev` as character devices. Improper permissions here 
 
 Modern devices use PCI with memory-mapped I/O and DMA. Poorly written drivers can:
 
-* Corrupt kernel memory
-* Enable DMA attacks
-* Trigger interrupt storms causing denial of service
+- Corrupt kernel memory
+- Enable DMA attacks
+- Trigger interrupt storms causing denial of service
 
 IOMMU exists specifically to mitigate these risks.
 
@@ -1367,9 +1372,9 @@ IOMMU exists specifically to mitigate these risks.
 
 ### 3.2 seL4: The Formally Verified Microkernel and the Holy Grail of System Security
 
-If FreeBSD represents the pinnacle of **monolithic kernel engineering**, then **seL4** represents the *holy grail* of computer security and reliability.
+If FreeBSD represents the pinnacle of **monolithic kernel engineering**, then **seL4** represents the _holy grail_ of computer security and reliability.
 
-**seL4 (Secure Embedded L4)** is the world’s first **formally verified microkernel**. This means that its implementation has been *mathematically proven* to be correct with respect to a precise specification. In practical terms, this elevates the security model from *“searching for bugs”* to *“assuming the kernel itself is free of entire classes of bugs.”*
+**seL4 (Secure Embedded L4)** is the world’s first **formally verified microkernel**. This means that its implementation has been _mathematically proven_ to be correct with respect to a precise specification. In practical terms, this elevates the security model from _“searching for bugs”_ to _“assuming the kernel itself is free of entire classes of bugs.”_
 
 In FreeBSD or Linux, security research begins with the assumption that vulnerabilities exist and must be found.
 In seL4, the assumption is fundamentally different: **the kernel is correct by construction**.
@@ -1378,38 +1383,39 @@ In seL4, the assumption is fundamentally different: **the kernel is correct by c
 
 The most important security metric of an operating system is its **Trusted Computing Base (TCB)**.
 
-* A monolithic kernel (FreeBSD, Linux) contains **millions of lines of privileged code**
-* Any single defect in the TCB can compromise the entire system
-* Drivers, filesystems, networking stacks—all run in kernel mode
+- A monolithic kernel (FreeBSD, Linux) contains **millions of lines of privileged code**
+- Any single defect in the TCB can compromise the entire system
+- Drivers, filesystems, networking stacks—all run in kernel mode
 
 By contrast, seL4’s kernel consists of **approximately 10,000 lines of C code**, and **every line has been formally verified**.
 
-This dramatically reduces the attack surface. There are no unchecked pointers, no buffer overflows, no null dereferences—*not because they were tested*, but because they were **proven impossible**.
+This dramatically reduces the attack surface. There are no unchecked pointers, no buffer overflows, no null dereferences—_not because they were tested_, but because they were **proven impossible**.
 
 #### What seL4 Is—and What It Is Not
 
 In a **monolithic kernel**:
 
-* Memory management, filesystems, drivers, and networking all run in kernel mode
-* A single buggy driver can crash or compromise the entire system
+- Memory management, filesystems, drivers, and networking all run in kernel mode
+- A single buggy driver can crash or compromise the entire system
 
 In a **microkernel**:
 
-* Only the minimal core remains in kernel mode:
+- Only the minimal core remains in kernel mode:
 
-  * Address space management
-  * Thread scheduling
-  * Inter-process communication (IPC)
-* All other services run as **unprivileged user processes**
+  - Address space management
+  - Thread scheduling
+  - Inter-process communication (IPC)
+
+- All other services run as **unprivileged user processes**
 
 **seL4 is a microkernel—not an operating system.**
 
 It provides:
 
-* No shell
-* No filesystem
-* No device drivers
-* No user utilities
+- No shell
+- No filesystem
+- No device drivers
+- No user utilities
 
 It is a **foundational substrate**, on top of which a full OS can be constructed.
 
@@ -1419,10 +1425,10 @@ seL4 is also a **high-assurance hypervisor**.
 
 Using modern hardware virtualization features, seL4 can act as a **Virtual Machine Monitor (VMM)**:
 
-* Entire Linux systems can run inside seL4-controlled partitions
-* seL4 enforces **strong physical isolation** of CPU, memory, and devices
+- Entire Linux systems can run inside seL4-controlled partitions
+- seL4 enforces **strong physical isolation** of CPU, memory, and devices
 
-This enables architectures where Linux is treated as an *untrusted component*, sandboxed by a formally verified kernel.
+This enables architectures where Linux is treated as an _untrusted component_, sandboxed by a formally verified kernel.
 
 > seL4 is **not** SELinux.
 > SELinux is a MAC framework inside Linux.
@@ -1434,29 +1440,29 @@ In security engineering, **testing can show the presence of bugs—but never the
 
 seL4’s verification effort uses interactive theorem provers such as **Isabelle/HOL** to prove:
 
-* The C implementation exactly matches the abstract specification
-* No buffer overflows
-* No use-after-free
-* No null pointer dereferences
-* No undefined behavior
+- The C implementation exactly matches the abstract specification
+- No buffer overflows
+- No use-after-free
+- No null pointer dereferences
+- No undefined behavior
 
 **Security Properties**
 
-* **Strong isolation** between components
-* **Confidentiality**: information cannot leak without explicit permission
-* **Integrity**: components cannot modify unauthorized data
+- **Strong isolation** between components
+- **Confidentiality**: information cannot leak without explicit permission
+- **Integrity**: components cannot modify unauthorized data
 
-These guarantees hold *mathematically*, not probabilistically.
+These guarantees hold _mathematically_, not probabilistically.
 
 #### The seL4 Microkit: Making Verified Systems Usable
 
-Native seL4 development is extremely demanding—often compared to *building a rocket in assembly language*.
+Native seL4 development is extremely demanding—often compared to _building a rocket in assembly language_.
 
 **seL4 Microkit** addresses this problem:
 
-* Provides a simplified framework for system construction
-* Developers define components and communication channels via configuration files
-* Greatly reduces the complexity of building real-world systems
+- Provides a simplified framework for system construction
+- Developers define components and communication channels via configuration files
+- Greatly reduces the complexity of building real-world systems
 
 Microkit makes high-assurance systems practical rather than purely academic.
 
@@ -1466,9 +1472,9 @@ seL4 is built around a **capability-based security model**.
 
 In seL4:
 
-* There is no “root”
-* There are no ambient permissions
-* Every action requires an explicit **Capability**
+- There is no “root”
+- There are no ambient permissions
+- Every action requires an explicit **Capability**
 
 A capability is an unforgeable token containing:
 
@@ -1476,12 +1482,12 @@ A capability is an unforgeable token containing:
 - A precise set of permissions (read, write, grant, etc.)
 
 Capabilities are stored in protected kernel structures called **CNodes**.
-User processes only hold *handles*—they cannot fabricate or modify capabilities.
+User processes only hold _handles_—they cannot fabricate or modify capabilities.
 
 Unlike Unix’s coarse user/root model, seL4 can express:
 
-* “This process may read exactly this 4 KB memory region”
-* Nothing more, nothing less
+- “This process may read exactly this 4 KB memory region”
+- Nothing more, nothing less
 
 The kernel itself enforces **mechanisms**, not policies.
 All resource allocation decisions are made by user-space components that possess the appropriate capabilities.
@@ -1490,20 +1496,20 @@ All resource allocation decisions are made by user-space components that possess
 
 seL4 is widely used in **aerospace, automotive, defense, and medical systems**, where timing guarantees are absolute.
 
-* Kernel code is extremely small and fully preemptible
-* Interrupt response times have **provable upper bounds**
+- Kernel code is extremely small and fully preemptible
+- Interrupt response times have **provable upper bounds**
 
 In some configurations, seL4 can provide **formal bounds on execution cycles** for kernel operations on specific hardware.
 
 On the same CPU:
 
-* High-criticality systems (flight control, navigation)
-* Low-criticality systems (UI, entertainment)
+- High-criticality systems (flight control, navigation)
+- Low-criticality systems (UI, entertainment)
 
 seL4 guarantees:
 
-* Faults or compromises in low-criticality components cannot starve or interfere with high-criticality tasks
-* CPU time and memory remain strictly partitioned
+- Faults or compromises in low-criticality components cannot starve or interfere with high-criticality tasks
+- CPU time and memory remain strictly partitioned
 
 #### Performance: Secure Does Not Mean Slow
 
@@ -1511,9 +1517,9 @@ A common myth is that strong security implies poor performance.
 
 seL4 disproves this.
 
-* seL4’s IPC is among the **fastest in the world**
-* Common operations follow extremely short, hand-optimized assembly paths
-* In some benchmarks, seL4 outperforms Linux IPC mechanisms
+- seL4’s IPC is among the **fastest in the world**
+- Common operations follow extremely short, hand-optimized assembly paths
+- In some benchmarks, seL4 outperforms Linux IPC mechanisms
 
 It is the **highest-performance microkernel currently available**.
 
